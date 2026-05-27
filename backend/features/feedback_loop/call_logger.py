@@ -1,0 +1,264 @@
+"""
+CallLogger — records every turn of a call to the database.
+Triggers the auto-evaluation pipeline after call ends.
+"""
+import uuid
+from datetime import datetime
+from typing import Optional
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.db.models import CallTurn
+
+log = structlog.get_logger()
+
+
+class CallLogger:
+    def __init__(self, db: AsyncSession, call_id: str):
+        self.db = db
+        self.call_id = call_id
+        self._turns: list[CallTurn] = []
+
+    async def log_turn(
+        self,
+        turn_index: int,
+        role: str,                    # "user" | "agent"
+        transcript: Optional[str] = None,
+        emotion_state: Optional[dict] = None,
+        paralinguistic: Optional[dict] = None,
+        sentiment: Optional[str] = None,
+        intent: Optional[str] = None,
+        latency_ms: Optional[int] = None,
+        tokens_used: Optional[int] = None,
+        from_cache: bool = False,
+    ):
+        turn = CallTurn(
+            id=str(uuid.uuid4()),
+            call_id=self.call_id,
+            turn_index=turn_index,
+            role=role,
+            transcript=transcript,
+            emotion_state=emotion_state or {},
+            paralinguistic=paralinguistic or {},
+            sentiment=sentiment,
+            intent=intent,
+            latency_ms=latency_ms,
+            tokens_used=tokens_used,
+            from_prediction_cache=from_cache,
+            created_at=datetime.utcnow(),
+        )
+        self.db.add(turn)
+        self._turns.append(turn)
+
+        try:
+            await self.db.flush()
+        except Exception as exc:
+            log.warning("CallLogger flush failed", error=str(exc))
+
+    async def finalize(self):
+        """Called when call ends. Runs evaluation + memory extraction before the DB session closes."""
+        log.info("Call finalize started", call_id=self.call_id, turn_count=len(self._turns))
+        await self.db.flush()
+        if self._turns:
+            from backend.features.feedback_loop.evaluator import CallEvaluator
+            evaluator = CallEvaluator(db=self.db, call_id=self.call_id)
+            try:
+                await evaluator.evaluate_call(self._turns)
+            except Exception as exc:
+                log.warning("Call evaluation failed", call_id=self.call_id, error=str(exc))
+
+            # Commit self.db to release the PG row lock acquired by evaluator's flush.
+            # Without this, the extraction fresh session deadlocks: it tries to UPDATE
+            # the same call row that self.db has locked (flush sends the SQL, PG locks
+            # the row, but the lock isn't released until commit).
+            try:
+                await self.db.commit()
+                log.info("Post-evaluation commit done", call_id=self.call_id)
+            except Exception as exc:
+                log.warning("Post-evaluation commit failed", call_id=self.call_id, error=str(exc))
+
+        # Extract memories — needs contact_id from the call record
+        try:
+            from backend.db.models import Call
+            from backend.features.memory_graph.extractor import MemoryExtractor
+            call = await self.db.get(Call, self.call_id)
+            if call and call.contact_id:
+                extractor = MemoryExtractor(db=self.db)
+                await extractor.extract_and_store(
+                    call_id=self.call_id,
+                    contact_id=call.contact_id,
+                )
+        except Exception as exc:
+            log.warning("Memory extraction failed", call_id=self.call_id, error=str(exc))
+
+        # Extract structured data: summary, appointment, key info
+        if self._turns:
+            try:
+                await self._extract_call_data()
+            except Exception as exc:
+                log.exception("Call data extraction failed", call_id=self.call_id, error=str(exc))
+
+        # Dispatch outbound webhook events
+        try:
+            from backend.db.models import Call
+            from backend.webhooks.dispatcher import dispatch
+            call = await self.db.get(Call, self.call_id)
+            if call and call.workspace_id:
+                status = call.status or "completed"
+                event = "call.failed" if status == "failed" else "call.completed"
+                await dispatch(
+                    workspace_id=call.workspace_id,
+                    event_type=event,
+                    payload={
+                        "call_id": call.id,
+                        "phone_number": call.phone_number,
+                        "direction": call.direction,
+                        "status": status,
+                        "duration_seconds": call.duration_seconds,
+                        "pipeline_mode": call.pipeline_mode,
+                        "summary": call.summary,
+                        "sentiment_score": call.sentiment_score,
+                        "agent_id": call.agent_id,
+                        "contact_id": call.contact_id,
+                        "created_at": call.created_at.isoformat() if call.created_at else None,
+                    },
+                )
+        except Exception as exc:
+            log.warning("Webhook dispatch failed", call_id=self.call_id, error=str(exc))
+
+    async def _extract_call_data(self):
+        """Use GPT to extract summary, appointment details, and key info from the transcript."""
+        from backend.db.database import AsyncSessionLocal
+
+        all_turns = len(self._turns)
+        transcript_lines = [
+            f"{'Caller' if t.role == 'user' else 'Agent'}: {t.transcript}"
+            for t in self._turns if t.transcript
+        ]
+        log.info("Call data extraction started",
+                 call_id=self.call_id,
+                 total_turns=all_turns,
+                 turns_with_transcript=len(transcript_lines))
+
+        if not transcript_lines:
+            log.warning("No turn transcripts available — skipping extraction", call_id=self.call_id)
+            return
+        transcript_text = "\n".join(transcript_lines)
+
+        # Use a fresh session so any stale/bad session state from the call never blocks saving.
+        async with AsyncSessionLocal() as fresh_db:
+            await self._save_extracted_data(fresh_db, transcript_text)
+
+    async def _save_extracted_data(self, db, transcript_text: str):
+        """Run GPT extraction and save results using the provided DB session."""
+        import json
+        from openai import AsyncOpenAI
+        from backend.config import settings
+        from backend.db.models import Call
+        from sqlalchemy.orm.attributes import flag_modified
+
+        # Load call to get date for relative date resolution
+        call_for_date = await db.get(Call, self.call_id)
+        if not call_for_date:
+            log.warning("Call not found in fresh session for extraction",
+                        call_id=self.call_id)
+            return
+        call_date_str = ""
+        if call_for_date.created_at:
+            call_date_str = call_for_date.created_at.strftime("%A, %d %B %Y")
+
+        log.info("Running GPT extraction", call_id=self.call_id,
+                 call_date=call_date_str,
+                 transcript_chars=len(transcript_text))
+
+        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        resp = await client.chat.completions.create(
+            model="gpt-4.1-mini",
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a call analysis assistant. Given a call transcript, extract structured data and respond ONLY with valid JSON.\n"
+                        "Return this exact structure:\n"
+                        '{{"summary": "2-3 sentence summary of the call", '
+                        '"appointment_booked": true or false, '
+                        '"appointment_datetime": "ISO datetime string or null", '
+                        '"caller_name": "name if mentioned or null", '
+                        '"caller_interest": "high/medium/low/not_interested", '
+                        '"key_points": ["list of up to 5 key points from the call"], '
+                        '"next_steps": "what was agreed next, or null", '
+                        '"language_used": "primary language of the conversation"}}\n\n'
+                        "RULES:\n"
+                        "- Set appointment_booked to true if the caller expressed a clear intent to book an appointment "
+                        "AND the agent acknowledged, agreed, or confirmed it — even if a specific date/time was not set. "
+                        "Set it to false only if no appointment was discussed or the caller declined.\n"
+                        "- Set appointment_datetime ONLY if a specific date AND time were both clearly stated in the conversation. "
+                        "If only a date was mentioned (no time), or only a time (no date), or neither, set appointment_datetime to null. "
+                        "Never guess, infer, or default to midnight/00:00. If uncertain, use null.\n"
+                        "- TIMEZONE: All times in this conversation are in Indian Standard Time (IST, UTC+05:30). "
+                        "Always include the +05:30 offset in appointment_datetime, e.g. '2026-05-15T10:00:00+05:30'.\n"
+                        "- RELATIVE DATES: The call took place on {call_date}. "
+                        "Resolve relative expressions like 'tomorrow', 'next Monday', 'day after tomorrow' using this date as today. "
+                        "Do NOT use any other date as the reference point."
+                    ).format(call_date=call_date_str or "an unknown date"),
+                },
+                {"role": "user", "content": f"Transcript:\n{transcript_text}"},
+            ],
+        )
+
+        raw = resp.choices[0].message.content or "{}"
+        log.info("GPT extraction response received", call_id=self.call_id, raw_length=len(raw))
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            log.warning("GPT returned invalid JSON", call_id=self.call_id, raw=raw[:200])
+            return
+
+        if not isinstance(data, dict):
+            log.warning("GPT extraction returned non-dict JSON", call_id=self.call_id,
+                        type=type(data).__name__, raw=raw[:200])
+            return
+
+        # call_for_date is the same object in the same session — reuse it
+        call = call_for_date
+        if data.get("summary"):
+            call.summary = data["summary"]
+
+        extra = dict(call.extra_data or {})
+        extra["appointment_booked"] = data.get("appointment_booked", False)
+        extra["appointment_datetime"] = data.get("appointment_datetime")
+        extra["caller_name"] = data.get("caller_name")
+        extra["caller_interest"] = data.get("caller_interest")
+        extra["key_points"] = data.get("key_points", [])
+        extra["next_steps"] = data.get("next_steps")
+        extra["language_used"] = data.get("language_used")
+        call.extra_data = extra
+        flag_modified(call, "extra_data")
+        await db.commit()
+        log.info("Call data extracted and committed", call_id=self.call_id,
+                 summary_len=len(data.get("summary") or ""),
+                 appointment=extra.get("appointment_booked"),
+                 language=extra.get("language_used"),
+                 interest=extra.get("caller_interest"))
+
+        # Safety: also write extracted fields into the old WebSocket session so
+        # AssistantManager's final commit cannot overwrite them with stale None values.
+        try:
+            old_call = await self.db.get(Call, self.call_id)
+            if old_call:
+                if data.get("summary"):
+                    old_call.summary = data["summary"]
+                old_extra = dict(old_call.extra_data or {})
+                old_extra.update(extra)
+                old_call.extra_data = old_extra
+                flag_modified(old_call, "extra_data")
+        except Exception as merge_exc:
+            log.warning("Could not merge extracted data into main session",
+                        call_id=self.call_id, error=str(merge_exc))
+
+    @property
+    def turn_count(self) -> int:
+        return len(self._turns)

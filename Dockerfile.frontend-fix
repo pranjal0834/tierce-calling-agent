@@ -1,0 +1,3 @@
+FROM tierce-voice-frontend:latest
+WORKDIR /app
+CMD ["npm", "start"]
