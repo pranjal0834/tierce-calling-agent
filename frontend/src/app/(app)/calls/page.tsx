@@ -4,9 +4,9 @@ import {
   Phone, PhoneCall, Clock, Zap, Activity, ChevronRight, Upload,
   Users, X, FileSpreadsheet, Calendar, MessageSquare, BarChart2,
   User, Globe, TrendingUp, CheckCircle2, XCircle, Mic2, ArrowUpRight,
-  ArrowDownLeft, Database, Repeat, DollarSign,
+  ArrowDownLeft, Database, Repeat, DollarSign, PhoneOff,
 } from "lucide-react";
-import { getCalls, getAgents, getCallDetail, initiateCall, bulkCall, getRecordingUrl } from "@/lib/api";
+import { getCalls, getAgents, getCallDetail, initiateCall, bulkCall, getRecordingUrl, hangupCall } from "@/lib/api";
 import toast from "react-hot-toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -226,8 +226,32 @@ export default function CallsPage() {
       setCalls((c: any[]) => [call, ...c]);
       setShowDial(false);
       toast.success("Call initiated!");
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail;
+      const status = err?.response?.status;
+      if (status === 402) {
+        toast.error(msg || "Insufficient balance. Please top up your account.");
+      } else if (status === 409) {
+        toast.error(msg || "A call to this number is already in progress.");
+      } else {
+        toast.error("Failed to initiate call");
+      }
+    }
+  };
+
+  const handleHangup = async (callId: string) => {
+    try {
+      await hangupCall(callId);
+      toast.success("Call ended");
+      // Refresh detail and list
+      const [updated, updatedList] = await Promise.all([
+        getCallDetail(callId),
+        getCalls(),
+      ]);
+      setDetail(updated);
+      setCalls(updatedList);
     } catch {
-      toast.error("Failed to initiate call");
+      toast.error("Failed to end call");
     }
   };
 
@@ -345,9 +369,17 @@ export default function CallsPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
+                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
                     <p className="text-xs text-gray-500">{fmtDate(detail.call.created_at)}</p>
-                    <p className="text-sm font-medium text-white mt-0.5">{fmtDuration(detail.call.duration_seconds)}</p>
+                    <p className="text-sm font-medium text-white">{fmtDuration(detail.call.duration_seconds)}</p>
+                    {["initiated", "ringing", "in_progress"].includes(detail.call.status) && (
+                      <button
+                        onClick={() => handleHangup(detail.call.id)}
+                        className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+                      >
+                        <PhoneOff className="w-3.5 h-3.5" /> Hang Up
+                      </button>
+                    )}
                   </div>
                 </div>
 

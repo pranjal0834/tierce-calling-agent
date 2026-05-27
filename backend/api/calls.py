@@ -27,11 +27,31 @@ async def initiate_call(
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
 ):
+    if (workspace.credits_balance or 0.0) <= 0:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient balance. Please top up your account to make calls.",
+        )
+
     agent = await db.get(Agent, payload.agent_id)
     if not agent or not agent.is_active or agent.workspace_id != workspace.id:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     phone = normalize_phone(payload.phone_number)
+
+    # Reject if an active call to this number is already in flight
+    active_check = await db.execute(
+        select(Call).where(
+            Call.workspace_id == workspace.id,
+            Call.phone_number == phone,
+            Call.status.in_(["initiated", "ringing", "in_progress"]),
+        )
+    )
+    if active_check.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail="A call to this number is already in progress.",
+        )
 
     # Upsert contact scoped to workspace
     result = await db.execute(
@@ -121,6 +141,12 @@ async def bulk_call(
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
 ):
+    if (workspace.credits_balance or 0.0) <= 0:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient balance. Please top up your account to make calls.",
+        )
+
     agent = await db.get(Agent, payload.agent_id)
     if not agent or not agent.is_active or agent.workspace_id != workspace.id:
         raise HTTPException(status_code=404, detail="Agent not found")
@@ -310,8 +336,14 @@ async def get_call_recording(
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+    # Verify the authenticated user owns the workspace that owns this call
+    from backend.db.models import User as UserModel
+    user = await db.get(UserModel, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     call = await db.get(Call, call_id)
-    if not call:
+    if not call or call.workspace_id != user.workspace_id:
         raise HTTPException(status_code=404, detail="Call not found")
     if not call.recording_url:
         raise HTTPException(status_code=404, detail="No recording available")
@@ -349,6 +381,56 @@ async def get_call_recording(
         media_type="audio/mpeg",
         headers=resp_headers,
     )
+
+
+@router.post("/{call_id}/hangup")
+async def hangup_call(
+    call_id: str,
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+):
+    """Terminate an in-progress call."""
+    call = await db.get(Call, call_id)
+    if not call or call.workspace_id != workspace.id:
+        raise HTTPException(status_code=404, detail="Call not found")
+
+    if call.status not in ("initiated", "ringing", "in_progress"):
+        raise HTTPException(status_code=400, detail="Call is not active")
+
+    telephony_sid = call.telephony_sid
+    workspace_id = call.workspace_id
+
+    # Mark ended in DB immediately so the UI updates right away
+    from datetime import datetime as _dt
+    call.status = "cancelled"
+    call.ended_at = _dt.utcnow()
+    await db.commit()
+
+    # Tell the telephony provider to hang up (best-effort, non-blocking)
+    if telephony_sid:
+        async def _hangup_provider():
+            try:
+                from sqlalchemy import select as _sel
+                from backend.db.models import TelephonyConfig
+                async with AsyncSessionLocal() as cfg_db:
+                    result = await cfg_db.execute(
+                        _sel(TelephonyConfig).where(TelephonyConfig.workspace_id == workspace_id)
+                    )
+                    cfg = result.scalar_one_or_none()
+                if cfg and cfg.provider == "plivo":
+                    from backend.telephony.plivo_handler import PlivoHandler
+                    await PlivoHandler().end_call(telephony_sid)
+                elif cfg and cfg.provider == "exotel":
+                    pass  # Exotel doesn't support mid-call termination via API
+                else:
+                    handler = TwilioHandler()
+                    await handler.end_call(telephony_sid)
+            except Exception as exc:
+                log.warning("Provider hangup failed", call_id=call_id, error=str(exc))
+
+        asyncio.create_task(_hangup_provider())
+
+    return {"ok": True, "call_id": call_id, "status": "cancelled"}
 
 
 @router.get("/{call_id}/detail")

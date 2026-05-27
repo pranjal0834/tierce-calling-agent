@@ -47,3 +47,15 @@ def verify_signature(order_id: str, payment_id: str, signature: str) -> bool:
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+async def fetch_payment_status(payment_id: str) -> str:
+    """Fetch live payment status from Razorpay. Returns 'captured', 'failed', etc."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{RAZORPAY_BASE}/payments/{payment_id}",
+            auth=_auth(),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json().get("status", "unknown")

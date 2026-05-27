@@ -95,51 +95,80 @@ class PlivoHandler:
 
     def search_available(self, area_code: str = "", country: str = "US",
                          limit: int = 15) -> list[dict]:
-        """Search Plivo for available phone numbers."""
+        """Search Plivo for available phone numbers. Tries local → mobile → tollfree."""
         clean_area = area_code.lstrip("+").strip()
 
-        # type='local' works for all Plivo countries incl. India (mobile returns nothing)
-        kwargs: dict = {"type": "local", "limit": limit}
-        if clean_area:
-            kwargs["pattern"] = clean_area
+        # Country-specific preferred type order
+        _TYPE_PREF: dict[str, list[str]] = {
+            "IN": ["local", "mobile"],
+            "US": ["local", "tollfree"],
+            "CA": ["local", "tollfree"],
+            "GB": ["mobile", "local"],
+            "AU": ["local", "mobile"],
+            "DE": ["local", "mobile"],
+            "FR": ["local", "mobile"],
+        }
+        type_order = _TYPE_PREF.get(country.upper(), ["local", "mobile", "tollfree"])
 
-        try:
-            response = self.client.numbers.search(country_iso=country, **kwargs)
-            objects, error = self._plivo_objects(response)
+        def _n(obj, key, default=""):
+            d = obj if isinstance(obj, dict) else obj.__dict__
+            return d.get(key, default)
 
-            log.info("Plivo number search", country=country, area_code=clean_area or None,
-                     found=len(objects), plivo_error=error or None)
+        last_error = ""
+        for num_type in type_order:
+            try:
+                kwargs: dict = {"type": num_type, "limit": limit}
+                if clean_area:
+                    kwargs["pattern"] = clean_area
 
-            if error and not objects:
-                raise ValueError(f"Plivo: {error}")
+                response = self.client.numbers.search(country_iso=country, **kwargs)
+                objects, error = self._plivo_objects(response)
 
-            def _n(obj, key, default=""):
-                """Get field from a number item — handles both dict and ResponseObject."""
-                d = obj if isinstance(obj, dict) else obj.__dict__
-                return d.get(key, default)
+                log.info("Plivo number search", country=country, type=num_type,
+                         area_code=clean_area or None, found=len(objects), plivo_error=error or None)
 
-            return [
-                {
-                    "phone_number": "+" + str(_n(n, "number")).lstrip("+"),
-                    "friendly_name": "+" + str(_n(n, "number")).lstrip("+"),
-                    "locality": _n(n, "city") or "",
-                    "region": _n(n, "region") or "",
-                    "iso_country": country,
-                    "capabilities": {
-                        "voice": _n(n, "voice_enabled") or True,
-                        "sms": _n(n, "sms_enabled") or False,
-                        "mms": _n(n, "mms_enabled") or False,
-                    },
-                    "monthly_rate_usd": float(_n(n, "monthly_rental_rate") or 1.0),
-                    "restriction_text": _n(n, "restriction_text") or "",
-                }
-                for n in objects
-            ]
-        except ValueError:
-            raise
-        except Exception as exc:
-            log.error("Plivo number search failed", country=country, error=str(exc))
-            raise ValueError(f"Plivo search failed for '{country}': {exc}")
+                if objects:
+                    return [
+                        {
+                            "phone_number": "+" + str(_n(n, "number")).lstrip("+"),
+                            "friendly_name": "+" + str(_n(n, "number")).lstrip("+"),
+                            "locality": _n(n, "city") or "",
+                            "region": _n(n, "region") or "",
+                            "iso_country": country,
+                            "number_type": num_type,
+                            "capabilities": {
+                                "voice": _n(n, "voice_enabled") or True,
+                                "sms": _n(n, "sms_enabled") or False,
+                                "mms": _n(n, "mms_enabled") or False,
+                            },
+                            "monthly_rate_usd": float(_n(n, "monthly_rental_rate") or 1.0),
+                            "restriction_text": _n(n, "restriction_text") or "",
+                        }
+                        for n in objects
+                    ]
+
+                if error:
+                    last_error = error
+
+            except Exception as exc:
+                last_error = str(exc)
+                log.warning("Plivo search attempt failed", country=country,
+                            type=num_type, error=last_error)
+
+        # All types exhausted — no numbers found
+        _account_restricted = (
+            "unable to offer" in last_error.lower() or
+            "not in coverage" in last_error.lower()
+        )
+        if _account_restricted:
+            raise ValueError(
+                f"Your Plivo account does not have {country} numbers enabled. "
+                "Only India (IN) is currently available. To buy international numbers, "
+                "switch to Twilio as your telephony provider."
+            )
+        if last_error:
+            raise ValueError(f"Plivo: no numbers available for {country} — {last_error}")
+        return []
 
     def provision(self, phone_number: str, bundle_sid: str | None = None) -> dict:
         """Buy a Plivo number and wire it to our inbound webhook."""

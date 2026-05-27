@@ -100,20 +100,32 @@ class AssistantManager:
             except Exception as exc:
                 log.warning("Final call commit failed", call_id=self.call_id, error=str(exc))
 
-            # Deduct credits for this call
+            # Deduct credits for this call — retry once on transient failure
             if call.duration_seconds and call.duration_seconds > 0:
-                try:
-                    from backend.db.database import AsyncSessionLocal
-                    from backend.billing.credits import deduct_credits
-                    async with AsyncSessionLocal() as billing_db:
-                        await deduct_credits(
-                            db=billing_db,
-                            workspace_id=call.workspace_id,
-                            duration_seconds=call.duration_seconds,
-                            call_id=call.id,
-                        )
-                        await billing_db.commit()
-                except Exception as exc:
-                    log.warning("Credit deduction failed", call_id=self.call_id, error=str(exc))
+                import asyncio as _asyncio
+                from backend.db.database import AsyncSessionLocal
+                from backend.billing.credits import deduct_credits
+                for _attempt in range(2):
+                    try:
+                        async with AsyncSessionLocal() as billing_db:
+                            await deduct_credits(
+                                db=billing_db,
+                                workspace_id=call.workspace_id,
+                                duration_seconds=call.duration_seconds,
+                                call_id=call.id,
+                            )
+                            await billing_db.commit()
+                        break  # success
+                    except Exception as exc:
+                        if _attempt == 0:
+                            await _asyncio.sleep(2)
+                        else:
+                            log.error(
+                                "Credit deduction failed after retry — balance not updated",
+                                call_id=self.call_id,
+                                workspace_id=call.workspace_id,
+                                duration_seconds=call.duration_seconds,
+                                error=str(exc),
+                            )
 
             log.info("WebSocket session closed", call_id=self.call_id)

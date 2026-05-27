@@ -141,7 +141,7 @@ async def verify_razorpay_payment(
     if not settings.RAZORPAY_KEY_SECRET:
         raise HTTPException(status_code=501, detail="Razorpay not configured")
 
-    from backend.billing.razorpay_client import verify_signature
+    from backend.billing.razorpay_client import verify_signature, fetch_payment_status
     ok = verify_signature(
         payload.razorpay_order_id,
         payload.razorpay_payment_id,
@@ -149,6 +149,20 @@ async def verify_razorpay_payment(
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Invalid payment signature")
+
+    # Verify the payment is actually captured (not just signed)
+    try:
+        pmt_status = await fetch_payment_status(payload.razorpay_payment_id)
+        if pmt_status != "captured":
+            raise HTTPException(
+                status_code=402,
+                detail=f"Payment not captured (status: {pmt_status}). Please retry.",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning("Could not verify Razorpay payment status — proceeding",
+                    payment_id=payload.razorpay_payment_id, error=str(exc))
 
     pack = PACKS_INR.get(payload.pack_id)
     if not pack:
