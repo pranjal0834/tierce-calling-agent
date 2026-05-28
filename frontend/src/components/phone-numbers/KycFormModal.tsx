@@ -118,7 +118,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
     }
   }
 
-  const inp = "w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500";
+  const inp = "w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500";
   const lbl = "block text-xs text-gray-500 mb-1.5";
 
   return (
@@ -150,7 +150,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
                   onClick={() => set({ business_type: t })}
                   className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${
                     form.business_type === t
-                      ? "bg-indigo-600 border-indigo-500 text-white"
+                      ? "bg-brand-500 border-brand-500 text-white"
                       : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white"
                   }`}
                 >
@@ -240,7 +240,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
               Cancel
             </button>
             <button type="submit" disabled={saving}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
+              className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
               {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               Submit KYC
             </button>

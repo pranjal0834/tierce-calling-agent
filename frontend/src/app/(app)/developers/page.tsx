@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import {
-  Code2, Key, Copy, Check, Trash2, RefreshCw,
+  Key, Copy, Check, Trash2,
   Terminal, Globe, Zap, Phone, CalendarClock, BookOpen,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -20,8 +20,8 @@ function CopyButton({ text }: { text: string }) {
     setTimeout(() => setCopied(false), 2000);
   }
   return (
-    <button onClick={copy} title="Copy" className="text-gray-500 hover:text-white transition-colors shrink-0">
-      {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+    <button onClick={copy} title="Copy" className="text-neutral-400 hover:text-neutral-900 transition-colors shrink-0">
+      {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -29,13 +29,19 @@ function CopyButton({ text }: { text: string }) {
 function CodeBlock({ code, language = "bash" }: { code: string; language?: string }) {
   return (
     <div className="relative group">
-      <pre className="bg-gray-950 border border-gray-800 rounded-lg px-4 py-3 text-xs text-gray-300 font-mono overflow-x-auto whitespace-pre">
+      <pre className="bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-3 text-xs text-neutral-200 font-mono overflow-x-auto whitespace-pre">
         {code}
       </pre>
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <CopyButton text={code} />
+        <button
+          onClick={() => navigator.clipboard.writeText(code)}
+          className="text-neutral-400 hover:text-white transition-colors p-1 rounded"
+          title="Copy"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
       </div>
-      <span className="absolute top-2 left-3 text-xs text-gray-600 font-sans">{language}</span>
+      <span className="absolute top-2 left-3 text-xs text-neutral-500 font-sans">{language}</span>
     </div>
   );
 }
@@ -95,11 +101,11 @@ function ApiKeysSection() {
   return (
     <div className="space-y-4">
       {/* Create */}
-      <div className="bg-gray-800/40 border border-gray-700 rounded-xl p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Key className="w-4 h-4 text-indigo-400" /> Create New API Key
+      <div className="bg-white border border-neutral-200 shadow-sm rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
+          <Key className="w-4 h-4 text-brand-500" /> Create New API Key
         </h3>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-neutral-500">
           Give each key a descriptive name so you know where it&apos;s used. The raw key is shown only once — store it securely.
         </p>
         <div className="flex gap-2">
@@ -108,12 +114,12 @@ function ApiKeysSection() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && create()}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-500"
+            className="flex-1 bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
           />
           <button
             onClick={create}
             disabled={creating || !newName.trim()}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
             {creating ? "Creating…" : "Create Key"}
           </button>
@@ -121,12 +127,12 @@ function ApiKeysSection() {
 
         {newKey && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-yellow-400">
+            <div className="flex items-center gap-2 text-amber-600">
               <Zap className="w-3.5 h-3.5" />
               <p className="text-xs font-semibold">Copy this key now — it won&apos;t be shown again.</p>
             </div>
-            <div className="flex items-center gap-2 bg-gray-900 border border-yellow-500/30 rounded-lg px-3 py-2.5">
-              <p className="flex-1 text-xs text-yellow-300 font-mono break-all">{newKey}</p>
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+              <p className="flex-1 text-xs text-amber-800 font-mono break-all">{newKey}</p>
               <CopyButton text={newKey} />
             </div>
           </div>
@@ -136,35 +142,39 @@ function ApiKeysSection() {
       {/* Keys list */}
       <div>
         {loading ? (
-          <div className="flex justify-center py-8"><RefreshCw className="w-5 h-5 text-gray-600 animate-spin" /></div>
+          <div className="flex justify-center py-8">
+            <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          </div>
         ) : keys.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 text-sm border border-dashed border-gray-700 rounded-xl">
+          <div className="text-center py-8 text-neutral-500 text-sm border border-dashed border-neutral-300 rounded-xl">
             No API keys yet — create one above
           </div>
         ) : (
-          <div className="space-y-2">
-            {keys.map((k) => (
-              <div key={k.id} className="flex items-center justify-between bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center">
-                    <Key className="w-3.5 h-3.5 text-indigo-400" />
+          <div className="bg-white border border-neutral-200 shadow-sm rounded-xl overflow-hidden">
+            <div className="divide-y divide-neutral-100">
+              {keys.map((k) => (
+                <div key={k.id} className="flex items-center justify-between px-4 py-3 hover:bg-neutral-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/25 flex items-center justify-center">
+                      <Key className="w-3.5 h-3.5 text-brand-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-neutral-900 font-medium">{k.name}</p>
+                      <p className="text-xs text-neutral-400">
+                        Created {fmtDate(k.created_at)} · Last used {fmtDate(k.last_used_at)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-white font-medium">{k.name}</p>
-                    <p className="text-xs text-gray-500">
-                      Created {fmtDate(k.created_at)} · Last used {fmtDate(k.last_used_at)}
-                    </p>
-                  </div>
+                  <button
+                    onClick={() => revoke(k.id, k.name)}
+                    className="text-neutral-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                    title="Revoke key"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => revoke(k.id, k.name)}
-                  className="text-gray-600 hover:text-red-400 transition-colors p-1.5 rounded-lg hover:bg-red-500/10"
-                  title="Revoke key"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -233,31 +243,26 @@ const call = await response.json();
 console.log(call.id); // call ID for tracking`;
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
-          <Code2 className="w-5 h-5 text-indigo-400" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Developers</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Use the Tierce API to automate calls, integrate with your CRM, or build your own workflows. All endpoints accept API key authentication.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-neutral-900">Developers</h1>
+        <p className="text-neutral-500 mt-1">
+          Use the Tierce API to automate calls, integrate with your CRM, or build your own workflows. All endpoints accept API key authentication.
+        </p>
       </div>
 
       {/* Base URL */}
-      <div className="bg-gray-800/40 border border-gray-700 rounded-xl p-5">
+      <div className="bg-white border border-neutral-200 shadow-sm rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
-          <Globe className="w-4 h-4 text-gray-400" />
-          <h2 className="text-sm font-semibold text-white">Base URL</h2>
+          <Globe className="w-4 h-4 text-neutral-400" />
+          <h2 className="text-sm font-semibold text-neutral-900">Base URL</h2>
           {workspace && (
-            <span className="ml-auto text-xs text-gray-500">Workspace: <span className="text-gray-300">{workspace.name}</span></span>
+            <span className="ml-auto text-xs text-neutral-400">Workspace: <span className="text-neutral-700">{workspace.name}</span></span>
           )}
         </div>
-        <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5">
-          <code className="flex-1 text-sm text-indigo-300 font-mono">{BASE_URL}/api</code>
+        <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2.5">
+          <code className="flex-1 text-sm text-brand-600 font-mono">{BASE_URL}/api</code>
           <CopyButton text={`${BASE_URL}/api`} />
         </div>
       </div>
@@ -265,11 +270,11 @@ console.log(call.id); // call ID for tracking`;
       {/* Authentication */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-gray-400" />
-          <h2 className="text-base font-semibold text-white">Authentication</h2>
+          <Terminal className="w-4 h-4 text-neutral-400" />
+          <h2 className="text-base font-semibold text-neutral-900">Authentication</h2>
         </div>
-        <p className="text-sm text-gray-400">
-          Pass your API key in the <code className="text-indigo-300 bg-indigo-500/10 px-1.5 py-0.5 rounded text-xs">X-API-Key</code> header on every request.
+        <p className="text-sm text-neutral-600">
+          Pass your API key in the <code className="text-brand-600 bg-brand-500/10 px-1.5 py-0.5 rounded text-xs">X-API-Key</code> header on every request.
           The key acts as the workspace owner — it has full access to all agents, calls, and data in your workspace.
         </p>
         <CodeBlock code={authExample} language="bash" />
@@ -278,21 +283,21 @@ console.log(call.id); // call ID for tracking`;
       {/* Quick Start */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <BookOpen className="w-4 h-4 text-gray-400" />
-          <h2 className="text-base font-semibold text-white">Quick Start</h2>
+          <BookOpen className="w-4 h-4 text-neutral-400" />
+          <h2 className="text-base font-semibold text-neutral-900">Quick Start</h2>
         </div>
 
         <div className="space-y-3">
           <div>
-            <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Initiate an outbound call</p>
+            <p className="text-xs text-neutral-500 mb-2 font-medium uppercase tracking-wide">Initiate an outbound call</p>
             <CodeBlock code={initiateExample} language="bash" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Schedule a call</p>
+            <p className="text-xs text-neutral-500 mb-2 font-medium uppercase tracking-wide">Schedule a call</p>
             <CodeBlock code={scheduleExample} language="bash" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">JavaScript / TypeScript</p>
+            <p className="text-xs text-neutral-500 mb-2 font-medium uppercase tracking-wide">JavaScript / TypeScript</p>
             <CodeBlock code={jsExample} language="javascript" />
           </div>
         </div>
@@ -300,48 +305,48 @@ console.log(call.id); // call ID for tracking`;
 
       {/* Endpoints reference */}
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-white">Endpoints Reference</h2>
-        <div className="border border-gray-700 rounded-xl overflow-hidden">
+        <h2 className="text-base font-semibold text-neutral-900">Endpoints Reference</h2>
+        <div className="border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-800/60 border-b border-gray-700">
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium w-16">Method</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Path</th>
-                <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Description</th>
+              <tr className="bg-neutral-50 border-b border-neutral-200">
+                <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium w-16">Method</th>
+                <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Path</th>
+                <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Description</th>
               </tr>
             </thead>
             <tbody>
               {ENDPOINTS.map((ep, i) => (
-                <tr key={i} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/30 transition-colors">
+                <tr key={i} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition-colors">
                   <td className="px-4 py-3">
                     <span className={`text-xs font-bold font-mono ${
-                      ep.method === "POST" ? "text-green-400" : "text-blue-400"
+                      ep.method === "POST" ? "text-green-600" : "text-blue-600"
                     }`}>
                       {ep.method}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <code className="text-xs text-gray-300 font-mono">{ep.path}</code>
+                    <code className="text-xs text-neutral-700 font-mono">{ep.path}</code>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-400">{ep.label}</td>
+                  <td className="px-4 py-3 text-xs text-neutral-500">{ep.label}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-600">
-          Full interactive docs available at <code className="text-gray-500">{BASE_URL}/docs</code> (FastAPI Swagger UI).
+        <p className="text-xs text-neutral-400">
+          Full interactive docs available at <code className="text-neutral-600">{BASE_URL}/docs</code> (FastAPI Swagger UI).
         </p>
       </div>
 
       {/* Divider */}
-      <div className="border-t border-gray-800" />
+      <div className="border-t border-neutral-200" />
 
       {/* API Keys section */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Key className="w-4 h-4 text-gray-400" />
-          <h2 className="text-base font-semibold text-white">API Keys</h2>
+          <Key className="w-4 h-4 text-neutral-400" />
+          <h2 className="text-base font-semibold text-neutral-900">API Keys</h2>
         </div>
         <ApiKeysSection />
       </div>

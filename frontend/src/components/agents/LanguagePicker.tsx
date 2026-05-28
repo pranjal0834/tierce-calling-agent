@@ -1,28 +1,9 @@
+// src/components/agents/LanguagePicker.tsx
 "use client";
-import { useState } from "react";
-
-const LANGUAGE_GROUPS = [
-  {
-    group: "Indian Languages",
-    langs: ["Hindi", "Gujarati", "Marathi", "Bengali", "Tamil", "Telugu", "Kannada", "Malayalam", "Punjabi", "Odia", "Urdu", "Assamese", "Maithili", "Sindhi", "Sanskrit"],
-  },
-  {
-    group: "English Variants",
-    langs: ["English", "British English", "Australian English"],
-  },
-  {
-    group: "European",
-    langs: ["Spanish", "French", "German", "Portuguese", "Italian", "Dutch", "Russian", "Polish", "Turkish"],
-  },
-  {
-    group: "Asian",
-    langs: ["Mandarin Chinese", "Japanese", "Korean", "Indonesian", "Vietnamese", "Thai", "Malay"],
-  },
-  {
-    group: "Middle Eastern & African",
-    langs: ["Arabic", "Persian", "Hebrew", "Swahili"],
-  },
-];
+import Card from "@/components/ui/Card";
+import Pill from "@/components/ui/Pill";
+import Button from "@/components/ui/Button";
+import { useLanguagePicker } from "@/hooks/useLanguagePicker";
 
 interface LanguagePickerProps {
   value: string[];
@@ -30,40 +11,44 @@ interface LanguagePickerProps {
 }
 
 export function LanguagePicker({ value, onChange }: LanguagePickerProps) {
-  const [search, setSearch] = useState("");
-  const toggle = (lang: string) => {
-    if (value.includes(lang)) {
-      if (value.length === 1) return; // keep at least one
-      onChange(value.filter(l => l !== lang));
+  // Use the custom hook to manage search and toggle logic
+  const { search, setSearch, filtered } = useLanguagePicker(value);
+
+  // Keep parent component in sync when toggling selections
+  const handleToggle = (lang: string) => {
+    // Compute new selection based on current prop `value`
+    let newValue = [...value];
+    if (newValue.includes(lang)) {
+      if (newValue.length === 1) return; // keep at least one selected
+      newValue = newValue.filter(l => l !== lang);
     } else {
-      onChange([...value, lang]);
+      newValue.push(lang);
     }
+    onChange(newValue);
   };
-  const q = search.toLowerCase();
-  const filtered = LANGUAGE_GROUPS.map(g => ({
-    ...g,
-    langs: g.langs.filter(l => l.toLowerCase().includes(q)),
-  })).filter(g => g.langs.length > 0);
 
   return (
-    <div className="space-y-2">
+    <Card className="space-y-2 bg-white p-4 rounded-lg border border-gray-200">
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-1">
           {value.map(l => (
-            <span key={l} className="flex items-center gap-1 bg-brand-500/20 text-brand-300 text-xs px-2 py-1 rounded-full">
+            <Pill
+              key={l}
+              selected={true}
+              onRemove={value.length > 1 ? () => handleToggle(l) : undefined}
+            >
               {l}
-              {value.length > 1 && (
-                <button type="button" onClick={() => toggle(l)} className="text-brand-400 hover:text-white ml-0.5">×</button>
-              )}
-            </span>
+            </Pill>
           ))}
           {value.length > 1 && (
-            <span className="text-xs text-gray-500 self-center">First selected = primary language</span>
+            <span className="text-xs text-gray-500 self-center">
+              First selected = primary language
+            </span>
           )}
         </div>
       )}
       <input
-        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
         placeholder="Search languages..."
         value={search}
         onChange={e => setSearch(e.target.value)}
@@ -74,23 +59,19 @@ export function LanguagePicker({ value, onChange }: LanguagePickerProps) {
             <p className="text-xs text-gray-500 uppercase tracking-wide mb-1.5">{g.group}</p>
             <div className="flex flex-wrap gap-1.5">
               {g.langs.map(l => (
-                <button
+                <Button
                   key={l}
-                  type="button"
-                  onClick={() => toggle(l)}
-                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                    value.includes(l)
-                      ? "bg-brand-500/20 border-brand-500 text-brand-300"
-                      : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500"
-                  }`}
+                  variant={value.includes(l) ? "primary" : "secondary"}
+                  className="text-xs"
+                  onClick={() => handleToggle(l)}
                 >
                   {l}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

@@ -58,7 +58,7 @@ function CapBadge({ label, enabled, icon: Icon }: {
 }) {
   if (!enabled) return null;
   return (
-    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+    <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20">
       <Icon className="w-3 h-3" />
       {label}
     </span>
@@ -212,7 +212,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
               <select
                 value={country}
                 onChange={e => { setCountry(e.target.value); setResults([]); }}
-                className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+                className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
               >
                 {countries.map(c => (
                   <option key={c.code} value={c.code}>{c.name}</option>
@@ -229,12 +229,12 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
               onChange={e => setAreaCode(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
               placeholder={country === "US" ? "Area code (e.g. 415)" : country === "IN" ? "STD code (e.g. 80)" : "Area code (optional)"}
-              className="flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+              className="flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
             />
             <button
               onClick={search}
               disabled={searching}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
+              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
             >
               {searching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               Search
@@ -248,7 +248,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
               <select
                 value={selectedAgent}
                 onChange={e => setSelectedAgent(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
               >
                 <option value="">— No agent (unrouted) —</option>
                 {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -282,7 +282,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
                     <button
                       onClick={() => buy(n)}
                       disabled={!!buying}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                      className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
                     >
                       {buying === n.phone_number
                         ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Buying…</>

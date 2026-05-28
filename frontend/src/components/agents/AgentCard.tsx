@@ -10,7 +10,7 @@ interface AgentCardProps {
 
 export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 flex items-start justify-between">
+    <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 flex items-start justify-between">
       <div className="flex items-start gap-4">
         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
           agent.pipeline_mode === "native" ? "bg-purple-500/20" : "bg-blue-500/20"
@@ -21,19 +21,19 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-white">{agent.name}</h3>
+            <h3 className="font-semibold text-neutral-900">{agent.name}</h3>
             {agent.is_personal && (
               <span className="flex items-center gap-1 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
                 <Lock className="w-2.5 h-2.5" /> Personal
               </span>
             )}
           </div>
-          {agent.description && <p className="text-sm text-gray-400 mt-0.5">{agent.description}</p>}
+          {agent.description && <p className="text-sm text-neutral-500 mt-0.5">{agent.description}</p>}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded">
+            <span className="text-xs bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded">
               {agent.pipeline_mode === "native" ? "Native Audio" : "Classic Pipeline"}
             </span>
-            <span className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded">{agent.llm_model}</span>
+            <span className="text-xs bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded">{agent.llm_model}</span>
             {agent.config?.backchannel_enabled && (
               <span className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded">Backchannel</span>
             )}
@@ -47,13 +47,13 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
         </div>
       </div>
       <div className="flex items-center gap-1">
-        <Link href={`/agents/${agent.id}`} className="text-gray-600 hover:text-brand-400 transition-colors p-1" title="View agent">
+        <Link href={`/agents/${agent.id}`} className="text-neutral-400 hover:text-brand-400 transition-colors p-1" title="View agent">
           <Eye className="w-4 h-4" />
         </Link>
-        <button onClick={() => onEdit(agent)} className="text-gray-600 hover:text-brand-400 transition-colors p-1" title="Edit agent">
+        <button onClick={() => onEdit(agent)} className="text-neutral-400 hover:text-brand-400 transition-colors p-1" title="Edit agent">
           <Pencil className="w-4 h-4" />
         </button>
-        <button onClick={() => onDelete(agent.id)} className="text-gray-600 hover:text-red-400 transition-colors p-1" title="Delete agent">
+        <button onClick={() => onDelete(agent.id)} className="text-neutral-400 hover:text-red-400 transition-colors p-1" title="Delete agent">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>

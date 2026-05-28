@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const VOICES = [
   { id: "alloy",   label: "Alloy",   gender: "Neutral",  tone: "Balanced & versatile",          color: "from-violet-500 to-purple-600" },
@@ -7,7 +7,7 @@ export const VOICES = [
   { id: "coral",   label: "Coral",   gender: "Female",   tone: "Bright & energetic",             color: "from-rose-500 to-pink-600" },
   { id: "echo",    label: "Echo",    gender: "Male",     tone: "Clear & professional",           color: "from-cyan-500 to-blue-600" },
   { id: "sage",    label: "Sage",    gender: "Female",   tone: "Calm & reassuring",              color: "from-emerald-500 to-green-600" },
-  { id: "shimmer", label: "Shimmer", gender: "Female",   tone: "Soft & approachable",            color: "from-sky-400 to-indigo-500" },
+  { id: "shimmer", label: "Shimmer", gender: "Female",   tone: "Soft & approachable",            color: "from-sky-400 to-brand-500" },
   { id: "verse",   label: "Verse",   gender: "Neutral",  tone: "Expressive & dynamic",           color: "from-fuchsia-500 to-violet-600" },
 ];
 

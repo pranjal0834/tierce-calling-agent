@@ -70,32 +70,32 @@ function fmtDateTime(iso?: string | null) {
   }
 }
 
-const STATUS_MAP: Record<string, { label: string; dot: string; text: string }> = {
-  completed:    { label: "Completed",    dot: "bg-green-500",              text: "text-green-400" },
-  in_progress:  { label: "Live",         dot: "bg-blue-400 animate-pulse", text: "text-blue-400" },
-  ringing:      { label: "Ringing",      dot: "bg-yellow-400 animate-pulse", text: "text-yellow-400" },
-  initiated:    { label: "Initiated",    dot: "bg-yellow-500",             text: "text-yellow-400" },
-  not_answered: { label: "Not Answered", dot: "bg-gray-500",               text: "text-gray-400" },
-  failed:       { label: "Failed",       dot: "bg-red-500",                text: "text-red-400" },
-  voicemail:    { label: "Voicemail",    dot: "bg-orange-400",             text: "text-orange-400" },
-  cancelled:    { label: "Cancelled",    dot: "bg-gray-600",               text: "text-gray-500" },
+const STATUS_MAP: Record<string, { label: string; cls: string; pulse?: boolean }> = {
+  completed:    { label: "Completed",    cls: "text-green-600 bg-green-50 border-green-200" },
+  in_progress:  { label: "Live",         cls: "text-brand-600 bg-brand-50 border-brand-200", pulse: true },
+  ringing:      { label: "Ringing",      cls: "text-yellow-600 bg-yellow-50 border-yellow-200", pulse: true },
+  initiated:    { label: "Initiated",    cls: "text-yellow-600 bg-yellow-50 border-yellow-200" },
+  not_answered: { label: "Not Answered", cls: "text-neutral-500 bg-neutral-100 border-neutral-200" },
+  failed:       { label: "Failed",       cls: "text-red-600 bg-red-50 border-red-200" },
+  voicemail:    { label: "Voicemail",    cls: "text-orange-600 bg-orange-50 border-orange-200" },
+  cancelled:    { label: "Cancelled",    cls: "text-neutral-500 bg-neutral-100 border-neutral-200" },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status] ?? { label: status, dot: "bg-gray-500", text: "text-gray-400" };
+  const s = STATUS_MAP[status] ?? { label: status, cls: "text-neutral-500 bg-neutral-100 border-neutral-200" };
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-gray-800 ${s.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${s.cls}`}>
+      {s.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
       {s.label}
     </span>
   );
 }
 
 const INTEREST_COLOR: Record<string, string> = {
-  high: "text-green-400",
-  medium: "text-yellow-400",
-  low: "text-orange-400",
-  not_interested: "text-red-400",
+  high: "text-green-600",
+  medium: "text-amber-600",
+  low: "text-orange-600",
+  not_interested: "text-red-600",
 };
 
 // ── Audio player with VBR duration fix ───────────────────────────────────────
@@ -259,13 +259,13 @@ export default function CallsPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Calls</h1>
-          <p className="text-gray-400 mt-1">Monitor and review all call sessions</p>
+          <h1 className="text-2xl font-bold text-neutral-900">Calls</h1>
+          <p className="text-neutral-500 mt-1">Monitor and review all call sessions</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulk(true)}
-            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium border border-gray-700"
+            className="flex items-center gap-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-medium border border-neutral-300"
           >
             <Users className="w-4 h-4" /> Bulk Call
           </button>
@@ -280,22 +280,29 @@ export default function CallsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
         {/* ── Call list ── */}
-        <div className="lg:col-span-2 bg-gray-900 rounded-xl border border-gray-800 flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-800 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col">
+          <div className="px-4 py-3 border-b border-neutral-200 text-xs font-semibold text-neutral-500 uppercase tracking-wide">
             All Calls ({calls.length})
           </div>
-          <div className="divide-y divide-gray-800/70 overflow-y-auto" style={{ maxHeight: "75vh" }}>
+          <div className="divide-y divide-neutral-100 overflow-y-auto" style={{ maxHeight: "75vh" }}>
             {calls.length === 0 && (
-              <div className="p-10 text-center text-gray-500 text-sm">No calls yet</div>
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
+                  <Phone className="w-7 h-7 text-neutral-400" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-neutral-500">No calls yet</p>
+                  <p className="text-xs text-neutral-400 mt-1">Dial a number above to place your first call.</p>
+                </div>
+              </div>
             )}
             {calls.map((call: any) => {
-              const s = STATUS_MAP[call.status] ?? STATUS_MAP.initiated;
               const isSelected = detail?.call?.id === call.id;
               return (
                 <button
                   key={call.id}
                   onClick={() => openCall(call)}
-                  className={`w-full px-4 py-3 text-left transition-colors ${isSelected ? "bg-gray-800" : "hover:bg-gray-800/40"}`}
+                  className={`w-full px-4 py-3 text-left transition-colors ${isSelected ? "bg-neutral-100" : "hover:bg-neutral-50"}`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
@@ -307,8 +314,8 @@ export default function CallsPage() {
                           : <ArrowDownLeft className="w-3.5 h-3.5 text-green-400" />}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-white truncate font-mono">{call.phone_number}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="text-sm font-medium text-neutral-900 truncate font-mono">{call.phone_number}</p>
+                        <p className="text-xs text-neutral-500 mt-0.5">
                           {new Date(toUTC(call.created_at)).toLocaleDateString("en-GB", { timeZone: IST, day: "2-digit", month: "short" })}
                           {" · "}{new Date(toUTC(call.created_at)).toLocaleTimeString("en-GB", { timeZone: IST, hour: "2-digit", minute: "2-digit", hour12: true })}
                           {call.duration_seconds ? ` · ${fmtDuration(call.duration_seconds)}` : ""}
@@ -317,8 +324,8 @@ export default function CallsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
+                      <StatusBadge status={call.status} />
+                      <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
                     </div>
                   </div>
                 </button>
@@ -328,7 +335,7 @@ export default function CallsPage() {
         </div>
 
         {/* ── Detail panel ── */}
-        <div className="lg:col-span-3 bg-gray-900 rounded-xl border border-gray-800 flex flex-col" style={{ minHeight: "75vh" }}>
+        <div className="lg:col-span-3 bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col" style={{ minHeight: "75vh" }}>
           {detailLoading && (
             <div className="flex items-center justify-center h-full">
               <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
@@ -337,28 +344,28 @@ export default function CallsPage() {
 
           {!detailLoading && !detail && (
             <div className="flex flex-col items-center justify-center h-full p-12 text-center">
-              <Phone className="w-12 h-12 text-gray-700 mb-3" />
-              <p className="text-gray-500 text-sm">Select a call to view full details</p>
+              <Phone className="w-12 h-12 text-neutral-300 mb-3" />
+              <p className="text-neutral-500 text-sm">Select a call to view full details</p>
             </div>
           )}
 
           {!detailLoading && detail && (
             <div className="flex flex-col h-full overflow-hidden">
               {/* Header */}
-              <div className="px-5 py-4 border-b border-gray-800 flex-shrink-0">
+              <div className="px-5 py-4 border-b border-neutral-200 flex-shrink-0">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-gray-500" />
-                      <p className="font-semibold text-white text-lg">
+                      <User className="w-4 h-4 text-neutral-400" />
+                      <p className="font-semibold text-neutral-900 text-lg">
                         {detail.contact?.name || "Unknown Caller"}
                       </p>
                       {detail.contact?.company && (
-                        <span className="text-sm text-gray-500">· {detail.contact.company}</span>
+                        <span className="text-sm text-neutral-500">· {detail.contact.company}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-sm text-gray-400 font-mono">{detail.call.phone_number}</span>
+                      <span className="text-sm text-neutral-500 font-mono">{detail.call.phone_number}</span>
                       <StatusBadge status={detail.call.status} />
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         detail.call.direction === "outbound"
@@ -370,8 +377,8 @@ export default function CallsPage() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <p className="text-xs text-gray-500">{fmtDate(detail.call.created_at)}</p>
-                    <p className="text-sm font-medium text-white">{fmtDuration(detail.call.duration_seconds)}</p>
+                    <p className="text-xs text-neutral-500">{fmtDate(detail.call.created_at)}</p>
+                    <p className="text-sm font-medium text-neutral-900">{fmtDuration(detail.call.duration_seconds)}</p>
                     {["initiated", "ringing", "in_progress"].includes(detail.call.status) && (
                       <button
                         onClick={() => handleHangup(detail.call.id)}
@@ -406,7 +413,7 @@ export default function CallsPage() {
                     icon={<DollarSign className="w-3 h-3" />}
                     label="Cost"
                     value={detail.call.cost_usd != null ? `$${detail.call.cost_usd.toFixed(4)}` : "—"}
-                    valueClass={detail.call.cost_usd != null ? "text-yellow-300" : "text-gray-400"}
+                    valueClass={detail.call.cost_usd != null ? "text-amber-600" : "text-neutral-400"}
                   />
                   <StatChip
                     icon={<Repeat className="w-3 h-3" />}
@@ -417,21 +424,21 @@ export default function CallsPage() {
                     icon={<Calendar className="w-3 h-3" />}
                     label="Appointment"
                     value={detail.call.extra_data?.appointment_booked ? "Booked" : "No"}
-                    valueClass={detail.call.extra_data?.appointment_booked ? "text-green-400" : "text-gray-400"}
+                    valueClass={detail.call.extra_data?.appointment_booked ? "text-green-600" : "text-neutral-400"}
                   />
                 </div>
               </div>
 
               {/* Tabs */}
-              <div className="flex border-b border-gray-800 flex-shrink-0">
+              <div className="flex border-b border-neutral-200 flex-shrink-0">
                 {(["overview", "transcript", "data"] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
                     className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                       activeTab === tab
-                        ? "border-brand-500 text-white"
-                        : "border-transparent text-gray-500 hover:text-gray-300"
+                        ? "border-brand-500 text-neutral-900"
+                        : "border-transparent text-neutral-500 hover:text-neutral-700"
                     }`}
                   >
                     {tab === "overview" ? "Overview" : tab === "transcript" ? "Transcript" : "Extracted Data"}
@@ -448,7 +455,7 @@ export default function CallsPage() {
                     {/* Summary */}
                     {detail.call.summary && (
                       <Section icon={<MessageSquare className="w-4 h-4 text-brand-400" />} title="Summary">
-                        <p className="text-sm text-gray-300 leading-relaxed">{detail.call.summary}</p>
+                        <p className="text-sm text-neutral-700 leading-relaxed">{detail.call.summary}</p>
                       </Section>
                     )}
 
@@ -457,7 +464,7 @@ export default function CallsPage() {
                       <Section icon={<Calendar className="w-4 h-4 text-green-400" />} title="Appointment Booked">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-green-400" />
-                          <p className="text-sm text-white font-medium">
+                          <p className="text-sm text-neutral-900 font-medium">
                             {detail.call.extra_data.appointment_datetime
                               ? fmtDateTime(detail.call.extra_data.appointment_datetime)
                               : "Appointment booked — time not specified"}
@@ -478,7 +485,7 @@ export default function CallsPage() {
                         <InfoRow
                           label="Ended by"
                           value={detail.call.extra_data?.ended_by === "caller" ? "Caller" : detail.call.extra_data?.ended_by === "agent" ? "Agent" : "—"}
-                          valueClass={detail.call.extra_data?.ended_by === "caller" ? "text-orange-400" : detail.call.extra_data?.ended_by === "agent" ? "text-blue-400" : "text-gray-400"}
+                          valueClass={detail.call.extra_data?.ended_by === "caller" ? "text-orange-600" : detail.call.extra_data?.ended_by === "agent" ? "text-blue-600" : "text-neutral-400"}
                         />
                       </div>
                     </Section>
@@ -493,7 +500,7 @@ export default function CallsPage() {
                         <InfoRow
                           label="Interest level"
                           value={detail.call.extra_data?.caller_interest || "—"}
-                          valueClass={INTEREST_COLOR[detail.call.extra_data?.caller_interest || ""] || "text-gray-300"}
+                          valueClass={INTEREST_COLOR[detail.call.extra_data?.caller_interest || ""] || "text-neutral-700"}
                         />
                         <InfoRow label="Next steps" value={detail.call.extra_data?.next_steps || "—"} />
                       </div>
@@ -504,16 +511,16 @@ export default function CallsPage() {
                       <Section icon={<Repeat className="w-4 h-4 text-orange-400" />} title={`Call History (${detail.contact?.total_calls} total)`}>
                         <div className="space-y-1.5">
                           {detail.call_history.map((h: any) => (
-                            <div key={h.id} className="flex items-center justify-between bg-gray-800/60 rounded-lg px-3 py-2">
+                            <div key={h.id} className="flex items-center justify-between bg-neutral-50 rounded-lg px-3 py-2">
                               <div className="flex items-center gap-2">
                                 {h.direction === "outbound"
                                   ? <ArrowUpRight className="w-3 h-3 text-brand-400" />
                                   : <ArrowDownLeft className="w-3 h-3 text-green-400" />}
-                                <span className="text-xs text-gray-400">{fmtDate(h.created_at)}</span>
+                                <span className="text-xs text-neutral-500">{fmtDate(h.created_at)}</span>
                               </div>
                               <div className="flex items-center gap-3">
                                 {h.duration_seconds && (
-                                  <span className="text-xs text-gray-500">{fmtDuration(h.duration_seconds)}</span>
+                                  <span className="text-xs text-neutral-400">{fmtDuration(h.duration_seconds)}</span>
                                 )}
                                 <StatusBadge status={h.status} />
                               </div>
@@ -529,7 +536,7 @@ export default function CallsPage() {
                 {activeTab === "transcript" && (
                   <div className="space-y-2">
                     {detail.turns.length === 0 && (
-                      <p className="text-gray-500 text-sm text-center py-10">No transcript available</p>
+                      <p className="text-neutral-500 text-sm text-center py-10">No transcript available</p>
                     )}
                     {detail.turns.map((turn: any, idx: number) => (
                       <div key={turn.id}>
@@ -547,31 +554,31 @@ export default function CallsPage() {
                         className={`rounded-lg p-3 ${
                           turn.from_transfer
                             ? turn.role === "user"
-                              ? "bg-gray-800/60 ml-6 border border-orange-500/10"
+                              ? "bg-neutral-100 ml-6 border border-orange-500/10"
                               : "bg-orange-500/10 border border-orange-500/20 mr-6"
                             : turn.role === "user"
-                            ? "bg-gray-800 ml-6"
+                            ? "bg-neutral-100 ml-6"
                             : "bg-brand-500/10 border border-brand-500/20 mr-6"
                         }`}
                       >
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`text-xs font-semibold ${
                             turn.from_transfer
-                              ? turn.role === "user" ? "text-gray-400" : "text-orange-400"
-                              : turn.role === "user" ? "text-gray-400" : "text-brand-400"
+                              ? turn.role === "user" ? "text-neutral-500" : "text-orange-400"
+                              : turn.role === "user" ? "text-neutral-500" : "text-brand-400"
                           }`}>
                             {turn.from_transfer
                               ? turn.role === "user" ? "Caller" : "Human Agent"
                               : turn.role === "user" ? "Caller" : "Agent"}
                           </span>
                           {turn.sentiment && (
-                            <span className="text-xs text-gray-500">· {turn.sentiment}</span>
+                            <span className="text-xs text-neutral-400">· {turn.sentiment}</span>
                           )}
                           {turn.created_at && (
-                            <span className="text-xs text-gray-600 ml-auto">{fmtTime(turn.created_at)}</span>
+                            <span className="text-xs text-neutral-400 ml-auto">{fmtTime(turn.created_at)}</span>
                           )}
                           {turn.latency_ms && (
-                            <span className="text-xs text-gray-600 flex items-center gap-0.5">
+                            <span className="text-xs text-neutral-400 flex items-center gap-0.5">
                               <Clock className="w-3 h-3" />{turn.latency_ms}ms
                             </span>
                           )}
@@ -581,7 +588,7 @@ export default function CallsPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-200">{turn.transcript || "(audio only)"}</p>
+                        <p className="text-sm text-neutral-700">{turn.transcript || "(audio only)"}</p>
                         {turn.eval_score != null && (
                           <div className="mt-1.5 flex items-center gap-1">
                             <Activity className="w-3 h-3 text-gray-500" />
@@ -590,7 +597,7 @@ export default function CallsPage() {
                               turn.eval_score >= 5 ? "text-yellow-400" : "text-red-400"
                             }`}>score: {turn.eval_score.toFixed(1)}</span>
                             {turn.eval_feedback && (
-                              <span className="text-xs text-gray-500"> — {turn.eval_feedback}</span>
+                              <span className="text-xs text-neutral-400"> — {turn.eval_feedback}</span>
                             )}
                           </div>
                         )}
@@ -608,7 +615,7 @@ export default function CallsPage() {
                       <Section icon={<BarChart2 className="w-4 h-4 text-brand-400" />} title="Key Points">
                         <ul className="space-y-1.5">
                           {detail.call.extra_data.key_points.map((pt: string, i: number) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                            <li key={i} className="flex items-start gap-2 text-sm text-neutral-700">
                               <span className="w-5 h-5 rounded-full bg-brand-500/20 text-brand-400 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</span>
                               {pt}
                             </li>
@@ -624,7 +631,7 @@ export default function CallsPage() {
                           ? <CheckCircle2 className="w-5 h-5 text-green-400" />
                           : <XCircle className="w-5 h-5 text-gray-500" />}
                         <div>
-                          <p className="text-sm font-medium text-white">
+                          <p className="text-sm font-medium text-neutral-900">
                             {detail.call.extra_data?.appointment_booked ? "Appointment booked" : "No appointment booked"}
                           </p>
                           {detail.call.extra_data?.appointment_datetime && (
@@ -643,7 +650,7 @@ export default function CallsPage() {
                         <InfoRow
                           label="Interest"
                           value={detail.call.extra_data?.caller_interest || "—"}
-                          valueClass={INTEREST_COLOR[detail.call.extra_data?.caller_interest || ""] || "text-gray-300"}
+                          valueClass={INTEREST_COLOR[detail.call.extra_data?.caller_interest || ""] || "text-neutral-700"}
                         />
                         <InfoRow label="Next steps" value={detail.call.extra_data?.next_steps || "—"} />
                         <InfoRow label="Language used" value={detail.call.extra_data?.language_used || "—"} />
@@ -659,12 +666,12 @@ export default function CallsPage() {
                           return (
                             <div>
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs text-gray-400">Overall positivity</span>
+                                <span className="text-xs text-neutral-500">Overall positivity</span>
                                 <span className={`text-sm font-bold ${
                                   pct >= 70 ? "text-green-400" : pct >= 40 ? "text-yellow-400" : "text-red-400"
                                 }`}>{pct}%</span>
                               </div>
-                              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                              <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full ${
                                     pct >= 70 ? "bg-green-500" : pct >= 40 ? "bg-yellow-500" : "bg-red-500"
@@ -689,12 +696,12 @@ export default function CallsPage() {
                               const avgEngagement = entries.reduce((s, [, v]: any) => s + (v?.engagement ?? 0), 0) / turnCount;
                               return (
                                 <div className="mt-2 space-y-2">
-                                  <p className="text-xs text-gray-500">{turnCount} turns analyzed</p>
+                                  <p className="text-xs text-neutral-400">{turnCount} turns analyzed</p>
                                   <div className="flex flex-wrap gap-2">
                                     {emotions.map((e) => (
-                                      <span key={e} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded-full capitalize">{e}</span>
+                                      <span key={e} className="text-xs bg-neutral-100 text-neutral-600 px-2 py-1 rounded-full capitalize">{e}</span>
                                     ))}
-                                    <span className="text-xs bg-gray-800 text-gray-400 px-2 py-1 rounded-full">
+                                    <span className="text-xs bg-neutral-100 text-neutral-500 px-2 py-1 rounded-full">
                                       engagement {Math.round(avgEngagement * 100)}%
                                     </span>
                                   </div>
@@ -704,7 +711,7 @@ export default function CallsPage() {
                             return (
                               <div className="flex flex-wrap gap-2 mt-2">
                                 {entries.map(([k, v]: any) => (
-                                  <span key={k} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded-full capitalize">
+                                  <span key={k} className="text-xs bg-neutral-100 text-neutral-600 px-2 py-1 rounded-full capitalize">
                                     {k}: {typeof v === "number" ? `${Math.round(v * 100)}%` : String(v ?? "")}
                                   </span>
                                 ))}
@@ -719,7 +726,7 @@ export default function CallsPage() {
                       {detail.call.has_recording ? (
                         <CallAudioPlayer src={getRecordingUrl(detail.call.id)} />
                       ) : (
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-neutral-500">
                           {detail.call.status === "completed"
                             ? "Recording is being processed — check back in a moment."
                             : "No recording available for this call."}
@@ -737,16 +744,16 @@ export default function CallsPage() {
       {/* Dial modal */}
       {showDial && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-md">
-            <div className="px-6 py-5 border-b border-gray-800 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Initiate Call</h2>
-              <button onClick={() => setShowDial(false)} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+          <div className="bg-white rounded-2xl border border-neutral-200 shadow-lg w-full max-w-md">
+            <div className="px-6 py-5 border-b border-neutral-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-neutral-900">Initiate Call</h2>
+              <button onClick={() => setShowDial(false)} className="text-neutral-400 hover:text-neutral-900"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-6 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm text-gray-300">Agent</label>
+                <label className="text-sm text-neutral-700">Agent</label>
                 <select
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm"
                   value={dialForm.agent_id}
                   onChange={e => setDialForm(f => ({ ...f, agent_id: e.target.value }))}
                 >
@@ -755,17 +762,17 @@ export default function CallsPage() {
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm text-gray-300">Phone Number</label>
+                <label className="text-sm text-neutral-700">Phone Number</label>
                 <input
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm"
                   placeholder="+1234567890"
                   value={dialForm.phone_number}
                   onChange={e => setDialForm(f => ({ ...f, phone_number: e.target.value }))}
                 />
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-800 flex justify-end gap-3">
-              <button onClick={() => setShowDial(false)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+            <div className="px-6 py-4 border-t border-neutral-200 flex justify-end gap-3">
+              <button onClick={() => setShowDial(false)} className="px-4 py-2 text-sm text-neutral-500 hover:text-neutral-900">Cancel</button>
               <button
                 onClick={handleDial}
                 className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
@@ -796,22 +803,22 @@ export default function CallsPage() {
 
 function StatChip({ icon, label, value, valueClass }: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) {
   return (
-    <div className="bg-gray-800/60 rounded-lg px-3 py-2">
-      <div className="flex items-center gap-1 text-gray-500 mb-0.5">
+    <div className="bg-neutral-50 rounded-lg px-3 py-2">
+      <div className="flex items-center gap-1 text-neutral-500 mb-0.5">
         {icon}
         <span className="text-[10px] uppercase tracking-wide">{label}</span>
       </div>
-      <p className={`text-sm font-semibold ${valueClass || "text-white"} truncate`}>{value}</p>
+      <p className={`text-sm font-semibold ${valueClass || "text-neutral-900"} truncate`}>{value}</p>
     </div>
   );
 }
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-gray-800/40 rounded-xl p-4">
+    <div className="bg-neutral-50 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         {icon}
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</h3>
+        <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">{title}</h3>
       </div>
       {children}
     </div>
@@ -821,8 +828,8 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 function InfoRow({ label, value, mono, valueClass }: { label: string; value: string; mono?: boolean; valueClass?: string }) {
   return (
     <div>
-      <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-sm mt-0.5 ${mono ? "font-mono" : ""} ${valueClass || "text-gray-200"}`}>{value}</p>
+      <p className="text-[10px] text-neutral-500 uppercase tracking-wide">{label}</p>
+      <p className={`text-sm mt-0.5 ${mono ? "font-mono" : ""} ${valueClass || "text-neutral-700"}`}>{value}</p>
     </div>
   );
 }
@@ -880,21 +887,21 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-2xl max-h-[90vh] flex flex-col">
-        <div className="px-6 py-5 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+      <div className="bg-white rounded-2xl border border-neutral-200 shadow-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="px-6 py-5 border-b border-neutral-200 flex items-center justify-between flex-shrink-0">
           <div>
-            <h2 className="text-lg font-semibold text-white">Bulk Call Campaign</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Upload CSV/Excel or paste numbers</p>
+            <h2 className="text-lg font-semibold text-neutral-900">Bulk Call Campaign</h2>
+            <p className="text-xs text-neutral-500 mt-0.5">Upload CSV/Excel or paste numbers</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm text-gray-300 font-medium">Agent</label>
+              <label className="text-sm text-neutral-700 font-medium">Agent</label>
               <select
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm"
                 value={agentId}
                 onChange={e => setAgentId(e.target.value)}
               >
@@ -903,20 +910,20 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm text-gray-300 font-medium">Calls/second</label>
+              <label className="text-sm text-neutral-700 font-medium">Calls/second</label>
               <input type="number" min={0.1} max={5} step={0.5}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm"
                 value={callsPerSecond}
                 onChange={e => setCallsPerSecond(Number(e.target.value))}
               />
             </div>
           </div>
 
-          <div className="flex gap-2 border-b border-gray-800">
+          <div className="flex gap-2 border-b border-neutral-200">
             {(["file", "paste"] as const).map(t => (
               <button key={t} onClick={() => { setTab(t); setContacts([]); setFileName(""); setPasteText(""); }}
                 className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  tab === t ? "border-brand-500 text-white" : "border-transparent text-gray-400 hover:text-white"
+                  tab === t ? "border-brand-500 text-neutral-900" : "border-transparent text-neutral-500 hover:text-neutral-700"
                 }`}>
                 {t === "file" ? "Upload File" : "Paste Numbers"}
               </button>
@@ -927,25 +934,25 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
             <div>
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
               <button onClick={() => fileRef.current?.click()}
-                className="w-full border-2 border-dashed border-gray-700 hover:border-brand-500 rounded-xl p-8 text-center transition-colors group">
-                <FileSpreadsheet className="w-10 h-10 text-gray-600 group-hover:text-brand-400 mx-auto mb-2 transition-colors" />
-                <p className="text-sm text-gray-300">{fileName ? fileName : "Click to upload CSV or Excel file"}</p>
-                <p className="text-xs text-gray-500 mt-1">Columns: phone_number, name, company (optional)</p>
+                className="w-full border-2 border-dashed border-neutral-300 hover:border-brand-500 rounded-xl p-8 text-center transition-colors group">
+                <FileSpreadsheet className="w-10 h-10 text-neutral-400 group-hover:text-brand-400 mx-auto mb-2 transition-colors" />
+                <p className="text-sm text-neutral-700">{fileName ? fileName : "Click to upload CSV or Excel file"}</p>
+                <p className="text-xs text-neutral-500 mt-1">Columns: phone_number, name, company (optional)</p>
               </button>
-              {parsing && <p className="text-sm text-gray-400 text-center mt-2">Parsing file...</p>}
+              {parsing && <p className="text-sm text-neutral-500 text-center mt-2">Parsing file...</p>}
             </div>
           )}
 
           {tab === "paste" && (
             <div className="space-y-2">
               <textarea
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm min-h-[140px] resize-none font-mono"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm min-h-[140px] resize-none font-mono"
                 placeholder="+91 9876543210&#10;+1 555 123 4567&#10;..."
                 value={pasteText}
                 onChange={e => setPasteText(e.target.value)}
               />
               <button onClick={handlePasteParse}
-                className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm">
+                className="px-4 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm">
                 Parse Numbers
               </button>
             </div>
@@ -953,28 +960,28 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
 
           {contacts.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-white mb-2">{contacts.length} contacts loaded</p>
-              <div className="bg-gray-800 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+              <p className="text-sm font-medium text-neutral-900 mb-2">{contacts.length} contacts loaded</p>
+              <div className="bg-neutral-50 rounded-lg overflow-hidden max-h-40 overflow-y-auto border border-neutral-200">
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-700/50 sticky top-0">
+                  <thead className="bg-neutral-100 sticky top-0">
                     <tr>
-                      <th className="px-3 py-2 text-left text-gray-400">#</th>
-                      <th className="px-3 py-2 text-left text-gray-400">Phone</th>
-                      <th className="px-3 py-2 text-left text-gray-400">Name</th>
-                      <th className="px-3 py-2 text-left text-gray-400">Company</th>
+                      <th className="px-3 py-2 text-left text-neutral-500">#</th>
+                      <th className="px-3 py-2 text-left text-neutral-500">Phone</th>
+                      <th className="px-3 py-2 text-left text-neutral-500">Name</th>
+                      <th className="px-3 py-2 text-left text-neutral-500">Company</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-700/50">
+                  <tbody className="divide-y divide-neutral-200">
                     {contacts.slice(0, 200).map((c, i) => (
-                      <tr key={i} className="hover:bg-gray-700/30">
-                        <td className="px-3 py-1.5 text-gray-500">{i + 1}</td>
-                        <td className="px-3 py-1.5 text-white font-mono">{c.phone_number}</td>
-                        <td className="px-3 py-1.5 text-gray-300">{c.name || "—"}</td>
-                        <td className="px-3 py-1.5 text-gray-300">{c.company || "—"}</td>
+                      <tr key={i} className="hover:bg-neutral-100">
+                        <td className="px-3 py-1.5 text-neutral-400">{i + 1}</td>
+                        <td className="px-3 py-1.5 text-neutral-900 font-mono">{c.phone_number}</td>
+                        <td className="px-3 py-1.5 text-neutral-600">{c.name || "—"}</td>
+                        <td className="px-3 py-1.5 text-neutral-600">{c.company || "—"}</td>
                       </tr>
                     ))}
                     {contacts.length > 200 && (
-                      <tr><td colSpan={4} className="px-3 py-2 text-gray-500 text-center">+{contacts.length - 200} more…</td></tr>
+                      <tr><td colSpan={4} className="px-3 py-2 text-neutral-500 text-center">+{contacts.length - 200} more…</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -983,8 +990,8 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-gray-800 flex justify-end gap-3 flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
+        <div className="px-6 py-4 border-t border-neutral-200 flex justify-end gap-3 flex-shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-neutral-500 hover:text-neutral-900">Cancel</button>
           <button
             onClick={handleStart}
             disabled={loading || contacts.length === 0 || !agentId}

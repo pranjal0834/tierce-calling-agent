@@ -217,7 +217,7 @@ export function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: KycSta
                 ) : (
                   <button
                     onClick={() => onOpenForm(code)}
-                    className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-medium"
+                    className="text-xs px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors font-medium"
                   >
                     {status === "rejected" || status === "failed" ? "Resubmit" : "Submit KYC"}
                   </button>

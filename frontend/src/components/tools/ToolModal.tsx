@@ -193,12 +193,12 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-gray-800">
-          <h2 className="text-lg font-semibold text-white">
+      <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-neutral-200">
+          <h2 className="text-lg font-semibold text-neutral-900">
             {existing ? "Edit Tool" : "Add Tool"}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -206,7 +206,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
         <div className="p-5 space-y-5">
           {/* Tool type */}
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wide mb-2 block">Tool Type</label>
+            <label className="text-xs text-neutral-500 uppercase tracking-wide mb-2 block">Tool Type</label>
             <div className="grid grid-cols-2 gap-2">
               {TOOL_TYPES.map(tt => (
                 <button
@@ -214,74 +214,74 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                   onClick={() => setType(tt.value)}
                   className={`flex flex-col items-center gap-2 p-3 rounded-xl border text-center transition-all ${
                     type === tt.value
-                      ? "border-brand-500 bg-brand-500/10"
-                      : "border-gray-700 bg-gray-800 hover:border-gray-600"
+                      ? "border-brand-500 bg-brand-50"
+                      : "border-neutral-200 bg-neutral-50 hover:border-neutral-300"
                   }`}
                 >
-                  <tt.icon className={`w-5 h-5 ${type === tt.value ? "text-brand-400" : tt.color}`} />
-                  <span className="text-xs font-medium text-gray-200 leading-tight">{tt.label}</span>
+                  <tt.icon className={`w-5 h-5 ${type === tt.value ? "text-brand-600" : tt.color}`} />
+                  <span className="text-xs font-medium text-neutral-700 leading-tight">{tt.label}</span>
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-neutral-500 mt-2">
               {TOOL_TYPES.find(t => t.value === type)?.description}
             </p>
           </div>
 
           {/* Name */}
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">
-              Function Name <span className="text-red-400">*</span>
+            <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
+              Function Name <span className="text-red-500">*</span>
             </label>
             <input
               value={name}
               onChange={e => setName(e.target.value.replace(/\s+/g, "_").toLowerCase())}
               placeholder="check_availability"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500"
             />
-            <p className="text-xs text-gray-500 mt-1">Lowercase, underscores only. This is what the AI calls.</p>
+            <p className="text-xs text-neutral-400 mt-1">Lowercase, underscores only. This is what the AI calls.</p>
           </div>
 
           {/* Description */}
           <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">Description</label>
+            <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">Description</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={2}
               placeholder="Check available time slots in the calendar"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 resize-none"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 resize-none"
             />
-            <p className="text-xs text-gray-500 mt-1">Describe when the AI should call this tool.</p>
+            <p className="text-xs text-neutral-400 mt-1">Describe when the AI should call this tool.</p>
           </div>
 
           {/* Webhook URL */}
           {type === "webhook" && (
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">
-                Webhook URL <span className="text-red-400">*</span>
+              <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                Webhook URL <span className="text-red-500">*</span>
               </label>
               <input
                 value={webhookUrl}
                 onChange={e => setWebhookUrl(e.target.value)}
                 placeholder="https://your-api.com/webhook"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 font-mono"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
               />
-              <p className="text-xs text-gray-500 mt-1">POST request with JSON body of collected parameters.</p>
+              <p className="text-xs text-neutral-400 mt-1">POST request with JSON body of collected parameters.</p>
             </div>
           )}
 
           {/* Transfer number */}
           {type === "transfer_call" && (
             <div>
-              <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">
-                Transfer To (E.164) <span className="text-red-400">*</span>
+              <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                Transfer To (E.164) <span className="text-red-500">*</span>
               </label>
               <input
                 value={transferTo}
                 onChange={e => setTransferTo(e.target.value)}
                 placeholder="+14155552671"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 font-mono"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
               />
             </div>
           )}
@@ -291,7 +291,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
             <div className="space-y-4">
               {/* Integration picker */}
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wide mb-2 block">Calendar Platform</label>
+                <label className="text-xs text-neutral-500 uppercase tracking-wide mb-2 block">Calendar Platform</label>
                 <div className="grid grid-cols-2 gap-2">
                   {CALENDAR_INTEGRATIONS.map(ci => (
                     <button
@@ -300,19 +300,19 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                       onClick={() => applyCalPreset(ci.value)}
                       className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all ${
                         calIntegration === ci.value
-                          ? "border-brand-500 bg-brand-500/10"
-                          : "border-gray-700 bg-gray-800 hover:border-gray-600"
+                          ? "border-brand-500 bg-brand-50"
+                          : "border-neutral-200 bg-neutral-50 hover:border-neutral-300"
                       }`}
                     >
                       <span className="text-xl">{ci.value === "calcom" ? "🗓" : "📅"}</span>
                       <div>
-                        <p className="text-xs font-semibold text-gray-200">{ci.label}</p>
-                        <p className="text-xs text-gray-500">{ci.supportsDirectBooking ? "Direct booking" : "Link booking"}</p>
+                        <p className="text-xs font-semibold text-neutral-800">{ci.label}</p>
+                        <p className="text-xs text-neutral-500">{ci.supportsDirectBooking ? "Direct booking" : "Link booking"}</p>
                       </div>
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-neutral-500 mt-1.5">
                   {calIntegration === "calcom"
                     ? "Checks real availability and books appointments directly via the Cal.com API."
                     : "Checks availability. For booking, sends the caller a personal one-time Calendly link."}
@@ -326,29 +326,29 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                 return (
                   <>
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">
-                        {preset.apiKeyLabel} <span className="text-red-400">*</span>
+                      <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                        {preset.apiKeyLabel} <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="password"
                         value={calApiKey}
                         onChange={e => setCalApiKey(e.target.value)}
                         placeholder={preset.apiKeyPlaceholder}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 font-mono"
+                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
                       />
-                      <p className="text-xs text-gray-500 mt-1">{preset.apiKeyHint}</p>
+                      <p className="text-xs text-neutral-400 mt-1">{preset.apiKeyHint}</p>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">
-                        {preset.idLabel} <span className="text-red-400">*</span>
+                      <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
+                        {preset.idLabel} <span className="text-red-500">*</span>
                       </label>
                       <input
                         value={calEventId}
                         onChange={e => setCalEventId(e.target.value)}
                         placeholder={preset.idPlaceholder}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-brand-500 font-mono"
+                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
                       />
-                      <p className="text-xs text-gray-500 mt-1">{preset.idHint}</p>
+                      <p className="text-xs text-neutral-400 mt-1">{preset.idHint}</p>
                     </div>
                   </>
                 );
@@ -356,11 +356,11 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
 
               {/* Timezone */}
               <div>
-                <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">Booking Timezone</label>
+                <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">Booking Timezone</label>
                 <select
                   value={calTimezone}
                   onChange={e => setCalTimezone(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:border-brand-500"
                 >
                   {TIMEZONES.map(tz => (
                     <option key={tz} value={tz}>{tz}</option>
@@ -369,13 +369,13 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
               </div>
 
               {/* How it works */}
-              <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-3 space-y-1">
-                <p className="text-xs font-semibold text-orange-300 mb-1.5">How the agent uses this tool</p>
-                <p className="text-xs text-gray-400">1. Caller says they want to book an appointment</p>
-                <p className="text-xs text-gray-400">2. Agent asks for preferred date → calls <span className="font-mono text-orange-300">check_availability</span></p>
-                <p className="text-xs text-gray-400">3. Agent reads available slots, caller picks one</p>
-                <p className="text-xs text-gray-400">4. Agent collects name + email → calls <span className="font-mono text-orange-300">book</span></p>
-                <p className="text-xs text-gray-400">5. Confirmation sent to caller&apos;s email automatically</p>
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-orange-700 mb-1.5">How the agent uses this tool</p>
+                <p className="text-xs text-neutral-600">1. Caller says they want to book an appointment</p>
+                <p className="text-xs text-neutral-600">2. Agent asks for preferred date → calls <span className="font-mono text-orange-600">check_availability</span></p>
+                <p className="text-xs text-neutral-600">3. Agent reads available slots, caller picks one</p>
+                <p className="text-xs text-neutral-600">4. Agent collects name + email → calls <span className="font-mono text-orange-600">book</span></p>
+                <p className="text-xs text-neutral-600">5. Confirmation sent to caller&apos;s email automatically</p>
               </div>
             </div>
           )}
@@ -384,37 +384,37 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
           {type === "webhook" && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-gray-400 uppercase tracking-wide">Parameters</label>
+                <label className="text-xs text-neutral-500 uppercase tracking-wide">Parameters</label>
                 <button
                   onClick={addParam}
-                  className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300"
+                  className="flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add
                 </button>
               </div>
               {params.length === 0 ? (
-                <p className="text-xs text-gray-500 italic">No parameters — the webhook will be called with no body.</p>
+                <p className="text-xs text-neutral-400 italic">No parameters — the webhook will be called with no body.</p>
               ) : (
                 <div className="space-y-2">
                   {params.map((p, i) => (
-                    <div key={i} className="bg-gray-800 rounded-lg p-3 space-y-2">
+                    <div key={i} className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <input
                           value={p.name}
                           onChange={e => updateParam(i, "name", e.target.value)}
                           placeholder="param_name"
-                          className="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none font-mono"
+                          className="flex-1 bg-white border border-neutral-300 rounded px-2 py-1 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none font-mono"
                         />
                         <select
                           value={p.type}
                           onChange={e => updateParam(i, "type", e.target.value)}
-                          className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                          className="bg-white border border-neutral-300 rounded px-2 py-1 text-xs text-neutral-900 focus:outline-none"
                         >
                           <option value="string">string</option>
                           <option value="number">number</option>
                           <option value="boolean">boolean</option>
                         </select>
-                        <button onClick={() => removeParam(i)} className="text-gray-500 hover:text-red-400">
+                        <button onClick={() => removeParam(i)} className="text-neutral-400 hover:text-red-500">
                           <Trash className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -422,7 +422,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                         value={p.description}
                         onChange={e => updateParam(i, "description", e.target.value)}
                         placeholder="Describe this parameter..."
-                        className="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs text-white placeholder-gray-500 focus:outline-none"
+                        className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none"
                       />
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -431,7 +431,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                           onChange={e => updateParam(i, "required", e.target.checked)}
                           className="accent-brand-500"
                         />
-                        <span className="text-xs text-gray-400">Required</span>
+                        <span className="text-xs text-neutral-500">Required</span>
                       </label>
                     </div>
                   ))}
@@ -441,8 +441,8 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-800">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">
+        <div className="flex items-center justify-end gap-3 p-5 border-t border-neutral-200">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-neutral-500 hover:text-neutral-900">
             Cancel
           </button>
           <button

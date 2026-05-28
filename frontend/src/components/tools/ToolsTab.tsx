@@ -127,8 +127,8 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-white">Function Tools</h2>
-          <p className="text-sm text-gray-400 mt-0.5">
+          <h2 className="text-base font-semibold text-neutral-900">Function Tools</h2>
+          <p className="text-sm text-neutral-500 mt-0.5">
             Tools the AI can call during a live conversation to take actions.
           </p>
         </div>
@@ -141,9 +141,9 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
       </div>
 
       {/* Info banner */}
-      <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-        <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-        <p className="text-xs text-blue-300">
+      <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+        <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-blue-700">
           Tools are passed to the AI as callable functions. The agent decides when to call them based on the conversation context and tool descriptions.
         </p>
       </div>
@@ -151,13 +151,13 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
       {/* Tool type legend */}
       <div className="grid grid-cols-3 gap-3">
         {TOOL_TYPES.map(tt => (
-          <div key={tt.value} className={`rounded-xl p-3 border border-gray-800 ${tt.bg}/20 flex items-start gap-2.5`}>
-            <div className={`w-7 h-7 rounded-lg ${tt.bg} flex items-center justify-center flex-shrink-0`}>
+          <div key={tt.value} className={`rounded-xl p-3 border border-neutral-200 ${tt.bg} flex items-start gap-2.5`}>
+            <div className={`w-7 h-7 rounded-lg bg-white/60 flex items-center justify-center flex-shrink-0`}>
               <tt.icon className={`w-4 h-4 ${tt.color}`} />
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-200">{tt.label}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{tt.description}</p>
+              <p className="text-xs font-medium text-neutral-800">{tt.label}</p>
+              <p className="text-xs text-neutral-500 mt-0.5">{tt.description}</p>
             </div>
           </div>
         ))}
@@ -165,10 +165,10 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
 
       {/* Tools list */}
       {tools.length === 0 ? (
-        <div className="text-center py-12 bg-gray-900 rounded-xl border border-gray-800 border-dashed">
-          <Wrench className="w-8 h-8 text-gray-600 mx-auto mb-3" />
-          <p className="text-sm text-gray-400">No tools configured yet</p>
-          <p className="text-xs text-gray-500 mt-1">Add a webhook, end-call, or transfer tool to get started</p>
+        <div className="text-center py-12 bg-white rounded-xl border border-dashed border-neutral-300">
+          <Wrench className="w-8 h-8 text-neutral-300 mx-auto mb-3" />
+          <p className="text-sm text-neutral-500">No tools configured yet</p>
+          <p className="text-xs text-neutral-400 mt-1">Add a webhook, end-call, or transfer tool to get started</p>
           <button
             onClick={() => { setEditing(null); setShowModal(true); }}
             className="mt-4 flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors mx-auto"
@@ -185,47 +185,47 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
             return (
               <div
                 key={tool.id}
-                className={`bg-gray-900 border rounded-xl p-4 transition-all ${
-                  tool.enabled ? "border-gray-700" : "border-gray-800 opacity-60"
+                className={`bg-white border rounded-xl p-4 shadow-sm transition-all ${
+                  tool.enabled ? "border-neutral-200" : "border-neutral-200 opacity-60"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg ${meta?.bg ?? "bg-gray-800"} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className={`w-4 h-4 ${meta?.color ?? "text-gray-400"}`} />
+                    <div className={`w-8 h-8 rounded-lg ${meta?.bg ?? "bg-neutral-100"} flex items-center justify-center flex-shrink-0`}>
+                      <Icon className={`w-4 h-4 ${meta?.color ?? "text-neutral-400"}`} />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-mono font-medium text-white">{tool.name}</span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${meta?.bg ?? "bg-gray-800"} ${meta?.color ?? "text-gray-400"}`}>
+                        <span className="text-sm font-mono font-medium text-neutral-900">{tool.name}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${meta?.bg ?? "bg-neutral-100"} ${meta?.color ?? "text-neutral-500"}`}>
                           {meta?.label ?? tool.type}
                         </span>
                         {!tool.enabled && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-500">disabled</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-400">disabled</span>
                         )}
                       </div>
                       {tool.description && (
-                        <p className="text-xs text-gray-400 mt-0.5 truncate">{tool.description}</p>
+                        <p className="text-xs text-neutral-500 mt-0.5 truncate">{tool.description}</p>
                       )}
                       <div className="flex items-center gap-3 mt-1.5">
                         {tool.type === "webhook" && !!tool.config?.url && (
-                          <span className="text-xs text-gray-500 font-mono truncate max-w-xs">
+                          <span className="text-xs text-neutral-500 font-mono truncate max-w-xs">
                             {String(tool.config.url)}
                           </span>
                         )}
                         {tool.type === "transfer_call" && !!tool.config?.transfer_to && (
-                          <span className="text-xs text-gray-500 font-mono">
+                          <span className="text-xs text-neutral-500 font-mono">
                             → {String(tool.config.transfer_to)}
                           </span>
                         )}
                         {tool.type === "calendar_booking" && !!tool.config?.integration && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-neutral-500">
                             via {String(tool.config.integration) === "calcom" ? "Cal.com" : "Calendly"}
                             {tool.config.timezone ? ` · ${String(tool.config.timezone)}` : ""}
                           </span>
                         )}
                         {paramCount > 0 && (
-                          <span className="text-xs text-gray-600">{paramCount} param{paramCount !== 1 ? "s" : ""}</span>
+                          <span className="text-xs text-neutral-400">{paramCount} param{paramCount !== 1 ? "s" : ""}</span>
                         )}
                       </div>
                     </div>
@@ -233,22 +233,22 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       onClick={() => handleToggle(tool)}
-                      className="text-gray-500 hover:text-gray-300 transition-colors"
+                      className="text-neutral-400 hover:text-neutral-700 transition-colors"
                       title={tool.enabled ? "Disable" : "Enable"}
                     >
                       {tool.enabled
-                        ? <ToggleRight className="w-5 h-5 text-green-400" />
+                        ? <ToggleRight className="w-5 h-5 text-green-600" />
                         : <ToggleLeft className="w-5 h-5" />}
                     </button>
                     <button
                       onClick={() => { setEditing(tool); setShowModal(true); }}
-                      className="text-gray-500 hover:text-gray-300 transition-colors p-1"
+                      className="text-neutral-400 hover:text-neutral-700 transition-colors p-1"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(tool)}
-                      className="text-gray-500 hover:text-red-400 transition-colors p-1"
+                      className="text-neutral-400 hover:text-red-500 transition-colors p-1"
                     >
                       <Trash className="w-4 h-4" />
                     </button>

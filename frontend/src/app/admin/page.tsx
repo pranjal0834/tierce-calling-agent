@@ -55,12 +55,12 @@ function fmt(iso: string) {
 
 function KPI({ label, value, icon: Icon, sub, color }: { label: string; value: string | number; icon: React.ElementType; sub?: string; color: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+    <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-gray-400">{label}</span>
+        <span className="text-sm text-gray-500">{label}</span>
         <Icon className={`w-5 h-5 ${color}`} />
       </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
+      <div className="text-2xl font-bold text-gray-900">{value}</div>
       {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
     </div>
   );
@@ -99,7 +99,7 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
       });
       toast.success(`Balance updated: ${res.new_balance.toFixed(1)} min`);
       setAdjMinutes(""); setAdjReason("");
-      setDetail(null); // force re-fetch
+      setDetail(null);
       onRefresh();
     } catch { toast.error("Failed to adjust credits"); }
     finally { setAdjusting(false); }
@@ -116,34 +116,30 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
   }
 
   return (
-    <div className="border border-gray-800 rounded-xl overflow-hidden">
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
       {/* Row header */}
       <div
-        className="flex items-center gap-4 px-5 py-4 bg-gray-900 cursor-pointer hover:bg-gray-800/60 transition-colors"
+        className="flex items-center gap-4 px-5 py-4 bg-white cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-200"
         onClick={expand}
       >
         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ws.is_active ? "bg-green-400" : "bg-gray-600"}`} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white truncate">{ws.name}</p>
+          <p className="text-sm font-medium text-gray-900 truncate">{ws.name}</p>
           <p className="text-xs text-gray-500">{fmt(ws.created_at)}</p>
         </div>
-        <div className="hidden sm:flex items-center gap-6 text-xs text-gray-400">
+        <div className="hidden sm:flex items-center gap-6 text-xs text-gray-500">
           <span title="Members"><Users className="w-3 h-3 inline mr-1" />{ws.member_count}</span>
           <span title="Agents"><Bot className="w-3 h-3 inline mr-1" />{ws.agent_count}</span>
           <span title="Calls"><Phone className="w-3 h-3 inline mr-1" />{ws.call_count}</span>
-          <span title="Balance" className={ws.credits_balance <= 0 ? "text-red-400" : "text-green-400"}>
-            {ws.credits_balance.toFixed(1)} min
-          </span>
+          <span title="Balance" className={ws.credits_balance <= 0 ? "text-red-400" : "text-green-400"}> {ws.credits_balance.toFixed(1)} min</span>
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full border hidden sm:inline ${
-          ws.is_active ? "text-green-400 bg-green-400/10 border-green-400/20" : "text-gray-500 bg-gray-800 border-gray-700"
-        }`}>{ws.is_active ? "Active" : "Disabled"}</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full border ${ws.is_active ? "text-green-400 bg-green-100 border-green-200" : "text-gray-500 bg-gray-100 border-gray-200"}`}>{ws.is_active ? "Active" : "Disabled"}</span>
         {expanded ? <ChevronUp className="w-4 h-4 text-gray-500 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />}
       </div>
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="border-t border-gray-800 bg-gray-950 p-5 space-y-5">
+        <div className="border-t border-gray-200 bg-gray-50 p-5 space-y-5">
           {loadingDetail ? (
             <div className="flex justify-center py-6"><RefreshCw className="w-5 h-5 text-gray-600 animate-spin" /></div>
           ) : detail ? (
@@ -153,11 +149,7 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
                 <button
                   onClick={toggleStatus}
                   disabled={toggling}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
-                    ws.is_active
-                      ? "text-red-400 border-red-500/30 hover:bg-red-500/10"
-                      : "text-green-400 border-green-500/30 hover:bg-green-500/10"
-                  } disabled:opacity-50`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${ws.is_active ? "text-red-400 border-red-500/30 hover:bg-red-100" : "text-green-400 border-green-500/30 hover:bg-green-100"} disabled:opacity-50`}
                 >
                   {ws.is_active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
                   {ws.is_active ? "Disable workspace" : "Enable workspace"}
@@ -165,7 +157,7 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
               </div>
 
               {/* Credit adjustment */}
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+              <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Adjust Credits</p>
                 <div className="flex gap-2">
                   <input
@@ -173,48 +165,51 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
                     placeholder="Minutes"
                     value={adjMinutes}
                     onChange={e => setAdjMinutes(e.target.value)}
-                    className="w-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                    className="w-28 bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-brand-500"
                   />
                   <input
                     type="text"
                     placeholder="Reason (optional)"
                     value={adjReason}
                     onChange={e => setAdjReason(e.target.value)}
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                    className="flex-1 bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:border-brand-500"
                   />
                   <button onClick={() => adjustCredits(1)} disabled={adjusting}
-                    className="flex items-center gap-1 px-3 py-2 bg-green-700/40 hover:bg-green-700/60 text-green-300 text-xs rounded-lg border border-green-700/40 disabled:opacity-50">
+                    className="flex items-center gap-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg border border-green-600 disabled:opacity-50"
+                  >
                     <Plus className="w-3.5 h-3.5" /> Add
                   </button>
                   <button onClick={() => adjustCredits(-1)} disabled={adjusting}
-                    className="flex items-center gap-1 px-3 py-2 bg-red-700/30 hover:bg-red-700/50 text-red-300 text-xs rounded-lg border border-red-700/30 disabled:opacity-50">
+                    className="flex items-center gap-1 px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-xs rounded-lg border border-red-600 disabled:opacity-50"
+                  >
                     <Minus className="w-3.5 h-3.5" /> Deduct
                   </button>
                 </div>
-                <p className="text-xs text-gray-600">Current balance: <span className="text-white">{detail.credits_balance.toFixed(1)} min</span></p>
+                <p className="text-xs text-gray-600">Current balance: <span className="text-gray-900">{detail.credits_balance.toFixed(1)} min</span></p>
               </div>
 
+              {/* Members, Agents, Calls, Transactions */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Members */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Members ({detail.members.length})</p>
                   <div className="space-y-2">
                     {detail.members.map(m => (
                       <div key={m.id} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300 truncate">{m.email}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-xs ${m.role === "owner" ? "text-yellow-400 bg-yellow-400/10" : "text-blue-400 bg-blue-400/10"}`}>{m.role}</span>
+                        <span className="text-gray-700 truncate">{m.email}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${m.role === "owner" ? "text-yellow-600 bg-yellow-100" : "text-blue-600 bg-blue-100"}`}>{m.role}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Agents */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Agents ({detail.agents.length})</p>
                   <div className="space-y-2">
                     {detail.agents.map(a => (
                       <div key={a.id} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300 truncate">{a.name}</span>
+                        <span className="text-gray-700 truncate">{a.name}</span>
                         <span className="text-gray-500">{a.pipeline_mode}</span>
                       </div>
                     ))}
@@ -223,15 +218,15 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
                 </div>
 
                 {/* Recent calls */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Recent Calls</p>
                   <div className="space-y-2">
                     {detail.recent_calls.map(c => (
                       <div key={c.id} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300">{c.phone_number}</span>
+                        <span className="text-gray-700">{c.phone_number}</span>
                         <div className="flex items-center gap-2">
                           {c.duration_seconds && <span className="text-gray-500">{c.duration_seconds}s</span>}
-                          <span className={`px-1.5 py-0.5 rounded ${c.status === "completed" ? "text-green-400 bg-green-400/10" : "text-gray-400 bg-gray-800"}`}>{c.status}</span>
+                          <span className={`px-1.5 py-0.5 rounded ${c.status === "completed" ? "text-green-600 bg-green-100" : "text-gray-600 bg-gray-100"}`}>{c.status}</span>
                         </div>
                       </div>
                     ))}
@@ -240,17 +235,15 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
                 </div>
 
                 {/* Transactions */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Billing Transactions</p>
                   <div className="space-y-2">
                     {detail.transactions.map(t => (
                       <div key={t.id} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300 truncate max-w-[160px]">{t.description || t.type}</span>
+                        <span className="text-gray-700 truncate max-w-[160px]">{t.description || t.type}</span>
                         <div className="flex items-center gap-2">
                           {t.amount_paid && <span className="text-gray-500">{t.currency === "INR" ? "₹" : "$"}{t.amount_paid}</span>}
-                          <span className={t.minutes >= 0 ? "text-green-400" : "text-red-400"}>
-                            {t.minutes >= 0 ? "+" : ""}{t.minutes.toFixed(1)}m
-                          </span>
+                          <span className={t.minutes >= 0 ? "text-green-600" : "text-red-600"}> {t.minutes >= 0 ? "+" : ""}{t.minutes.toFixed(1)}m</span>
                         </div>
                       </div>
                     ))}
@@ -299,48 +292,47 @@ export default function AdminPage() {
   async function loadTab(t: typeof tab) {
     setTab(t);
     try {
-      if (t === "users" && users.length === 0)   setUsers(await adminGet("/users"));
-      if (t === "calls" && calls.length === 0)   setCalls(await adminGet("/calls"));
+      if (t === "users" && users.length === 0) setUsers(await adminGet("/users"));
+      if (t === "calls" && calls.length === 0) setCalls(await adminGet("/calls"));
     } catch { toast.error("Failed to load data"); }
   }
 
   if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-gray-950">
+    <div className="flex items-center justify-center h-screen bg-gray-50">
       <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
     </div>
   );
 
   if (forbidden) return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-950 gap-4">
+    <div className="flex flex-col items-center justify-center h-screen bg-gray-50 gap-4">
       <ShieldCheck className="w-12 h-12 text-red-400" />
-      <p className="text-white text-lg font-semibold">Super admin access required</p>
-      <p className="text-gray-400 text-sm">Your account is not in the ADMIN_EMAILS list.</p>
+      <p className="text-gray-900 text-lg font-semibold">Super admin access required</p>
+      <p className="text-gray-600 text-sm">Your account is not in the ADMIN_EMAILS list.</p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Top bar */}
-      <div className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+      <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between bg-white/90 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <div className="w-7 h-7 bg-brand-500 rounded-lg flex items-center justify-center">
             <Zap className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-white">Tierce</span>
+          <span className="font-bold text-gray-900">Tierce</span>
           <span className="text-gray-600 mx-1">·</span>
-          <div className="flex items-center gap-1.5 text-sm text-indigo-400">
+          <div className="flex items-center gap-1.5 text-sm text-brand-400">
             <ShieldCheck className="w-4 h-4" /> Super Admin
           </div>
         </div>
-        <a href="/" className="text-xs text-gray-500 hover:text-white transition-colors">← Back to app</a>
+        <a href="/" className="text-xs text-gray-500 hover:text-gray-900 transition-colors">← Back to app</a>
       </div>
 
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-
         {/* KPI cards */}
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
-            <KPI label="Workspaces"    value={stats.total_workspaces}   icon={Building2}   color="text-indigo-400" sub={`+${stats.new_workspaces_7d} this week`} />
+            <KPI label="Workspaces"    value={stats.total_workspaces}   icon={Building2}   color="text-brand-400" sub={`+${stats.new_workspaces_7d} this week`} />
             <KPI label="Users"         value={stats.total_users}        icon={Users}       color="text-blue-400"   />
             <KPI label="Total Calls"   value={stats.total_calls}        icon={Phone}       color="text-green-400"  sub={`${stats.calls_last_24h} last 24h`} />
             <KPI label="Agents"        value={stats.total_agents}       icon={Bot}         color="text-purple-400" />
@@ -351,16 +343,15 @@ export default function AdminPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2 border-b border-gray-800 pb-4">
+        <div className="flex gap-2 border-b border-gray-200 pb-4">
           {(["workspaces", "users", "calls"] as const).map(t => (
             <button key={t} onClick={() => loadTab(t)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-                tab === t ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30" : "text-gray-400 hover:text-white hover:bg-gray-800"
-              }`}>
+              className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${tab === t ? "bg-brand-100 text-brand-600 border border-brand-200" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
+            >
               {t}
             </button>
           ))}
-          <button onClick={load} className="ml-auto text-gray-500 hover:text-white p-2 rounded-lg hover:bg-gray-800 transition-colors">
+          <button onClick={load} className="ml-auto text-gray-500 hover:text-gray-900 p-2 rounded-lg hover:bg-gray-50 transition-colors">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -380,17 +371,15 @@ export default function AdminPage() {
           <div className="space-y-2">
             <p className="text-sm text-gray-500 mb-3">{users.length} users</p>
             {users.map(u => (
-              <div key={u.id} className="flex items-center gap-4 bg-gray-900 border border-gray-800 rounded-xl px-5 py-3">
-                <div className="w-8 h-8 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-xs font-medium text-indigo-400 flex-shrink-0">
+              <div key={u.id} className="flex items-center gap-4 bg-white border border-gray-200 rounded-xl px-5 py-3">
+                <div className="w-8 h-8 rounded-full bg-brand-500/20 border border-brand-500/30 flex items-center justify-center text-xs font-medium text-brand-400 flex-shrink-0">
                   {u.email[0].toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white truncate">{u.email}</p>
+                  <p className="text-sm text-gray-900 truncate">{u.email}</p>
                   <p className="text-xs text-gray-500">{u.workspace_name}</p>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full border hidden sm:inline ${
-                  u.role === "owner" ? "text-yellow-400 border-yellow-500/30 bg-yellow-400/10" : "text-blue-400 border-blue-500/30 bg-blue-400/10"
-                }`}>{u.role}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${u.role === "owner" ? "text-yellow-600 border-yellow-500/30 bg-yellow-100" : "text-blue-600 border-blue-500/30 bg-blue-100"}`}>{u.role}</span>
                 <span className="text-xs text-gray-500 hidden md:inline">{fmt(u.created_at)}</span>
                 <span className={`w-2 h-2 rounded-full flex-shrink-0 ${u.is_active ? "bg-green-400" : "bg-gray-600"}`} />
               </div>
@@ -403,20 +392,15 @@ export default function AdminPage() {
           <div className="space-y-2">
             <p className="text-sm text-gray-500 mb-3">Last {calls.length} calls across all workspaces</p>
             {calls.map(c => (
-              <div key={c.id} className="flex items-center gap-4 bg-gray-900 border border-gray-800 rounded-xl px-5 py-3">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                  c.status === "in_progress" ? "bg-green-400 animate-pulse" :
-                  c.status === "completed" ? "bg-gray-500" : "bg-yellow-400"
-                }`} />
+              <div key={c.id} className="flex items-center gap-4 bg-white border border-gray-200 rounded-xl px-5 py-3">
+                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "in_progress" ? "bg-green-400 animate-pulse" : c.status === "completed" ? "bg-gray-500" : "bg-yellow-400"}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white">{c.phone_number}</p>
+                  <p className="text-sm text-gray-900">{c.phone_number}</p>
                   <p className="text-xs text-gray-500">{c.workspace_name} · {c.pipeline_mode}</p>
                 </div>
                 <span className="text-xs text-gray-400 hidden sm:inline">{c.direction}</span>
                 {c.duration_seconds && <span className="text-xs text-gray-500">{c.duration_seconds}s</span>}
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                  c.status === "completed" ? "text-green-400 border-green-500/20 bg-green-400/10" : "text-gray-400 border-gray-700 bg-gray-800"
-                }`}>{c.status}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${c.status === "completed" ? "text-green-600 border-green-500/20 bg-green-100" : "text-gray-600 border-gray-700 bg-gray-100"}`}>{c.status}</span>
                 <span className="text-xs text-gray-600 hidden md:inline">{fmt(c.created_at)}</span>
               </div>
             ))}
@@ -426,3 +410,4 @@ export default function AdminPage() {
     </div>
   );
 }
+

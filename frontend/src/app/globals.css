@@ -1,3 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---- Design-system CSS variables (Modern Enterprise SaaS — Teal/Amber palette) ---- */
+:root {
+  --color-primary:        #0B8A8F;
+  --color-primary-dark:   #0F766E;
+  --color-secondary:      #2BA7A9;
+  --color-accent:         #F4B63D;
+  --color-bg:             #F8F7F5;
+  --color-surface:        #FFFFFF;
+  --color-border:         #E9ECEF;
+  --color-text-primary:   #0F172A;
+  --color-text-secondary: #64748B;
+}
+
+html, body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Hide scrollbar on sidebar nav while keeping scroll functionality */
+.sidebar-nav::-webkit-scrollbar { display: none; }
+.sidebar-nav { scrollbar-width: none; -ms-overflow-style: none; }

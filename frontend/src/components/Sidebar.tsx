@@ -6,19 +6,34 @@ import { Bot, Phone, BarChart3, Brain, Settings, Zap, LogOut, Wrench, CalendarCl
 import { logout } from "@/lib/auth";
 import { api } from "@/lib/api";
 
-const nav = [
-  { href: "/",              icon: BarChart3,    label: "Dashboard"     },
-  { href: "/agents",        icon: Bot,          label: "Agents"        },
-  { href: "/calls",         icon: Phone,        label: "Calls"         },
-  { href: "/analytics",     icon: Zap,          label: "Analytics"     },
-  { href: "/memory",        icon: Brain,        label: "Memory"        },
-  { href: "/tools",         icon: Wrench,       label: "Tools"         },
-  { href: "/scheduling",    icon: CalendarClock, label: "Scheduling"   },
-  { href: "/phone-numbers", icon: Hash,         label: "Phone Numbers" },
-  { href: "/billing",       icon: CreditCard,   label: "Billing"       },
-  { href: "/webhooks",      icon: Webhook,      label: "Webhooks"      },
-  { href: "/developers",    icon: Code2,        label: "Developers"    },
-  { href: "/settings",      icon: Settings,     label: "Settings"      },
+const NAV_GROUPS = [
+  {
+    label: "Core",
+    items: [
+      { href: "/",       icon: BarChart3,     label: "Dashboard" },
+      { href: "/agents", icon: Bot,           label: "Agents"    },
+      { href: "/calls",  icon: Phone,         label: "Calls"     },
+    ],
+  },
+  {
+    label: "Features",
+    items: [
+      { href: "/phone-numbers", icon: Hash,          label: "Phone Numbers" },
+      { href: "/scheduling",    icon: CalendarClock, label: "Scheduling"    },
+      { href: "/analytics",     icon: BarChart3,     label: "Analytics"     },
+      { href: "/memory",        icon: Brain,         label: "Memory"        },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { href: "/webhooks",   icon: Webhook,    label: "Webhooks"   },
+      { href: "/tools",      icon: Wrench,     label: "Tools"      },
+      { href: "/developers", icon: Code2,      label: "Developers" },
+      { href: "/billing",    icon: CreditCard, label: "Billing"    },
+      { href: "/settings",   icon: Settings,   label: "Settings"   },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -32,42 +47,55 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col py-6">
-      <div className="px-5 mb-8">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-brand-500 rounded-lg flex items-center justify-center">
+    <aside className="w-56 bg-white border-r border-neutral-200 flex flex-col">
+      {/* Brand header */}
+      <div className="px-5 py-5 border-b border-neutral-200">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-brand-500 rounded-xl flex items-center justify-center shadow-sm">
             <Zap className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-white text-lg">Tierce</span>
+          <div>
+            <span className="font-bold text-neutral-900 text-base leading-none">Tierce</span>
+            <p className="text-[10px] text-neutral-400 mt-0.5">Voice Agent Platform</p>
+          </div>
         </div>
-        <p className="text-xs text-gray-500 mt-1">Voice Agent Platform</p>
       </div>
 
-      <nav className="flex-1 px-3 space-y-1">
-        {nav.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${active
-                  ? "bg-brand-500/20 text-brand-400"
-                  : "text-gray-400 hover:text-white hover:bg-gray-800"
-                }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-3 py-4 space-y-4 overflow-y-auto sidebar-nav">
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={group.label}>
+            {gi > 0 && <div className="h-px bg-neutral-200 mb-3" />}
+            <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider px-3 mb-1">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map(({ href, icon: Icon, label }) => {
+                const active = pathname === href || (href !== "/" && pathname.startsWith(href));
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-brand-50 text-brand-600"
+                        : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100"
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 shrink-0 ${active ? "text-brand-500" : ""}`} />
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      <div className="px-3 pt-4 border-t border-gray-800 space-y-1">
+      <div className="px-3 pb-4 border-t border-neutral-200 pt-3 space-y-0.5">
         {isSuperAdmin && (
           <Link
             href="/admin"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 transition-colors"
           >
             <ShieldCheck className="w-4 h-4" />
             Super Admin
@@ -75,12 +103,12 @@ export function Sidebar() {
         )}
         <button
           onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-neutral-500 hover:text-red-600 hover:bg-red-50 transition-colors"
         >
           <LogOut className="w-4 h-4" />
           Sign out
         </button>
-        <p className="text-xs text-gray-600 px-3">Tierce Voice Agent v1.0</p>
+        <p className="text-[10px] text-neutral-400 px-3 pt-1">Tierce Voice v1.0</p>
       </div>
     </aside>
   );

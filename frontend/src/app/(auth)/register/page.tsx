@@ -1,14 +1,12 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { setToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [form, setForm] = useState({
     workspace_name: "",
     email: "",
@@ -57,16 +55,16 @@ export default function RegisterPage() {
         <div className="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center">
           <Zap className="w-5 h-5 text-white" />
         </div>
-        <span className="text-2xl font-bold text-white">Tierce</span>
+        <span className="text-2xl font-bold text-neutral-900">Tierce</span>
       </div>
 
-      <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8">
-        <h1 className="text-xl font-semibold text-white mb-1">Create your workspace</h1>
-        <p className="text-sm text-gray-400 mb-6">Start your AI voice calling platform in seconds</p>
+      <div className="bg-white rounded-2xl border border-neutral-200 shadow-md p-8">
+        <h1 className="text-xl font-semibold text-neutral-900 mb-1">Create your workspace</h1>
+        <p className="text-sm text-neutral-500 mb-6">Start your AI voice calling platform in seconds</p>
 
         <button
           onClick={handleGoogle}
-          className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-gray-900 rounded-lg py-2.5 text-sm font-medium transition-colors mb-4"
+          className="w-full flex items-center justify-center gap-3 bg-white hover:bg-neutral-100 text-neutral-900 border border-neutral-200 rounded-lg py-2.5 text-sm font-medium transition-colors mb-4"
         >
           <svg viewBox="0 0 24 24" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -78,49 +76,49 @@ export default function RegisterPage() {
         </button>
 
         <div className="flex items-center gap-3 my-4">
-          <div className="flex-1 h-px bg-gray-800" />
-          <span className="text-xs text-gray-500">or</span>
-          <div className="flex-1 h-px bg-gray-800" />
+          <div className="flex-1 h-px bg-neutral-200" />
+          <span className="text-xs text-neutral-400">or</span>
+          <div className="flex-1 h-px bg-neutral-200" />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-300">Workspace Name</label>
+            <label className="text-sm text-neutral-700">Workspace Name</label>
             <input
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-brand-500"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
               placeholder="Acme Inc."
               value={form.workspace_name}
               onChange={e => setForm(f => ({ ...f, workspace_name: e.target.value }))}
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-300">Email</label>
+            <label className="text-sm text-neutral-700">Email</label>
             <input
               type="email"
               autoComplete="email"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-brand-500"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
               placeholder="you@company.com"
               value={form.email}
               onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-300">Password</label>
+            <label className="text-sm text-neutral-700">Password</label>
             <input
               type="password"
               autoComplete="new-password"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-brand-500"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
               placeholder="Minimum 8 characters"
               value={form.password}
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm text-gray-300">Confirm Password</label>
+            <label className="text-sm text-neutral-700">Confirm Password</label>
             <input
               type="password"
               autoComplete="new-password"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-brand-500"
+              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
               placeholder="••••••••"
               value={form.confirm_password}
               onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))}
@@ -136,9 +134,9 @@ export default function RegisterPage() {
         </form>
       </div>
 
-      <p className="text-center text-sm text-gray-500 mt-4">
+      <p className="text-center text-sm text-neutral-500 mt-4">
         Already have an account?{" "}
-        <Link href="/login" className="text-brand-400 hover:text-brand-300">
+        <Link href="/login" className="text-brand-500 hover:text-brand-600">
           Sign in
         </Link>
       </p>

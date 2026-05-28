@@ -48,11 +48,11 @@ export default function AgentsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Agents</h1>
-          <p className="text-gray-400 mt-1">Configure and manage your voice AI agents</p>
+          <h1 className="text-2xl font-bold text-neutral-900">Agents</h1>
+          <p className="text-neutral-500 mt-1">Configure and manage your voice AI agents</p>
         </div>
         <button
           onClick={openCreate}
@@ -64,9 +64,20 @@ export default function AgentsPage() {
 
       {/* Agent list */}
       {agents.length === 0 ? (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-12 text-center">
-          <Bot className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400">No agents yet. Create your first agent to start calling.</p>
+        <div className="flex flex-col items-center justify-center py-16 gap-4 border border-dashed border-neutral-300 rounded-2xl">
+          <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
+            <Bot className="w-7 h-7 text-neutral-400" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-medium text-neutral-500">No agents yet</p>
+            <p className="text-xs text-neutral-400 mt-1">Create your first agent to start making calls.</p>
+          </div>
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors"
+          >
+            <Plus className="w-4 h-4" /> New Agent
+          </button>
         </div>
       ) : (
         <>
@@ -74,9 +85,9 @@ export default function AgentsPage() {
           {agents.filter((a: any) => !a.is_personal).length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-gray-500" />
-                <h2 className="text-sm font-medium text-gray-400">Workspace Agents</h2>
-                <span className="text-xs text-gray-600">— visible to all team members</span>
+                <Globe className="w-4 h-4 text-neutral-400" />
+                <h2 className="text-sm font-medium text-neutral-500">Workspace Agents</h2>
+                <span className="text-xs text-neutral-400">— visible to all team members</span>
               </div>
               {agents.filter((a: any) => !a.is_personal).map((agent: any) => (
                 <AgentCard key={agent.id} agent={agent} onEdit={openEdit} onDelete={handleDelete} />
@@ -89,8 +100,8 @@ export default function AgentsPage() {
             <div className="space-y-3 mt-6">
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-amber-500" />
-                <h2 className="text-sm font-medium text-gray-400">My Personal Agents</h2>
-                <span className="text-xs text-gray-600">— only visible to you</span>
+                <h2 className="text-sm font-medium text-neutral-500">My Personal Agents</h2>
+                <span className="text-xs text-neutral-400">— only visible to you</span>
               </div>
               {agents.filter((a: any) => a.is_personal).map((agent: any) => (
                 <AgentCard key={agent.id} agent={agent} onEdit={openEdit} onDelete={handleDelete} />

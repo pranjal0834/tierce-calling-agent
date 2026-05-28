@@ -70,9 +70,9 @@ function fmtMins(m: number) {
 }
 
 const TX_ICONS: Record<string, React.ReactNode> = {
-  purchase:    <ArrowUpRight className="w-4 h-4 text-green-400" />,
-  free_trial:  <Zap className="w-4 h-4 text-yellow-400" />,
-  deduction:   <ArrowDownLeft className="w-4 h-4 text-red-400" />,
+  purchase:    <ArrowUpRight className="w-4 h-4 text-green-500" />,
+  free_trial:  <Zap className="w-4 h-4 text-yellow-500" />,
+  deduction:   <ArrowDownLeft className="w-4 h-4 text-red-500" />,
 };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ export default function BillingPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
+        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -190,34 +190,34 @@ export default function BillingPage() {
   const currentPacks = packs ? (currency === "inr" ? packs.inr : packs.usd) : {};
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <CreditCard className="w-6 h-6 text-indigo-400" />
-          <h1 className="text-2xl font-semibold text-white">Billing</h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900">Billing</h1>
+          <p className="text-neutral-500 mt-1">Manage your credits, plans, and transaction history</p>
         </div>
         <button
           onClick={refresh}
-          className="text-sm text-gray-400 hover:text-white flex items-center gap-1.5 transition-colors"
+          className="text-sm text-neutral-500 hover:text-neutral-900 flex items-center gap-1.5 transition-colors mt-1"
         >
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
-      {/* Trial callout — buying any pack unlocks numbers */}
+      {/* Trial callout */}
       {isTrial && (
-        <div className="bg-gradient-to-r from-indigo-600/15 via-purple-600/10 to-indigo-600/15 border border-indigo-500/30 rounded-2xl p-4">
+        <div className="bg-brand-500/8 border border-brand-500/25 rounded-2xl p-4">
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-indigo-600/20 border border-indigo-500/30 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-              <Lock className="w-4 h-4 text-indigo-400" />
+            <div className="w-8 h-8 bg-brand-500/15 border border-brand-500/25 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+              <Lock className="w-4 h-4 text-brand-500" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white mb-1">
+              <p className="text-sm font-semibold text-neutral-900 mb-1">
                 Buy any pack to unlock dedicated phone numbers
               </p>
-              <p className="text-xs text-gray-400 leading-relaxed">
+              <p className="text-xs text-neutral-500 leading-relaxed">
                 You&apos;re on the free trial — your agents make outbound calls using Tierce&apos;s shared number.
                 Once you buy any pack below, you can purchase your own dedicated number for inbound calls and branded caller ID.
               </p>
@@ -227,43 +227,43 @@ export default function BillingPage() {
       )}
 
       {/* Balance card */}
-      <div className="bg-gradient-to-br from-indigo-600/20 to-purple-600/20 border border-indigo-500/30 rounded-2xl p-6">
+      <div className="bg-gradient-to-br from-brand-500/15 to-purple-600/15 border border-brand-500/25 rounded-2xl p-6">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm text-indigo-300 mb-1">Available Balance</p>
+            <p className="text-sm text-brand-600 mb-1 font-medium">Available Balance</p>
             <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-bold text-white">
+              <span className="text-5xl font-bold text-neutral-900">
                 {balance != null ? balance.toFixed(1) : "—"}
               </span>
-              <span className="text-lg text-indigo-300">minutes</span>
+              <span className="text-lg text-brand-500">minutes</span>
             </div>
             {balance != null && balance <= 5 && balance > 0 && (
-              <p className="mt-2 text-sm text-yellow-400 flex items-center gap-1">
+              <p className="mt-2 text-sm text-yellow-600 flex items-center gap-1">
                 <Zap className="w-3.5 h-3.5" /> Low balance — top up to keep making calls
               </p>
             )}
             {balance != null && balance <= 0 && (
-              <p className="mt-2 text-sm text-red-400 flex items-center gap-1">
+              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
                 <Zap className="w-3.5 h-3.5" /> No balance — calls are blocked until you top up
               </p>
             )}
           </div>
-          <TrendingUp className="w-10 h-10 text-indigo-400/40" />
+          <TrendingUp className="w-10 h-10 text-brand-400/30" />
         </div>
-        <div className="mt-4 pt-4 border-t border-indigo-500/20 text-xs text-indigo-300/70">
+        <div className="mt-4 pt-4 border-t border-brand-500/15 text-xs text-neutral-500">
           Free trial: 20 minutes on signup &nbsp;·&nbsp; Pay-as-you-go: ₹10/min (INR) or $0.12/min (USD)
         </div>
       </div>
 
       {/* Currency toggle */}
       <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-400 mr-2">Buy credits in:</span>
+        <span className="text-sm text-neutral-500 mr-2">Buy credits in:</span>
         <button
           onClick={() => setCurrency("inr")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
             currency === "inr"
-              ? "bg-indigo-600 border-indigo-500 text-white"
-              : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white"
+              ? "bg-brand-500 border-brand-500 text-white"
+              : "bg-white border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400"
           }`}
         >
           <IndianRupee className="w-3.5 h-3.5" /> INR (Razorpay)
@@ -272,8 +272,8 @@ export default function BillingPage() {
           onClick={() => setCurrency("usd")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
             currency === "usd"
-              ? "bg-indigo-600 border-indigo-500 text-white"
-              : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white"
+              ? "bg-brand-500 border-brand-500 text-white"
+              : "bg-white border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400"
           }`}
         >
           <Globe className="w-3.5 h-3.5" /> USD (Stripe)
@@ -294,26 +294,26 @@ export default function BillingPage() {
               key={packId}
               className={`relative flex flex-col rounded-2xl border p-5 transition-all ${
                 isPopular
-                  ? "border-indigo-500/60 bg-indigo-600/10"
-                  : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
+                  ? "border-brand-500/60 bg-brand-500/8 shadow-sm"
+                  : "border-neutral-200 bg-white shadow-sm hover:border-neutral-300"
               }`}
             >
               {isPopular && (
-                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-semibold bg-indigo-600 text-white px-3 py-0.5 rounded-full">
+                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-semibold bg-brand-500 text-white px-3 py-0.5 rounded-full">
                   Most Popular
                 </span>
               )}
               <div className="mb-3">
-                <p className="text-sm font-semibold text-white">{pack.label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{pack.minutes} minutes</p>
+                <p className="text-sm font-semibold text-neutral-900">{pack.label}</p>
+                <p className="text-xs text-neutral-500 mt-0.5">{pack.minutes} minutes</p>
               </div>
               <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-2xl font-bold text-white">{symbol}{price}</span>
+                <span className="text-2xl font-bold text-neutral-900">{symbol}{price}</span>
               </div>
               {perMin && (
-                <p className="text-xs text-gray-500 mb-2">{symbol}{perMin}/min</p>
+                <p className="text-xs text-neutral-400 mb-2">{symbol}{perMin}/min</p>
               )}
-              <div className="flex items-center gap-1 text-xs text-emerald-400 mb-3">
+              <div className="flex items-center gap-1 text-xs text-emerald-600 mb-3">
                 <Phone className="w-3 h-3" />
                 Unlocks dedicated phone numbers
               </div>
@@ -322,8 +322,8 @@ export default function BillingPage() {
                 disabled={isBuying}
                 className={`mt-auto w-full py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                   isPopular
-                    ? "bg-indigo-600 hover:bg-indigo-500 text-white"
-                    : "bg-gray-700 hover:bg-gray-600 text-white"
+                    ? "bg-brand-500 hover:bg-brand-600 text-white"
+                    : "bg-neutral-900 hover:bg-neutral-700 text-white"
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isBuying ? (
@@ -339,41 +339,43 @@ export default function BillingPage() {
 
       {/* Transaction history */}
       <div>
-        <h2 className="text-lg font-semibold text-white mb-4">Transaction History</h2>
+        <h2 className="text-lg font-semibold text-neutral-900 mb-4">Transaction History</h2>
         {transactions.length === 0 ? (
-          <div className="text-center py-10 text-gray-500 bg-gray-800/40 rounded-xl border border-gray-700">
+          <div className="text-center py-10 text-neutral-500 bg-white rounded-xl border border-neutral-200 border-dashed">
             No transactions yet
           </div>
         ) : (
-          <div className="space-y-2">
-            {transactions.map((tx) => (
-              <div
-                key={tx.id}
-                className="flex items-center gap-4 bg-gray-800/50 border border-gray-700 rounded-xl px-4 py-3"
-              >
-                <div className="flex-shrink-0">
-                  {TX_ICONS[tx.type] ?? <CreditCard className="w-4 h-4 text-gray-400" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white truncate">{tx.description || tx.type}</p>
-                  <p className="text-xs text-gray-500">{fmtDate(tx.created_at)}</p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className={`text-sm font-medium ${tx.minutes >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {tx.minutes >= 0 ? "+" : ""}{fmtMins(tx.minutes)}
-                  </p>
-                  {tx.amount_paid != null && (
-                    <p className="text-xs text-gray-500">
-                      {tx.currency === "INR" ? "₹" : "$"}{tx.amount_paid}
+          <div className="bg-white border border-neutral-200 shadow-sm rounded-xl overflow-hidden">
+            <div className="divide-y divide-neutral-100">
+              {transactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="flex items-center gap-4 px-4 py-3 hover:bg-neutral-50 transition-colors"
+                >
+                  <div className="flex-shrink-0">
+                    {TX_ICONS[tx.type] ?? <CreditCard className="w-4 h-4 text-neutral-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-neutral-900 truncate">{tx.description || tx.type}</p>
+                    <p className="text-xs text-neutral-500">{fmtDate(tx.created_at)}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-sm font-medium ${tx.minutes >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      {tx.minutes >= 0 ? "+" : ""}{fmtMins(tx.minutes)}
                     </p>
-                  )}
+                    {tx.amount_paid != null && (
+                      <p className="text-xs text-neutral-500">
+                        {tx.currency === "INR" ? "₹" : "$"}{tx.amount_paid}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0 w-20">
+                    <p className="text-xs text-neutral-500">{tx.balance_after.toFixed(1)} min</p>
+                    <p className="text-xs text-neutral-400">balance</p>
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0 w-20">
-                  <p className="text-xs text-gray-400">{tx.balance_after.toFixed(1)} min</p>
-                  <p className="text-xs text-gray-600">balance</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
       </div>

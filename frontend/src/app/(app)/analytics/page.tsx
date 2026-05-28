@@ -60,17 +60,17 @@ interface AgentAnalytics {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const CHART_COLORS = ["#4f46e5", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#f97316", "#ec4899"];
+const CHART_COLORS = ["#0B8A8F", "#F4B63D", "#22C55E", "#F87171", "#8B5CF6", "#60A5FA", "#F97316", "#EC4899"];
 
 const STATUS_COLORS: Record<string, string> = {
-  completed:    "#10b981",
-  failed:       "#ef4444",
-  initiated:    "#a78bfa",
-  running:      "#06b6d4",
-  in_progress:  "#f59e0b",
-  not_answered: "#f97316",
-  voicemail:    "#8b5cf6",
-  cancelled:    "#6b7280",
+  completed:    "#22C55E",
+  failed:       "#F87171",
+  initiated:    "#A78BFA",
+  running:      "#0B8A8F",
+  in_progress:  "#F4B63D",
+  not_answered: "#F97316",
+  voicemail:    "#8B5CF6",
+  cancelled:    "#64748B",
 };
 
 function ActiveSlice(props: any) {
@@ -128,15 +128,15 @@ function KpiCard({ label, value, sub, icon: Icon, color }: {
   label: string; value: string | number; sub?: string; icon: React.ElementType; color: string;
 }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</span>
+        <span className="text-xs text-neutral-500 font-medium uppercase tracking-wide">{label}</span>
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color.replace("text-", "bg-").replace("400", "400/10")}`}>
           <Icon className={`w-3.5 h-3.5 ${color}`} />
         </div>
       </div>
-      <p className="text-2xl font-bold text-white">{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+      <p className="text-2xl font-bold text-neutral-900">{value}</p>
+      {sub && <p className="text-xs text-neutral-500 mt-1">{sub}</p>}
     </div>
   );
 }
@@ -146,10 +146,10 @@ function SectionHeader({ title, onExport, data }: {
 }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h3 className="text-sm font-semibold text-white">{title}</h3>
+      <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
       {onExport && data && data.length > 0 && (
         <button onClick={onExport}
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-gray-800">
+          className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-900 transition-colors px-2 py-1 rounded-lg hover:bg-neutral-100">
           <Download className="w-3.5 h-3.5" /> Export CSV
         </button>
       )}
@@ -178,12 +178,12 @@ function HourlyHeatmap({ data }: { data: { dow: number; hour: number; count: num
       <div style={{ minWidth: 520 }}>
         <div className="flex items-center mb-1 pl-10">
           {HOUR_LABELS.map((h, i) => (
-            <div key={i} className="flex-1 text-center text-gray-600 font-mono" style={{ fontSize: 9 }}>{i % 3 === 0 ? h : ""}</div>
+            <div key={i} className="flex-1 text-center text-neutral-400 font-mono" style={{ fontSize: 9 }}>{i % 3 === 0 ? h : ""}</div>
           ))}
         </div>
         {DOW_LABELS.map((day, dow) => (
           <div key={dow} className="flex items-center mb-1">
-            <div className="w-10 text-xs text-gray-500 shrink-0">{day}</div>
+            <div className="w-10 text-xs text-neutral-500 shrink-0">{day}</div>
             {Array.from({ length: 24 }, (_, hour) => {
               const count = map[`${dow}-${hour}`] || 0;
               return (
@@ -198,11 +198,11 @@ function HourlyHeatmap({ data }: { data: { dow: number; hour: number; count: num
           </div>
         ))}
         <div className="flex items-center gap-2 mt-3 pl-10">
-          <span className="text-xs text-gray-600">Less</span>
+          <span className="text-xs text-neutral-400">Less</span>
           {[0.04, 0.2, 0.4, 0.65, 0.9].map((o, i) => (
             <div key={i} className="w-4 h-4 rounded-sm" style={{ background: `rgba(99,102,241,${o})` }} />
           ))}
-          <span className="text-xs text-gray-600">More</span>
+          <span className="text-xs text-neutral-400">More</span>
         </div>
       </div>
     </div>
@@ -231,13 +231,13 @@ function DateRangeFilter({ range, onChange }: { range: AnalyticsRange; onChange:
   return (
     <div className="flex items-center gap-2 flex-wrap justify-end">
       {/* Preset pills */}
-      <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
+      <div className="flex gap-1 bg-neutral-100 rounded-xl p-1">
         {[7, 30, 90].map(d => (
           <button
             key={d}
             onClick={() => { onChange({ preset: d, startDate: "", endDate: "" }); setShowPicker(false); }}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              !isCustom && range.preset === d ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"
+              !isCustom && range.preset === d ? "bg-brand-500 text-white" : "text-neutral-500 hover:text-neutral-900"
             }`}
           >
             {d}d
@@ -246,7 +246,7 @@ function DateRangeFilter({ range, onChange }: { range: AnalyticsRange; onChange:
         <button
           onClick={() => setShowPicker(v => !v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-            isCustom ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"
+            isCustom ? "bg-brand-500 text-white" : "text-neutral-500 hover:text-neutral-900"
           }`}
         >
           <Calendar className="w-3 h-3" />
@@ -256,39 +256,37 @@ function DateRangeFilter({ range, onChange }: { range: AnalyticsRange; onChange:
 
       {/* Inline date picker — shown when Custom is clicked */}
       {showPicker && (
-        <div className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2">
+        <div className="flex items-center gap-2 bg-white border border-neutral-300 rounded-xl px-3 py-2 shadow-sm">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-gray-500">From</span>
+            <span className="text-xs text-neutral-500">From</span>
             <input
               type="date"
               value={localStart}
               max={localEnd || today}
               onChange={e => setLocalStart(e.target.value)}
-              className="bg-gray-900 border border-gray-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-              style={{ colorScheme: "dark" }}
+              className="bg-white border border-neutral-300 text-neutral-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-500"
             />
           </div>
-          <span className="text-gray-600 text-xs">→</span>
+          <span className="text-neutral-400 text-xs">→</span>
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-gray-500">To</span>
+            <span className="text-xs text-neutral-500">To</span>
             <input
               type="date"
               value={localEnd}
               min={localStart}
               max={today}
               onChange={e => setLocalEnd(e.target.value)}
-              className="bg-gray-900 border border-gray-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-indigo-500"
-              style={{ colorScheme: "dark" }}
+              className="bg-white border border-neutral-300 text-neutral-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-500"
             />
           </div>
           <button
             onClick={applyCustom}
             disabled={!canApply}
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors"
+            className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors"
           >
             Apply
           </button>
-          <button onClick={() => setShowPicker(false)} className="text-gray-600 hover:text-white transition-colors">
+          <button onClick={() => setShowPicker(false)} className="text-neutral-400 hover:text-neutral-900 transition-colors">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -317,7 +315,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading) return (
-    <div className="flex items-center justify-center py-24 gap-2 text-gray-500">
+    <div className="flex items-center justify-center py-24 gap-2 text-neutral-500">
       <RefreshCw className="w-5 h-5 animate-spin" /><span className="text-sm">Loading…</span>
     </div>
   );
@@ -325,28 +323,28 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
   const period = periodLabel(range);
 
   if (!data || data.total_calls === 0) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-3 border border-dashed border-gray-700/60 rounded-2xl">
-      <BarChart3 className="w-10 h-10 text-gray-700" />
-      <p className="text-sm text-gray-500">No calls for {period}</p>
-      <p className="text-xs text-gray-600">Make some calls to see analytics here.</p>
+    <div className="flex flex-col items-center justify-center py-24 gap-3 border border-dashed border-neutral-300 rounded-2xl">
+      <BarChart3 className="w-10 h-10 text-neutral-300" />
+      <p className="text-sm text-neutral-500">No calls for {period}</p>
+      <p className="text-xs text-neutral-400">Make some calls to see analytics here.</p>
     </div>
   );
 
   const sl = sentimentLabel(data.avg_sentiment_score);
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Calls"   value={data.total_calls}                     sub={period}                          icon={Phone}      color="text-blue-400"   />
-        <KpiCard label="Active Agents" value={data.active_agents}                   sub="in workspace"                    icon={Bot}        color="text-indigo-400" />
+        <KpiCard label="Active Agents" value={data.active_agents}                   sub="in workspace"                    icon={Bot}        color="text-brand-400" />
         <KpiCard label="Avg Duration"  value={`${data.avg_duration_s.toFixed(0)}s`} sub={`${(data.avg_duration_s/60).toFixed(1)} min`} icon={Clock} color="text-green-400" />
         <KpiCard label="Avg Sentiment" value={`${(data.avg_sentiment_score * 100).toFixed(0)}%`} sub={sl.text} icon={TrendingUp} color={sl.color} />
       </div>
 
       {/* Calls per day */}
       {data.calls_per_day.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader
             title="Calls over time"
             onExport={() => exportCSV(data.calls_per_day, `calls-trend.csv`)}
@@ -367,7 +365,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
       {/* Call outcomes: donut + stacked bar */}
       {data.status_distribution.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+          <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
             <SectionHeader title="Call outcomes" />
             <div className="flex items-center gap-6">
               <ResponsiveContainer width={160} height={160}>
@@ -395,11 +393,11 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
                     <div key={status} className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
-                        <span className="text-xs text-gray-300 capitalize truncate">{status}</span>
+                        <span className="text-xs text-neutral-600 capitalize truncate">{status}</span>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="text-xs font-semibold text-white">{count}</span>
-                        <span className="text-xs text-gray-600 ml-1">({pct}%)</span>
+                        <span className="text-xs font-semibold text-neutral-900">{count}</span>
+                        <span className="text-xs text-neutral-400 ml-1">({pct}%)</span>
                       </div>
                     </div>
                   );
@@ -409,7 +407,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
           </div>
 
           {data.calls_by_status_per_day.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
               <SectionHeader title="Outcomes over time" />
               <ResponsiveContainer width="100%" height={160}>
                 <BarChart data={data.calls_by_status_per_day.map(d => ({ ...d, day: shortDay(d.day) }))}>
@@ -436,7 +434,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
 
       {/* Sentiment trend */}
       {data.calls_per_day.length > 1 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader title="Sentiment trend" />
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={data.calls_per_day.map(d => ({ ...d, day: shortDay(d.day), sentiment: +((d.avg_sentiment ?? 0) * 100).toFixed(1) }))}>
@@ -452,7 +450,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
 
       {/* Calls by agent */}
       {data.calls_by_agent.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader
             title="Calls by agent"
             onExport={() => exportCSV(data.calls_by_agent as any, `calls-by-agent.csv`)}
@@ -476,7 +474,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
 
       {/* Direction */}
       {data.direction_distribution.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader title="Call direction" />
           <div className="flex items-center gap-8">
             <ResponsiveContainer width={160} height={160}>
@@ -495,8 +493,8 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
                 <div key={direction} className="flex items-center gap-3">
                   <div className="w-3 h-3 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
                   <div>
-                    <p className="text-sm text-white capitalize">{direction}</p>
-                    <p className="text-xs text-gray-500">{count} calls ({Math.round(count / data.total_calls * 100)}%)</p>
+                    <p className="text-sm text-neutral-900 capitalize">{direction}</p>
+                    <p className="text-xs text-neutral-500">{count} calls ({Math.round(count / data.total_calls * 100)}%)</p>
                   </div>
                 </div>
               ))}
@@ -509,7 +507,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
 
       {/* Avg call duration over time */}
       {data.calls_per_day.some(d => d.avg_duration && d.avg_duration > 0) && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader
             title="Avg call duration over time"
             onExport={() => exportCSV(data.calls_per_day, `duration-trend.csv`)}
@@ -532,9 +530,9 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
 
       {/* Call success rate % over time */}
       {data.calls_by_status_per_day.length > 1 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader title="Call success rate over time" />
-          <p className="text-xs text-gray-500 mb-4">% of calls that completed successfully</p>
+          <p className="text-xs text-neutral-500 mb-4">% of calls that completed successfully</p>
           <ResponsiveContainer width="100%" height={190}>
             <LineChart data={data.calls_by_status_per_day.map(d => {
               const completed = (d.completed || 0);
@@ -557,18 +555,18 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
 
       {/* Hourly heatmap */}
       {data.hourly_heatmap.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader title="Busiest call hours" />
-          <p className="text-xs text-gray-500 mb-4">When calls are made — darker means more calls at that hour</p>
+          <p className="text-xs text-neutral-500 mb-4">When calls are made — darker means more calls at that hour</p>
           <HourlyHeatmap data={data.hourly_heatmap} />
         </div>
       )}
 
       {/* First call resolution */}
       {data.first_call_resolution.total_contacts > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader title="First call resolution" />
-          <p className="text-xs text-gray-500 mb-5">How many contacts needed only one call vs called back multiple times</p>
+          <p className="text-xs text-neutral-500 mb-5">How many contacts needed only one call vs called back multiple times</p>
           <div className="flex items-center gap-8">
             <ResponsiveContainer width={160} height={160}>
               <PieChart>
@@ -594,10 +592,10 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
                 <div className="w-3 h-3 rounded-full bg-green-500 shrink-0" />
                 <div className="flex-1">
                   <div className="flex items-baseline justify-between">
-                    <p className="text-sm text-white">Resolved in 1 call</p>
-                    <p className="text-lg font-bold text-white">{data.first_call_resolution.single_call_contacts}</p>
+                    <p className="text-sm text-neutral-900">Resolved in 1 call</p>
+                    <p className="text-lg font-bold text-neutral-900">{data.first_call_resolution.single_call_contacts}</p>
                   </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full mt-1 overflow-hidden">
+                  <div className="h-1.5 bg-neutral-200 rounded-full mt-1 overflow-hidden">
                     <div className="h-full bg-green-500 rounded-full" style={{ width: `${data.first_call_resolution.rate * 100}%` }} />
                   </div>
                 </div>
@@ -606,19 +604,19 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
                 <div className="w-3 h-3 rounded-full bg-amber-500 shrink-0" />
                 <div className="flex-1">
                   <div className="flex items-baseline justify-between">
-                    <p className="text-sm text-white">Called back 2+ times</p>
-                    <p className="text-lg font-bold text-white">{data.first_call_resolution.multi_call_contacts}</p>
+                    <p className="text-sm text-neutral-900">Called back 2+ times</p>
+                    <p className="text-lg font-bold text-neutral-900">{data.first_call_resolution.multi_call_contacts}</p>
                   </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full mt-1 overflow-hidden">
+                  <div className="h-1.5 bg-neutral-200 rounded-full mt-1 overflow-hidden">
                     <div className="h-full bg-amber-500 rounded-full" style={{ width: `${(1 - data.first_call_resolution.rate) * 100}%` }} />
                   </div>
                 </div>
               </div>
-              <div className="pt-2 border-t border-gray-800">
-                <p className="text-xs text-gray-500">FCR rate</p>
-                <p className="text-2xl font-bold text-white mt-0.5">
+              <div className="pt-2 border-t border-neutral-200">
+                <p className="text-xs text-neutral-500">FCR rate</p>
+                <p className="text-2xl font-bold text-neutral-900 mt-0.5">
                   {Math.round(data.first_call_resolution.rate * 100)}%
-                  <span className="text-sm font-normal text-gray-500 ml-2">of {data.first_call_resolution.total_contacts} contacts</span>
+                  <span className="text-sm font-normal text-neutral-500 ml-2">of {data.first_call_resolution.total_contacts} contacts</span>
                 </p>
               </div>
             </div>
@@ -658,24 +656,24 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Bot className="w-4 h-4 text-gray-500 shrink-0" />
+        <Bot className="w-4 h-4 text-neutral-500 shrink-0" />
         <select
           value={selectedId}
           onChange={e => setSelectedId(e.target.value)}
-          className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+          className="bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-brand-500"
         >
           {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name}{a.is_personal ? " (Personal)" : ""}</option>)}
         </select>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 gap-2 text-gray-500">
+        <div className="flex items-center justify-center py-16 gap-2 text-neutral-500">
           <RefreshCw className="w-5 h-5 animate-spin" /><span className="text-sm">Loading…</span>
         </div>
       ) : !data || data.total_calls === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 border border-dashed border-gray-700/60 rounded-2xl">
-          <Phone className="w-10 h-10 text-gray-700" />
-          <p className="text-sm text-gray-500">No calls for this agent for {period}</p>
+        <div className="flex flex-col items-center justify-center py-20 gap-3 border border-dashed border-neutral-300 rounded-2xl">
+          <Phone className="w-10 h-10 text-neutral-300" />
+          <p className="text-sm text-neutral-500">No calls for this agent for {period}</p>
         </div>
       ) : (
         <>
@@ -689,7 +687,7 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
           </div>
 
           {data.calls_per_day.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
               <SectionHeader
                 title="Calls over time"
                 onExport={() => exportCSV(data.calls_per_day, `agent-calls.csv`)}
@@ -708,7 +706,7 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
           )}
 
           {data.calls_per_day.length > 1 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
               <SectionHeader title="Sentiment trend" />
               <ResponsiveContainer width="100%" height={180}>
                 <LineChart data={data.calls_per_day.map(d => ({
@@ -725,8 +723,8 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
             </div>
           )}
 
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-            <h3 className="text-sm font-semibold text-white mb-4">Self-Improving Feedback Loop</h3>
+          <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-neutral-900 mb-4">Self-Improving Feedback Loop</h3>
             <div className="flex items-center gap-3 overflow-x-auto pb-2">
               {[
                 { label: "Live Calls",      desc: `${data.total_calls} total`,                color: "bg-blue-500/15 text-blue-400 border-blue-500/20"   },
@@ -740,7 +738,7 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
                     <p className="text-xs font-semibold">{step.label}</p>
                     <p className="text-xs opacity-70 mt-0.5">{step.desc}</p>
                   </div>
-                  {i < arr.length - 1 && <span className="text-gray-700 text-lg">→</span>}
+                  {i < arr.length - 1 && <span className="text-neutral-400 text-lg">→</span>}
                 </div>
               ))}
             </div>
@@ -762,19 +760,19 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-4">
-          <div className="w-10 h-10 bg-indigo-600/20 border border-indigo-500/30 rounded-xl flex items-center justify-center shrink-0">
-            <BarChart3 className="w-5 h-5 text-indigo-400" />
+          <div className="w-10 h-10 bg-brand-500/20 border border-brand-500/30 rounded-xl flex items-center justify-center shrink-0">
+            <BarChart3 className="w-5 h-5 text-brand-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-white">Analytics</h1>
-            <p className="text-sm text-gray-400 mt-1">Performance metrics, sentiment trends, and agent quality scores</p>
+            <h1 className="text-2xl font-bold text-neutral-900">Analytics</h1>
+            <p className="text-sm text-neutral-500 mt-1">Performance metrics, sentiment trends, and agent quality scores</p>
           </div>
         </div>
         <DateRangeFilter range={range} onChange={setRange} />
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-800 pb-0">
+      <div className="flex gap-1 border-b border-neutral-200 pb-0">
         {[
           { key: "overview", label: "Workspace Overview", icon: BarChart3 },
           { key: "agent",    label: "Per Agent",           icon: Bot },
@@ -784,8 +782,8 @@ export default function AnalyticsPage() {
             onClick={() => setTab(key as any)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
               tab === key
-                ? "border-indigo-500 text-indigo-400"
-                : "border-transparent text-gray-500 hover:text-gray-300"
+                ? "border-brand-500 text-brand-400"
+                : "border-transparent text-neutral-500 hover:text-neutral-700"
             }`}
           >
             <Icon className="w-4 h-4" />

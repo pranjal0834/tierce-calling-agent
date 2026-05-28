@@ -27,15 +27,15 @@ async def initiate_call(
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
 ):
+    agent = await db.get(Agent, payload.agent_id)
+    if not agent or not agent.is_active or agent.workspace_id != workspace.id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
     if (workspace.credits_balance or 0.0) <= 0:
         raise HTTPException(
             status_code=402,
             detail="Insufficient balance. Please top up your account to make calls.",
         )
-
-    agent = await db.get(Agent, payload.agent_id)
-    if not agent or not agent.is_active or agent.workspace_id != workspace.id:
-        raise HTTPException(status_code=404, detail="Agent not found")
 
     phone = normalize_phone(payload.phone_number)
 
@@ -141,15 +141,15 @@ async def bulk_call(
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
 ):
+    agent = await db.get(Agent, payload.agent_id)
+    if not agent or not agent.is_active or agent.workspace_id != workspace.id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
     if (workspace.credits_balance or 0.0) <= 0:
         raise HTTPException(
             status_code=402,
             detail="Insufficient balance. Please top up your account to make calls.",
         )
-
-    agent = await db.get(Agent, payload.agent_id)
-    if not agent or not agent.is_active or agent.workspace_id != workspace.id:
-        raise HTTPException(status_code=404, detail="Agent not found")
 
     base_ws = settings.BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
     contacts_data = [c.model_dump() for c in payload.contacts]

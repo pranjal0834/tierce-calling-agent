@@ -86,12 +86,12 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-5 border-b border-gray-800 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">
+      <div className="bg-white rounded-2xl border border-neutral-200 shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-5 border-b border-neutral-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-neutral-900">
             {editingAgent ? "Edit Agent" : "Create Agent"}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900">✕</button>
         </div>
         <div className="p-6 space-y-4">
           <Field label="Name" required>
@@ -113,7 +113,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
 
           {/* Personal toggle — only shown when creating */}
           {!editingAgent && (
-            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-gray-700 hover:border-amber-500/40 transition-colors">
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-neutral-300 hover:border-amber-500/40 transition-colors">
               <input
                 type="checkbox"
                 className="mt-0.5 w-4 h-4 accent-amber-500"
@@ -121,10 +121,10 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                 onChange={e => setForm(f => ({ ...f, is_personal: e.target.checked }))}
               />
               <div>
-                <p className="text-sm font-medium text-white flex items-center gap-1.5">
+                <p className="text-sm font-medium text-neutral-900 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-amber-400" /> Personal agent
                 </p>
-                <p className="text-xs text-gray-500 mt-0.5">Only you can see this agent — team members won&apos;t see it.</p>
+                <p className="text-xs text-neutral-500 mt-0.5">Only you can see this agent — team members won&apos;t see it.</p>
               </div>
             </label>
           )}
@@ -204,7 +204,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
           </Field>
 
           <div className="pt-2 space-y-3">
-            <p className="text-sm font-medium text-gray-300">Features</p>
+            <p className="text-sm font-medium text-neutral-700">Features</p>
             {([
               ["backchannel_enabled", "Backchannel Engine (mm-hmm, uh-huh)"],
               ["emotional_intelligence", "Emotional Intelligence Layer"],
@@ -221,13 +221,13 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                     config: { ...f.config, [key]: e.target.checked },
                   }))}
                 />
-                <span className="text-sm text-gray-300">{label}</span>
+                <span className="text-sm text-neutral-700">{label}</span>
               </label>
             ))}
           </div>
         </div>
-        <div className="px-6 py-4 border-t border-gray-800 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">
+        <div className="px-6 py-4 border-t border-neutral-200 flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-neutral-500 hover:text-neutral-900">
             Cancel
           </button>
           <button
@@ -243,15 +243,15 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
       <style jsx>{`
         .input {
           width: 100%;
-          background: #111827;
-          border: 1px solid #374151;
+          background: #ffffff;
+          border: 1px solid #D1D5DB;
           border-radius: 8px;
           padding: 8px 12px;
-          color: white;
+          color: #111827;
           font-size: 14px;
           outline: none;
         }
-        .input:focus { border-color: #4f46e5; }
+        .input:focus { border-color: #0B8A8F; }
       `}</style>
     </div>
   );
@@ -260,7 +260,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
 function Field({ label, children, required }: any) {
   return (
     <div className="space-y-1.5">
-      <label className="text-sm text-gray-300 font-medium">
+      <label className="text-sm text-neutral-700 font-medium">
         {label}{required && <span className="text-red-400 ml-1">*</span>}
       </label>
       {children}

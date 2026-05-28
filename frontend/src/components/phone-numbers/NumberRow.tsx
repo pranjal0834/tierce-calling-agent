@@ -5,7 +5,7 @@ import {
   updateNumberRouting,
   updateNumberAutoRenew,
 } from "@/lib/api";
-import CapBadge from "@/components/phone-numbers/CapBadge"; // Assuming CapBadge is exported separately; adjust import if needed
+import CapBadge from "@/components/phone-numbers/CapBadge";
 
 interface PhoneNumber {
   id: string;
@@ -17,6 +17,8 @@ interface PhoneNumber {
   capabilities: { voice?: boolean; sms?: boolean };
   agent_id: string | null;
   agent_name: string | null;
+  purchased_at: string;
+  twilio_sid: string | null;
 }
 
 interface Agent {
@@ -81,31 +83,31 @@ export default function NumberRow({
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+    <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="w-10 h-10 bg-indigo-600/20 border border-indigo-500/30 rounded-xl flex items-center justify-center shrink-0">
-            <Phone className="w-5 h-5 text-indigo-400" />
+          <div className="w-10 h-10 bg-brand-500/10 border border-brand-500/25 rounded-xl flex items-center justify-center shrink-0">
+            <Phone className="w-5 h-5 text-brand-500" />
           </div>
           <div>
-            <p className="text-base font-semibold text-white font-mono tracking-wide">{number.phone_number}</p>
+            <p className="text-base font-semibold text-neutral-900 font-mono tracking-wide">{number.phone_number}</p>
             {number.friendly_name && (
-              <p className="text-xs text-gray-500 mt-0.5">{number.friendly_name}</p>
+              <p className="text-xs text-neutral-400 mt-0.5">{number.friendly_name}</p>
             )}
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <CapBadge label="Voice" enabled={number.capabilities?.voice} icon={Mic} />
               <CapBadge label="SMS" enabled={number.capabilities?.sms} icon={MessageSquare} />
-              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-medium">
                 ₹{number.monthly_cost_inr}/month
               </span>
-              <span className="text-xs text-gray-600 capitalize">{providerLabel}</span>
+              <span className="text-xs text-neutral-400 capitalize">{providerLabel}</span>
             </div>
           </div>
         </div>
 
         <button
           onClick={confirmRelease}
-          className="p-2 text-gray-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+          className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
           title="Release number"
         >
           <Trash2 className="w-4 h-4" />
@@ -113,16 +115,16 @@ export default function NumberRow({
       </div>
 
       {/* Agent routing */}
-      <div className="mt-4 pt-4 border-t border-gray-800">
+      <div className="mt-4 pt-4 border-t border-neutral-200">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-sm min-w-0">
-            <Bot className="w-4 h-4 text-gray-500 shrink-0" />
+            <Bot className="w-4 h-4 text-neutral-400 shrink-0" />
             {editing ? (
               <div className="flex items-center gap-2 flex-wrap">
                 <select
                   value={agentId}
                   onChange={e => setAgentId(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+                  className="bg-white border border-neutral-300 text-neutral-900 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-brand-500"
                 >
                   <option value="">— No agent —</option>
                   {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -130,32 +132,32 @@ export default function NumberRow({
                 <button
                   onClick={save}
                   disabled={saving}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                  className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
                 >
                   {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                   Save
                 </button>
                 <button
                   onClick={() => { setEditing(false); setAgentId(number.agent_id || ""); }}
-                  className="text-gray-500 hover:text-white transition-colors"
+                  className="text-neutral-400 hover:text-neutral-900 transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             ) : (
               number.agent_name ? (
-                <span className="text-white truncate">
-                  Routes to <span className="text-indigo-400 font-medium">{number.agent_name}</span>
+                <span className="text-neutral-700 truncate">
+                  Routes to <span className="text-brand-500 font-medium">{number.agent_name}</span>
                 </span>
               ) : (
-                <span className="text-gray-500">No agent assigned</span>
+                <span className="text-neutral-400">No agent assigned</span>
               )
             )}
           </div>
           {!editing && (
             <button
               onClick={() => setEditing(true)}
-              className="text-xs text-gray-500 hover:text-indigo-400 transition-colors px-2 py-1 rounded-lg hover:bg-gray-800 shrink-0"
+              className="text-xs text-neutral-400 hover:text-brand-500 transition-colors px-2 py-1 rounded-lg hover:bg-neutral-100 shrink-0"
             >
               Change routing
             </button>
@@ -164,10 +166,10 @@ export default function NumberRow({
       </div>
 
       {/* Auto-renew toggle */}
-      <div className="mt-3 pt-3 border-t border-gray-800 flex items-center justify-between gap-3">
+      <div className="mt-3 pt-3 border-t border-neutral-200 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-gray-400">Auto-renew monthly</p>
-          <p className="text-xs text-gray-600 mt-0.5">
+          <p className="text-xs font-medium text-neutral-700">Auto-renew monthly</p>
+          <p className="text-xs text-neutral-400 mt-0.5">
             {autoRenew
               ? `₹${number.monthly_cost_inr}/mo will be deducted from your credits automatically`
               : "Renewal is manual — number will stay active until you release it"}
@@ -176,14 +178,14 @@ export default function NumberRow({
         <button
           onClick={toggleAutoRenew}
           disabled={togglingRenew}
-          className={`relative shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${autoRenew ? "bg-indigo-600" : "bg-gray-700"} ${togglingRenew ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          className={`relative shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${autoRenew ? "bg-brand-500" : "bg-neutral-200"} ${togglingRenew ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
           title={autoRenew ? "Disable auto-renew" : "Enable auto-renew"}
         >
           <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${autoRenew ? "translate-x-5" : "translate-x-0"}`} />
         </button>
       </div>
 
-      <p className="text-xs text-gray-700 mt-3 font-mono">
+      <p className="text-xs text-neutral-400 mt-3 font-mono">
         Purchased {new Date(number.purchased_at + "Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         &nbsp;·&nbsp;{number.twilio_sid}
       </p>

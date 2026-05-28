@@ -18,26 +18,26 @@ const VOICE_LABELS: Record<string, string> = {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    completed:     { label: "Completed",    cls: "bg-green-500/10 text-green-400" },
-    "in-progress": { label: "Live",         cls: "bg-blue-500/10 text-blue-400 animate-pulse" },
-    in_progress:   { label: "Live",         cls: "bg-blue-500/10 text-blue-400 animate-pulse" },
-    ringing:       { label: "Ringing",      cls: "bg-yellow-500/10 text-yellow-400 animate-pulse" },
-    initiated:     { label: "Initiated",    cls: "bg-yellow-500/10 text-yellow-400" },
-    not_answered:  { label: "Not Answered", cls: "bg-gray-500/10 text-gray-400" },
-    failed:        { label: "Failed",       cls: "bg-red-500/10 text-red-400" },
-    cancelled:     { label: "Cancelled",    cls: "bg-gray-500/10 text-gray-400" },
-    voicemail:     { label: "Voicemail",    cls: "bg-orange-500/10 text-orange-400" },
+    completed:     { label: "Completed",    cls: "bg-green-50 text-green-600" },
+    "in-progress": { label: "Live",         cls: "bg-teal-50 text-teal-600 animate-pulse" },
+    in_progress:   { label: "Live",         cls: "bg-teal-50 text-teal-600 animate-pulse" },
+    ringing:       { label: "Ringing",      cls: "bg-yellow-50 text-yellow-700 animate-pulse" },
+    initiated:     { label: "Initiated",    cls: "bg-yellow-50 text-yellow-700" },
+    not_answered:  { label: "Not Answered", cls: "bg-neutral-100 text-neutral-500" },
+    failed:        { label: "Failed",       cls: "bg-red-50 text-red-600" },
+    cancelled:     { label: "Cancelled",    cls: "bg-neutral-100 text-neutral-500" },
+    voicemail:     { label: "Voicemail",    cls: "bg-orange-50 text-orange-600" },
   };
-  const b = map[status] ?? { label: status, cls: "bg-gray-500/10 text-gray-400" };
+  const b = map[status] ?? { label: status, cls: "bg-neutral-100 text-neutral-500" };
   return <span className={`text-xs px-2 py-0.5 rounded font-medium ${b.cls}`}>{b.label}</span>;
 }
 
 function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-gray-800/60 rounded-xl p-4">
-      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-2xl font-bold text-white">{value}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-4">
+      <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">{label}</p>
+      <p className="text-2xl font-bold text-neutral-900">{value}</p>
+      {sub && <p className="text-xs text-neutral-500 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -45,7 +45,7 @@ function Stat({ label, value, sub }: { label: string; value: string | number; su
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-sm text-gray-500">{label}</span>
+      <span className="text-sm text-neutral-500">{label}</span>
       {children}
     </div>
   );
@@ -88,16 +88,16 @@ export default function AgentViewPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!agent) {
     return (
-      <div className="text-center py-24 text-gray-400">
+      <div className="text-center py-24 text-neutral-500">
         Agent not found.{" "}
-        <Link href="/agents" className="text-brand-400 hover:underline">Back to agents</Link>
+        <Link href="/agents" className="text-teal-500 hover:underline">Back to agents</Link>
       </div>
     );
   }
@@ -119,7 +119,7 @@ export default function AgentViewPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
-          <Link href="/agents" className="mt-1 text-gray-400 hover:text-white transition-colors">
+          <Link href="/agents" className="mt-1 text-neutral-400 hover:text-neutral-900 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
@@ -132,8 +132,8 @@ export default function AgentViewPage() {
                   : <Layers className="w-5 h-5 text-blue-400" />}
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white">{agent.name}</h1>
-                {agent.description && <p className="text-sm text-gray-400">{agent.description}</p>}
+                <h1 className="text-2xl font-bold text-neutral-900">{agent.name}</h1>
+                {agent.description && <p className="text-sm text-neutral-500">{agent.description}</p>}
               </div>
             </div>
           </div>
@@ -141,7 +141,7 @@ export default function AgentViewPage() {
         <div className="flex items-center gap-2">
           <Link
             href={`/agents?edit=${id}`}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 rounded-lg transition-colors"
           >
             <Pencil className="w-3.5 h-3.5" /> Edit
           </Link>
@@ -171,21 +171,21 @@ export default function AgentViewPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-800">
+      <div className="flex items-center gap-1 border-b border-neutral-200">
         {(["overview", "tools"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab
-                ? "border-brand-500 text-brand-400"
-                : "border-transparent text-gray-500 hover:text-gray-300"
+                ? "border-teal-500 text-teal-600"
+                : "border-transparent text-neutral-500 hover:text-neutral-700"
             }`}
           >
             {tab === "overview" ? <Layers className="w-4 h-4" /> : <Wrench className="w-4 h-4" />}
             {tab === "overview" ? "Overview" : "Tools"}
             {tab === "tools" && toolsCount > 0 && (
-              <span className="text-xs bg-brand-500/20 text-brand-400 px-1.5 py-0.5 rounded-full">
+              <span className="text-xs bg-teal-500/20 text-teal-400 px-1.5 py-0.5 rounded-full">
                 {toolsCount}
               </span>
             )}
@@ -198,8 +198,8 @@ export default function AgentViewPage() {
         <div className="grid md:grid-cols-3 gap-4">
           {/* Left: Configuration */}
           <div className="md:col-span-1 space-y-4">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-4">
-              <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Configuration</h2>
+            <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 space-y-4">
+              <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Configuration</h2>
               <Row label="Pipeline">
                 <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                   agent.pipeline_mode === "native" ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"
@@ -208,26 +208,26 @@ export default function AgentViewPage() {
                 </span>
               </Row>
               <Row label="Model">
-                <span className="text-sm text-white font-mono">{agent.llm_model}</span>
+                <span className="text-sm text-neutral-900 font-mono">{agent.llm_model}</span>
               </Row>
               <Row label="Voice">
-                <span className="text-sm text-white">{VOICE_LABELS[agent.voice_id] ?? agent.voice_id ?? "—"}</span>
+                <span className="text-sm text-neutral-900">{VOICE_LABELS[agent.voice_id] ?? agent.voice_id ?? "—"}</span>
               </Row>
               <Row label="Status">
                 {agent.is_active
-                  ? <span className="flex items-center gap-1 text-sm text-green-400"><CheckCircle2 className="w-3.5 h-3.5" /> Active</span>
-                  : <span className="flex items-center gap-1 text-sm text-gray-400"><XCircle className="w-3.5 h-3.5" /> Inactive</span>}
+                  ? <span className="flex items-center gap-1 text-sm text-green-600"><CheckCircle2 className="w-3.5 h-3.5" /> Active</span>
+                  : <span className="flex items-center gap-1 text-sm text-neutral-400"><XCircle className="w-3.5 h-3.5" /> Inactive</span>}
               </Row>
               <Row label="Accent">
-                <span className="text-sm text-white">{agent.config?.accent || "Default (Neutral)"}</span>
+                <span className="text-sm text-neutral-900">{agent.config?.accent || "Default (Neutral)"}</span>
               </Row>
               <Row label="Speech Pace">
-                <span className="text-sm text-white capitalize">{agent.config?.speech_pace || "Natural"}</span>
+                <span className="text-sm text-neutral-900 capitalize">{agent.config?.speech_pace || "Natural"}</span>
               </Row>
             </div>
 
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
-              <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Languages</h2>
+            <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 space-y-3">
+              <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Languages</h2>
               {agent.config?.languages?.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {agent.config.languages.map((lang: string, i: number) => (
@@ -235,8 +235,8 @@ export default function AgentViewPage() {
                       key={lang}
                       className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                         i === 0
-                          ? "bg-brand-500/20 text-brand-300 border border-brand-500/40"
-                          : "bg-gray-800 text-gray-300 border border-gray-700"
+                          ? "bg-brand-50 text-brand-600 border border-brand-200"
+                          : "bg-neutral-100 text-neutral-700 border border-neutral-200"
                       }`}
                     >
                       {lang}{i === 0 && agent.config.languages.length > 1 ? " (primary)" : ""}
@@ -244,21 +244,21 @@ export default function AgentViewPage() {
                   ))}
                 </div>
               ) : (
-                <span className="text-sm text-gray-400">English (default)</span>
+                <span className="text-sm text-neutral-500">English (default)</span>
               )}
             </div>
 
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-5 space-y-3">
-              <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Features</h2>
+            <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 space-y-3">
+              <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Features</h2>
               {features.map(({ key, label, icon: Icon, color }) => {
                 const enabled = agent.config?.[key];
                 return (
                   <div key={key} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${enabled ? color : "text-gray-600"}`} />
-                      <span className={`text-sm ${enabled ? "text-gray-200" : "text-gray-500"}`}>{label}</span>
+                      <Icon className={`w-4 h-4 ${enabled ? color : "text-neutral-300"}`} />
+                      <span className={`text-sm ${enabled ? "text-neutral-800" : "text-neutral-400"}`}>{label}</span>
                     </div>
-                    <span className={`text-xs font-medium ${enabled ? "text-green-400" : "text-gray-600"}`}>
+                    <span className={`text-xs font-medium ${enabled ? "text-green-600" : "text-neutral-300"}`}>
                       {enabled ? "ON" : "OFF"}
                     </span>
                   </div>
@@ -269,48 +269,48 @@ export default function AgentViewPage() {
 
           {/* Right: System Prompt + Recent Calls */}
           <div className="md:col-span-2 space-y-4">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
+            <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-3">
-                <Brain className="w-4 h-4 text-brand-400" />
-                <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">System Prompt</h2>
+                <Brain className="w-4 h-4 text-brand-500" />
+                <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">System Prompt</h2>
               </div>
-              <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans leading-relaxed max-h-48 overflow-y-auto">
+              <pre className="text-sm text-neutral-700 whitespace-pre-wrap font-sans leading-relaxed max-h-48 overflow-y-auto">
                 {agent.system_prompt}
               </pre>
             </div>
 
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
+            <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-brand-400" />
-                  <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Recent Calls</h2>
+                  <Phone className="w-4 h-4 text-brand-500" />
+                  <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Recent Calls</h2>
                 </div>
-                <Link href={`/calls?agent=${id}`} className="text-xs text-brand-400 hover:text-brand-300">
+                <Link href={`/calls?agent=${id}`} className="text-xs text-brand-500 hover:text-brand-600">
                   View all →
                 </Link>
               </div>
               {calls.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 text-sm">No calls yet for this agent.</div>
+                <div className="text-center py-8 text-neutral-500 text-sm">No calls yet for this agent.</div>
               ) : (
                 <div className="space-y-2">
                   {calls.map((call: any) => (
-                    <div key={call.id} className="flex items-center justify-between py-2.5 border-b border-gray-800 last:border-0">
+                    <div key={call.id} className="flex items-center justify-between py-2.5 border-b border-neutral-200 last:border-0">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                          call.direction === "outbound" ? "bg-brand-500/15" : "bg-green-500/15"
+                          call.direction === "outbound" ? "bg-brand-50" : "bg-green-50"
                         }`}>
-                          <Phone className={`w-3.5 h-3.5 ${call.direction === "outbound" ? "text-brand-400" : "text-green-400"}`} />
+                          <Phone className={`w-3.5 h-3.5 ${call.direction === "outbound" ? "text-brand-600" : "text-green-600"}`} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm text-white font-mono truncate">{call.phone_number}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm text-neutral-900 font-mono truncate">{call.phone_number}</p>
+                          <p className="text-xs text-neutral-500">
                             {new Date((call.created_at.endsWith("Z") || call.created_at.includes("+") ? call.created_at : call.created_at + "Z")).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         {call.duration_seconds != null && (
-                          <span className="text-xs text-gray-400 flex items-center gap-1">
+                          <span className="text-xs text-neutral-500 flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {Math.floor(call.duration_seconds / 60)}m {call.duration_seconds % 60}s
                           </span>

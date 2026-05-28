@@ -67,15 +67,15 @@ function nowLocalMin(): string {
 // ── Status badge ──────────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-  pending:   { label: "Pending",   cls: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",  icon: <Clock className="w-3 h-3" /> },
-  running:   { label: "Running",   cls: "text-blue-400 bg-blue-400/10 border-blue-400/30",         icon: <Loader2 className="w-3 h-3 animate-spin" /> },
-  completed: { label: "Completed", cls: "text-green-400 bg-green-400/10 border-green-400/30",      icon: <CheckCircle2 className="w-3 h-3" /> },
-  failed:    { label: "Failed",    cls: "text-red-400 bg-red-400/10 border-red-400/30",            icon: <XCircle className="w-3 h-3" /> },
-  cancelled: { label: "Cancelled", cls: "text-gray-400 bg-gray-400/10 border-gray-400/30",         icon: <X className="w-3 h-3" /> },
+  pending:   { label: "Pending",   cls: "text-yellow-700 bg-yellow-50 border-yellow-200",  icon: <Clock className="w-3 h-3" /> },
+  running:   { label: "Running",   cls: "text-brand-600 bg-brand-50 border-brand-200",     icon: <Loader2 className="w-3 h-3 animate-spin" /> },
+  completed: { label: "Completed", cls: "text-green-600 bg-green-50 border-green-200",     icon: <CheckCircle2 className="w-3 h-3" /> },
+  failed:    { label: "Failed",    cls: "text-red-600 bg-red-50 border-red-200",           icon: <XCircle className="w-3 h-3" /> },
+  cancelled: { label: "Cancelled", cls: "text-neutral-500 bg-neutral-100 border-neutral-200", icon: <X className="w-3 h-3" /> },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_STYLES[status] ?? { label: status, cls: "text-gray-400 bg-gray-800 border-gray-700", icon: null };
+  const s = STATUS_STYLES[status] ?? { label: status, cls: "text-neutral-500 bg-neutral-100 border-neutral-200", icon: null };
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${s.cls}`}>
       {s.icon}
@@ -253,18 +253,18 @@ export default function SchedulingPage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Call Scheduling</h1>
-          <p className="text-gray-400 mt-1">Schedule outbound calls for a future date and time</p>
+          <h1 className="text-2xl font-bold text-neutral-900">Call Scheduling</h1>
+          <p className="text-neutral-500 mt-1">Schedule outbound calls for a future date and time</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulk(true)}
-            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium border border-gray-700"
+            className="flex items-center gap-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-medium border border-neutral-300"
           >
             <Users className="w-4 h-4" /> Bulk Schedule
           </button>
@@ -278,7 +278,7 @@ export default function SchedulingPage() {
       </div>
 
       {/* ── Filter tabs ── */}
-      <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-neutral-100 border border-neutral-200 rounded-xl p-1 w-fit">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -286,7 +286,7 @@ export default function SchedulingPage() {
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               filter === t.key
                 ? "bg-brand-500 text-white"
-                : "text-gray-400 hover:text-white"
+                : "text-neutral-500 hover:text-neutral-900"
             }`}
           >
             {t.label}
@@ -295,11 +295,11 @@ export default function SchedulingPage() {
       </div>
 
       {/* ── Table ── */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+      <div className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-xs uppercase tracking-wide">
+              <tr className="border-b border-neutral-200 text-neutral-400 text-xs uppercase tracking-wide">
                 <th className="text-left px-4 py-3">Phone</th>
                 <th className="text-left px-4 py-3">Contact</th>
                 <th className="text-left px-4 py-3">Agent</th>
@@ -309,10 +309,10 @@ export default function SchedulingPage() {
                 <th className="text-right px-4 py-3">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800/60">
+            <tbody className="divide-y divide-neutral-100">
               {loading && (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-500">
+                  <td colSpan={7} className="text-center py-12 text-neutral-500">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
                     Loading…
                   </td>
@@ -320,26 +320,33 @@ export default function SchedulingPage() {
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-500">
-                    <CalendarClock className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    No scheduled calls
+                  <td colSpan={7} className="py-16">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
+                        <CalendarClock className="w-7 h-7 text-neutral-400" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-neutral-500">No scheduled calls yet</p>
+                        <p className="text-xs text-neutral-400 mt-1">Use the buttons above to schedule a call.</p>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               )}
               {items.map(sc => {
                 const agent = agents.find(a => a.id === sc.agent_id);
                 return (
-                  <tr key={sc.id} className="hover:bg-gray-800/40 transition-colors">
-                    <td className="px-4 py-3 font-mono text-white">{sc.phone_number}</td>
-                    <td className="px-4 py-3 text-gray-300">
+                  <tr key={sc.id} className="hover:bg-neutral-50 transition-colors">
+                    <td className="px-4 py-3 font-mono text-neutral-900">{sc.phone_number}</td>
+                    <td className="px-4 py-3 text-neutral-700">
                       {sc.contact_name
-                        ? <span className="flex items-center gap-1.5"><User className="w-3 h-3 text-gray-500" />{sc.contact_name}</span>
-                        : <span className="text-gray-600">—</span>}
+                        ? <span className="flex items-center gap-1.5"><User className="w-3 h-3 text-neutral-400" />{sc.contact_name}</span>
+                        : <span className="text-neutral-400">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-300">
-                      {agent?.name ?? <span className="text-gray-600 font-mono text-xs">{sc.agent_id.slice(0, 8)}…</span>}
+                    <td className="px-4 py-3 text-neutral-700">
+                      {agent?.name ?? <span className="text-neutral-400 font-mono text-xs">{sc.agent_id.slice(0, 8)}…</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{fmtScheduled(sc.scheduled_at)}</td>
+                    <td className="px-4 py-3 text-neutral-700 whitespace-nowrap">{fmtScheduled(sc.scheduled_at)}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={sc.status} />
                       {sc.error_message && (
@@ -349,7 +356,7 @@ export default function SchedulingPage() {
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[140px] truncate">
+                    <td className="px-4 py-3 text-neutral-400 text-xs max-w-[140px] truncate">
                       {sc.notes ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -357,7 +364,7 @@ export default function SchedulingPage() {
                         {sc.call_id && (
                           <a
                             href={`/calls?highlight=${sc.call_id}`}
-                            className="inline-flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300"
+                            className="inline-flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600"
                           >
                             <ExternalLink className="w-3 h-3" /> View Call
                           </a>
@@ -383,21 +390,21 @@ export default function SchedulingPage() {
       {/* ── Schedule Call Modal ── */}
       {showSchedule && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-4">
+          <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-6 w-full max-w-md space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Schedule a Call</h2>
-              <button onClick={() => setShowSchedule(false)} className="text-gray-400 hover:text-white">
+              <h2 className="text-lg font-semibold text-neutral-900">Schedule a Call</h2>
+              <button onClick={() => setShowSchedule(false)} className="text-neutral-400 hover:text-neutral-900">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Agent *</label>
+                <label className="block text-xs text-neutral-500 mb-1">Agent *</label>
                 <select
                   value={schedForm.agent_id}
                   onChange={e => setSchedForm(f => ({ ...f, agent_id: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
                 >
                   <option value="">Select agent…</option>
                   {agents.filter(a => a.is_active).map(a => (
@@ -407,57 +414,57 @@ export default function SchedulingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Phone Number *</label>
+                <label className="block text-xs text-neutral-500 mb-1">Phone Number *</label>
                 <input
                   type="tel"
                   placeholder="+91XXXXXXXXXX"
                   value={schedForm.phone_number}
                   onChange={e => setSchedForm(f => ({ ...f, phone_number: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500 placeholder-gray-600"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500 placeholder-neutral-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Schedule Date & Time (IST) *</label>
+                <label className="block text-xs text-neutral-500 mb-1">Schedule Date & Time (IST) *</label>
                 <input
                   type="datetime-local"
                   min={nowLocalMin()}
                   value={schedForm.scheduled_at}
                   onChange={e => setSchedForm(f => ({ ...f, scheduled_at: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Contact Name</label>
+                <label className="block text-xs text-neutral-500 mb-1">Contact Name</label>
                 <input
                   type="text"
                   placeholder="Optional"
                   value={schedForm.contact_name}
                   onChange={e => setSchedForm(f => ({ ...f, contact_name: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500 placeholder-gray-600"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500 placeholder-neutral-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Contact Email</label>
+                <label className="block text-xs text-neutral-500 mb-1">Contact Email</label>
                 <input
                   type="email"
                   placeholder="Optional"
                   value={schedForm.contact_email}
                   onChange={e => setSchedForm(f => ({ ...f, contact_email: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500 placeholder-gray-600"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500 placeholder-neutral-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Notes</label>
+                <label className="block text-xs text-neutral-500 mb-1">Notes</label>
                 <textarea
                   rows={2}
                   placeholder="Context for this call…"
                   value={schedForm.notes}
                   onChange={e => setSchedForm(f => ({ ...f, notes: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500 placeholder-gray-600 resize-none"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500 placeholder-neutral-400 resize-none"
                 />
               </div>
             </div>
@@ -465,7 +472,7 @@ export default function SchedulingPage() {
             <div className="flex gap-2 pt-1">
               <button
                 onClick={() => setShowSchedule(false)}
-                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium border border-gray-700"
+                className="flex-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200"
               >
                 Cancel
               </button>
@@ -485,21 +492,21 @@ export default function SchedulingPage() {
       {/* ── Bulk Schedule Modal ── */}
       {showBulk && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4">
+          <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-6 w-full max-w-lg space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">Bulk Schedule</h2>
-              <button onClick={() => setShowBulk(false)} className="text-gray-400 hover:text-white">
+              <h2 className="text-lg font-semibold text-neutral-900">Bulk Schedule</h2>
+              <button onClick={() => setShowBulk(false)} className="text-neutral-400 hover:text-neutral-900">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Agent *</label>
+                <label className="block text-xs text-neutral-500 mb-1">Agent *</label>
                 <select
                   value={bulkForm.agent_id}
                   onChange={e => setBulkForm(f => ({ ...f, agent_id: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
                 >
                   <option value="">Select agent…</option>
                   {agents.filter(a => a.is_active).map(a => (
@@ -508,39 +515,39 @@ export default function SchedulingPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Date & Time (IST) *</label>
+                <label className="block text-xs text-neutral-500 mb-1">Date & Time (IST) *</label>
                 <input
                   type="datetime-local"
                   min={nowLocalMin()}
                   value={bulkForm.scheduled_at}
                   onChange={e => setBulkForm(f => ({ ...f, scheduled_at: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Notes</label>
+              <label className="block text-xs text-neutral-500 mb-1">Notes</label>
               <input
                 type="text"
                 placeholder="Optional notes for all calls…"
                 value={bulkForm.notes}
                 onChange={e => setBulkForm(f => ({ ...f, notes: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500 placeholder-gray-600"
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500 placeholder-neutral-400"
               />
             </div>
 
             {/* Tab switcher */}
-            <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
+            <div className="flex gap-1 bg-neutral-100 rounded-lg p-1">
               <button
                 onClick={() => setBulkTab("paste")}
-                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${bulkTab === "paste" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}
+                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${bulkTab === "paste" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"}`}
               >
                 Paste Numbers
               </button>
               <button
                 onClick={() => setBulkTab("file")}
-                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${bulkTab === "file" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}
+                className={`flex-1 py-1.5 rounded text-xs font-medium transition-colors ${bulkTab === "file" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-900"}`}
               >
                 Upload CSV / Excel
               </button>
@@ -553,20 +560,20 @@ export default function SchedulingPage() {
                   placeholder={"One number per line or comma-separated:\n+917284885875\n+917572900482"}
                   value={bulkText}
                   onChange={e => { setBulkText(e.target.value); setBulkPreview([]); }}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-brand-500 placeholder-gray-600 resize-none"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm font-mono focus:outline-none focus:border-brand-500 placeholder-neutral-400 resize-none"
                 />
                 <button
                   onClick={handleBulkPreview}
-                  className="mt-2 text-xs text-brand-400 hover:text-brand-300"
+                  className="mt-2 text-xs text-brand-500 hover:text-brand-600"
                 >
                   Parse numbers
                 </button>
               </div>
             ) : (
               <div>
-                <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-700 rounded-lg py-6 cursor-pointer hover:border-brand-500/50 transition-colors">
-                  <FileSpreadsheet className="w-6 h-6 text-gray-500" />
-                  <span className="text-xs text-gray-400">
+                <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-neutral-300 rounded-lg py-6 cursor-pointer hover:border-brand-400 transition-colors">
+                  <FileSpreadsheet className="w-6 h-6 text-neutral-400" />
+                  <span className="text-xs text-neutral-500">
                     {bulkFile ? bulkFile.name : "Click to upload CSV or Excel"}
                   </span>
                   <input
@@ -582,7 +589,7 @@ export default function SchedulingPage() {
                 {bulkFile && (
                   <button
                     onClick={handleBulkPreview}
-                    className="mt-2 text-xs text-brand-400 hover:text-brand-300"
+                    className="mt-2 text-xs text-brand-500 hover:text-brand-600"
                   >
                     Parse file
                   </button>
@@ -591,18 +598,18 @@ export default function SchedulingPage() {
             )}
 
             {bulkPreview.length > 0 && (
-              <div className="bg-gray-800 rounded-lg p-3 max-h-36 overflow-y-auto">
-                <p className="text-xs text-gray-400 mb-2">{bulkPreview.length} contact{bulkPreview.length !== 1 ? "s" : ""} ready</p>
+              <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 max-h-36 overflow-y-auto">
+                <p className="text-xs text-neutral-500 mb-2">{bulkPreview.length} contact{bulkPreview.length !== 1 ? "s" : ""} ready</p>
                 <div className="space-y-0.5">
                   {bulkPreview.slice(0, 20).map((c, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs text-gray-300">
-                      <Phone className="w-3 h-3 text-gray-500 shrink-0" />
+                    <div key={i} className="flex items-center gap-2 text-xs text-neutral-700">
+                      <Phone className="w-3 h-3 text-neutral-400 shrink-0" />
                       <span className="font-mono">{c.phone_number}</span>
-                      {c.name && <span className="text-gray-500">— {c.name}</span>}
+                      {c.name && <span className="text-neutral-500">— {c.name}</span>}
                     </div>
                   ))}
                   {bulkPreview.length > 20 && (
-                    <div className="text-xs text-gray-500">… and {bulkPreview.length - 20} more</div>
+                    <div className="text-xs text-neutral-400">… and {bulkPreview.length - 20} more</div>
                   )}
                 </div>
               </div>
@@ -611,7 +618,7 @@ export default function SchedulingPage() {
             <div className="flex gap-2 pt-1">
               <button
                 onClick={() => setShowBulk(false)}
-                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium border border-gray-700"
+                className="flex-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-medium border border-neutral-200"
               >
                 Cancel
               </button>

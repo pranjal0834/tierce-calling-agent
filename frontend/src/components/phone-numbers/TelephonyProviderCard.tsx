@@ -64,7 +64,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
             onClick={() => set({ provider: p })}
             className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium border transition-all ${
               local.provider === p
-                ? "bg-indigo-600 border-indigo-500 text-white"
+                ? "bg-brand-500 border-brand-500 text-white"
                 : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:border-gray-600"
             }`}
           >
@@ -112,7 +112,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
                 value={local.exotel_api_key}
                 onChange={e => set({ exotel_api_key: e.target.value })}
                 placeholder="your_api_key"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
               />
             </div>
             <div>
@@ -123,7 +123,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
                   value={local.exotel_api_token}
                   onChange={e => set({ exotel_api_token: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none focus:border-brand-500 font-mono"
                 />
                 <button
                   type="button"
@@ -140,7 +140,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
                 value={local.exotel_account_sid}
                 onChange={e => set({ exotel_account_sid: e.target.value })}
                 placeholder="your_account_sid"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
               />
             </div>
             <div>
@@ -149,7 +149,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
                 value={local.exotel_virtual_number}
                 onChange={e => set({ exotel_virtual_number: e.target.value })}
                 placeholder="+911234567890"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
               />
             </div>
             <div className="col-span-2">
@@ -158,7 +158,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
                 value={local.exotel_subdomain}
                 onChange={e => set({ exotel_subdomain: e.target.value })}
                 placeholder="api.exotel.in"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
               />
             </div>
           </div>
@@ -170,7 +170,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
           <button
             onClick={save}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
           >
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
             Save Provider
