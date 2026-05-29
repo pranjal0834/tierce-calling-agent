@@ -192,8 +192,8 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4">
+      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-lg w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-neutral-200">
           <h2 className="text-lg font-semibold text-neutral-900">
             {existing ? "Edit Tool" : "Add Tool"}

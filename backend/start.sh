@@ -2,6 +2,7 @@
 set -e
 
 echo "Running database migrations..."
+python ./backend/wait_for_db.py
 alembic upgrade head
 
 echo "Starting Tierce Voice Agent..."

@@ -388,7 +388,7 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
           key: order.key,
           amount: order.amount,
           currency: "INR",
-          name: "Tierce Voice",
+          name: "Vaaniq Voice",
           description: `First month: ${n.phone_number}`,
           order_id: order.order_id,
           handler: async (response: any) => {
@@ -923,7 +923,7 @@ function TrialBanner() {
             </span>
           </div>
           <p className="text-xs text-neutral-600 leading-relaxed mb-3">
-            Your AI agents can already make outbound calls using <span className="text-neutral-800 font-medium">Tierce&apos;s shared platform number</span>.
+            Your AI agents can already make outbound calls using <span className="text-neutral-800 font-medium">Vaaniq&apos;s shared platform number</span>.
             To get a dedicated number for inbound calls and branded caller ID, upgrade to any paid plan.
           </p>
           <div className="flex items-center gap-3 flex-wrap">
@@ -933,11 +933,11 @@ function TrialBanner() {
                 Outbound calls work now
               </span>
               <span className="flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-neutral-300" />
+                <Lock className="w-3.5 h-3.5 text-neutral-400" />
                 Inbound requires own number
               </span>
               <span className="flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-neutral-300" />
+                <Lock className="w-3.5 h-3.5 text-neutral-400" />
                 Branded caller ID requires own number
               </span>
             </div>
@@ -1021,12 +1021,12 @@ export default function PhoneNumbersPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Phone Numbers</h1>
-          <p className="text-neutral-500 mt-1">Buy dedicated numbers for inbound calls and branded outbound caller ID</p>
+          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Phone Numbers</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Buy dedicated numbers for inbound calls and branded outbound caller ID</p>
         </div>
         {isTrial ? (
           <a
@@ -1051,14 +1051,14 @@ export default function PhoneNumbersPage() {
       {isTrial && <TrialBanner />}
 
       {/* Feature overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
         <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-4">
           <div className="w-7 h-7 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center mb-3">
             <Phone className="w-3.5 h-3.5 text-blue-500" />
           </div>
           <p className="text-sm font-semibold text-neutral-900 mb-1">Inbound Calls</p>
           <p className="text-xs text-neutral-500 leading-relaxed">
-            Someone calls your number → Tierce instantly routes it to the assigned AI agent. No human needed.
+            Someone calls your number → Vaaniq instantly routes it to the assigned AI agent. No human needed.
           </p>
         </div>
         <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-4">
@@ -1116,12 +1116,12 @@ export default function PhoneNumbersPage() {
             {[
               { n: "1", label: "Caller dials your number", color: "text-blue-600 bg-blue-50 border-blue-200" },
               { n: "→", label: "", color: "" },
-              { n: "2", label: "Tierce matches it to your agent", color: "text-brand-600 bg-brand-500/8 border-brand-500/25" },
+              { n: "2", label: "Vaaniq matches it to your agent", color: "text-brand-600 bg-brand-500/8 border-brand-500/25" },
               { n: "→", label: "", color: "" },
               { n: "3", label: "AI agent answers in real-time", color: "text-green-600 bg-green-50 border-green-200" },
             ].map((item, i) =>
               item.n === "→" ? (
-                <span key={i} className="text-neutral-300 text-base shrink-0">→</span>
+                <span key={i} className="text-neutral-400 text-base shrink-0">→</span>
               ) : (
                 <div key={i} className={`shrink-0 rounded-xl px-3 py-2 border ${item.color} text-center min-w-[130px]`}>
                   <p className="text-[10px] font-semibold opacity-60 mb-0.5">Step {item.n}</p>

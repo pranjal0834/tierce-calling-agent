@@ -15,29 +15,23 @@ function InviteForm() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-
-  // Decode email from the JWT payload (middle part, base64)
   const [invitedEmail, setInvitedEmail] = useState("");
+
   useEffect(() => {
     if (!token) { toast.error("Invalid invite link"); return; }
     try {
       const payload = JSON.parse(atob(token.split(".")[1]));
       setInvitedEmail(payload.email || "");
-    } catch {
-      // ignore decode errors
-    }
+    } catch { /* ignore decode errors */ }
   }, [token]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password && password !== confirm) { toast.error("Passwords don't match"); return; }
-    if (password && password.length < 8) { toast.error("Password must be at least 8 characters"); return; }
-
+    if (password && password.length < 8)  { toast.error("Password must be at least 8 characters"); return; }
     setLoading(true);
     try {
-      const res = await api.post("/auth/accept-invite", null, {
-        params: { token, password },
-      });
+      const res = await api.post("/auth/accept-invite", null, { params: { token, password } });
       setToken(res.data.access_token);
       setDone(true);
       toast.success("Welcome! Joining workspace…");
@@ -51,51 +45,58 @@ function InviteForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
-            <Zap className="w-5 h-5 text-white" />
+    <div className="min-h-screen bg-neutral-50 bg-grid flex items-center justify-center p-4">
+      <div className="w-full max-w-[420px] animate-fade-in">
+        {/* Logo */}
+        <div className="flex items-center gap-2.5 justify-center mb-8">
+          <div className="w-9 h-9 bg-brand-500 rounded-[11px] flex items-center justify-center shadow-brand">
+            <Zap className="w-4.5 h-4.5 text-white" />
           </div>
-          <span className="text-xl font-bold text-white">Tierce</span>
+          <span className="text-2xl font-semibold tracking-tight text-neutral-900">Vaaniq</span>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8">
-          <h1 className="text-xl font-semibold text-white mb-1">You&apos;ve been invited</h1>
-          {invitedEmail && (
-            <p className="text-sm text-gray-400 mb-1">
-              Invited as <span className="text-white font-medium">{invitedEmail}</span>
+        {/* Card */}
+        <div className="bg-white rounded-2xl border border-neutral-200 shadow-modal p-8">
+          <div className="mb-6">
+            <h1 className="text-xl font-semibold text-neutral-900 tracking-tight">You&apos;ve been invited</h1>
+            {invitedEmail && (
+              <p className="text-sm text-neutral-500 mt-1">
+                Joining as <span className="font-medium text-neutral-800">{invitedEmail}</span>
+              </p>
+            )}
+            <p className="text-sm text-neutral-500 mt-2 leading-relaxed">
+              If you already have an account, you&apos;ll be added to this workspace directly.
+              Otherwise, set a password to create your account.
             </p>
-          )}
-          <p className="text-sm text-gray-500 mb-6">
-            If you already have an account, you&apos;ll be added to this workspace directly.
-            Otherwise set a password to create your account.
-          </p>
+          </div>
 
           {done ? (
-            <p className="text-center text-green-400 py-4">Joining workspace…</p>
+            <div className="text-center py-4">
+              <p className="text-sm font-medium text-emerald-600">Joining workspace…</p>
+            </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">
-                  Password <span className="text-gray-600">(only needed for new accounts)</span>
+                <label className="label-base">
+                  Password
+                  <span className="text-neutral-400 font-normal ml-1">(only needed for new accounts)</span>
                 </label>
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-brand-500"
+                  onChange={e => setPassword(e.target.value)}
+                  className="input-base"
                   placeholder="Leave blank if you already have an account"
                 />
               </div>
               {password && (
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Confirm password</label>
+                  <label className="label-base">Confirm password</label>
                   <input
                     type="password"
                     value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-brand-500"
+                    onChange={e => setConfirm(e.target.value)}
+                    className="input-base"
                     placeholder="Repeat password"
                   />
                 </div>
@@ -103,7 +104,7 @@ function InviteForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors shadow-xs disabled:opacity-50"
               >
                 {loading ? "Joining…" : "Join Workspace"}
               </button>

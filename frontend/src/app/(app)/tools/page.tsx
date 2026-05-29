@@ -46,12 +46,12 @@ const TOOL_TYPES = [
 
 export default function ToolsPage() {
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Function Tools</h1>
-          <p className="text-neutral-500 mt-1">
+          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Function Tools</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">
             Connect your agent to external systems during live calls.
           </p>
         </div>

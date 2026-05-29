@@ -27,21 +27,30 @@ function CopyButton({ text }: { text: string }) {
 }
 
 function CodeBlock({ code, language = "bash" }: { code: string; language?: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
   return (
-    <div className="relative group">
-      <pre className="bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-3 text-xs text-neutral-200 font-mono overflow-x-auto whitespace-pre">
-        {code}
-      </pre>
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+    <div className="rounded-xl border border-neutral-200 overflow-hidden shadow-xs">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-4 py-2 bg-neutral-100 border-b border-neutral-200">
+        <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">{language}</span>
         <button
-          onClick={() => navigator.clipboard.writeText(code)}
-          className="text-neutral-400 hover:text-white transition-colors p-1 rounded"
-          title="Copy"
+          onClick={copy}
+          className="flex items-center gap-1 text-[10px] font-medium text-neutral-500 hover:text-neutral-800 transition-colors"
         >
-          <Copy className="w-3.5 h-3.5" />
+          {copied
+            ? <><Check className="w-3 h-3 text-green-500" /> Copied</>
+            : <><Copy className="w-3 h-3" /> Copy</>}
         </button>
       </div>
-      <span className="absolute top-2 left-3 text-xs text-neutral-500 font-sans">{language}</span>
+      {/* Code body */}
+      <pre className="bg-white px-4 py-4 text-xs text-neutral-800 font-mono overflow-x-auto whitespace-pre leading-relaxed">
+        {code}
+      </pre>
     </div>
   );
 }
@@ -243,12 +252,12 @@ const call = await response.json();
 console.log(call.id); // call ID for tracking`;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Developers</h1>
-        <p className="text-neutral-500 mt-1">
-          Use the Tierce API to automate calls, integrate with your CRM, or build your own workflows. All endpoints accept API key authentication.
+        <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Developers</h1>
+        <p className="text-sm text-neutral-500 mt-0.5">
+          Use the Vaaniq API to automate calls, integrate with your CRM, or build your own workflows. All endpoints accept API key authentication.
         </p>
       </div>
 
@@ -306,36 +315,42 @@ console.log(call.id); // call ID for tracking`;
       {/* Endpoints reference */}
       <div className="space-y-4">
         <h2 className="text-base font-semibold text-neutral-900">Endpoints Reference</h2>
-        <div className="border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-neutral-50 border-b border-neutral-200">
-                <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium w-16">Method</th>
-                <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Path</th>
-                <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ENDPOINTS.map((ep, i) => (
-                <tr key={i} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-bold font-mono ${
-                      ep.method === "POST" ? "text-green-600" : "text-blue-600"
-                    }`}>
-                      {ep.method}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <code className="text-xs text-neutral-700 font-mono">{ep.path}</code>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-neutral-500">{ep.label}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-xl border border-neutral-200 overflow-hidden shadow-xs overflow-x-auto">
+          {/* Table header */}
+          <div className="grid grid-cols-[72px_1fr_1fr] bg-neutral-100 border-b border-neutral-200 px-4 py-2.5 min-w-[480px]">
+            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">Method</span>
+            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">Endpoint</span>
+            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">Description</span>
+          </div>
+          {/* Rows */}
+          {ENDPOINTS.map((ep, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-[72px_1fr_1fr] items-center px-4 py-3.5 bg-white border-b border-neutral-100 last:border-0 hover:bg-neutral-50 transition-colors min-w-[480px]"
+            >
+              {/* Method badge */}
+              <div>
+                <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md font-mono ${
+                  ep.method === "POST"
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-blue-50 text-blue-700 border border-blue-200"
+                }`}>
+                  {ep.method}
+                </span>
+              </div>
+              {/* Path */}
+              <code className="text-xs text-neutral-800 font-mono bg-neutral-100 border border-neutral-200 rounded-md px-2 py-1 w-fit">
+                {ep.path}
+              </code>
+              {/* Description */}
+              <span className="text-xs text-neutral-600">{ep.label}</span>
+            </div>
+          ))}
         </div>
         <p className="text-xs text-neutral-400">
-          Full interactive docs available at <code className="text-neutral-600">{BASE_URL}/docs</code> (FastAPI Swagger UI).
+          Full interactive docs available at{" "}
+          <code className="text-neutral-600 bg-neutral-100 px-1.5 py-0.5 rounded text-[11px]">{BASE_URL}/docs</code>
+          {" "}(FastAPI Swagger UI).
         </p>
       </div>
 

@@ -70,22 +70,22 @@ function fmtDateTime(iso?: string | null) {
   }
 }
 
-const STATUS_MAP: Record<string, { label: string; cls: string; pulse?: boolean }> = {
-  completed:    { label: "Completed",    cls: "text-green-600 bg-green-50 border-green-200" },
-  in_progress:  { label: "Live",         cls: "text-brand-600 bg-brand-50 border-brand-200", pulse: true },
-  ringing:      { label: "Ringing",      cls: "text-yellow-600 bg-yellow-50 border-yellow-200", pulse: true },
-  initiated:    { label: "Initiated",    cls: "text-yellow-600 bg-yellow-50 border-yellow-200" },
-  not_answered: { label: "Not Answered", cls: "text-neutral-500 bg-neutral-100 border-neutral-200" },
-  failed:       { label: "Failed",       cls: "text-red-600 bg-red-50 border-red-200" },
-  voicemail:    { label: "Voicemail",    cls: "text-orange-600 bg-orange-50 border-orange-200" },
-  cancelled:    { label: "Cancelled",    cls: "text-neutral-500 bg-neutral-100 border-neutral-200" },
+const STATUS_MAP: Record<string, { label: string; dot: string; text: string; bg: string; pulse?: boolean }> = {
+  completed:    { label: "Completed",   dot: "bg-emerald-400",              text: "text-emerald-700", bg: "bg-emerald-50"  },
+  in_progress:  { label: "Live",        dot: "bg-brand-400 animate-pulse",  text: "text-brand-700",   bg: "bg-brand-50",    pulse: true },
+  ringing:      { label: "Ringing",     dot: "bg-amber-400 animate-pulse",  text: "text-amber-700",   bg: "bg-amber-50",    pulse: true },
+  initiated:    { label: "Initiated",   dot: "bg-amber-400",                text: "text-amber-700",   bg: "bg-amber-50"    },
+  not_answered: { label: "No Answer",   dot: "bg-neutral-400",              text: "text-neutral-600", bg: "bg-neutral-100" },
+  failed:       { label: "Failed",      dot: "bg-red-400",                  text: "text-red-700",     bg: "bg-red-50"      },
+  voicemail:    { label: "Voicemail",   dot: "bg-orange-400",               text: "text-orange-700",  bg: "bg-orange-50"   },
+  cancelled:    { label: "Cancelled",   dot: "bg-neutral-400",              text: "text-neutral-600", bg: "bg-neutral-100" },
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_MAP[status] ?? { label: status, cls: "text-neutral-500 bg-neutral-100 border-neutral-200" };
+  const s = STATUS_MAP[status] ?? { label: status, dot: "bg-neutral-400", text: "text-neutral-600", bg: "bg-neutral-100" };
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border ${s.cls}`}>
-      {s.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />}
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.dot}`} />
       {s.label}
     </span>
   );
@@ -256,35 +256,35 @@ export default function CallsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Calls</h1>
-          <p className="text-neutral-500 mt-1">Monitor and review all call sessions</p>
+          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Calls</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Monitor and review all call sessions</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulk(true)}
-            className="flex items-center gap-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-medium border border-neutral-300"
+            className="inline-flex items-center gap-1.5 h-9 px-3 sm:px-4 bg-white hover:bg-neutral-50 text-neutral-700 text-sm font-medium border border-neutral-200 hover:border-neutral-300 rounded-lg shadow-xs transition-all duration-150"
           >
-            <Users className="w-4 h-4" /> Bulk Call
+            <Users className="w-4 h-4" /> <span className="hidden sm:inline">Bulk Call</span>
           </button>
           <button
             onClick={() => setShowDial(true)}
-            className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            className="inline-flex items-center gap-1.5 h-9 px-3 sm:px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg shadow-xs transition-colors"
           >
             <PhoneCall className="w-4 h-4" /> Dial
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* ── Call list ── */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col">
           <div className="px-4 py-3 border-b border-neutral-200 text-xs font-semibold text-neutral-500 uppercase tracking-wide">
             All Calls ({calls.length})
           </div>
-          <div className="divide-y divide-neutral-100 overflow-y-auto" style={{ maxHeight: "75vh" }}>
+          <div className="divide-y divide-neutral-100 overflow-y-auto" style={{ maxHeight: "60vh" }}>
             {calls.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 gap-4">
                 <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
@@ -335,7 +335,7 @@ export default function CallsPage() {
         </div>
 
         {/* ── Detail panel ── */}
-        <div className="lg:col-span-3 bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col" style={{ minHeight: "75vh" }}>
+        <div className="lg:col-span-3 bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col min-h-[400px] lg:min-h-[75vh]">
           {detailLoading && (
             <div className="flex items-center justify-center h-full">
               <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
@@ -404,7 +404,7 @@ export default function CallsPage() {
                       ? `${(detail.call.sentiment_score * 10).toFixed(0)}%`
                       : "—"}
                     valueClass={
-                      detail.call.sentiment_score == null ? "text-gray-400" :
+                      detail.call.sentiment_score == null ? "text-neutral-400" :
                       detail.call.sentiment_score >= 0.7 ? "text-green-400" :
                       detail.call.sentiment_score >= 0.4 ? "text-yellow-400" : "text-red-400"
                     }
@@ -591,7 +591,7 @@ export default function CallsPage() {
                         <p className="text-sm text-neutral-700">{turn.transcript || "(audio only)"}</p>
                         {turn.eval_score != null && (
                           <div className="mt-1.5 flex items-center gap-1">
-                            <Activity className="w-3 h-3 text-gray-500" />
+                            <Activity className="w-3 h-3 text-neutral-500" />
                             <span className={`text-xs ${
                               turn.eval_score >= 7 ? "text-green-400" :
                               turn.eval_score >= 5 ? "text-yellow-400" : "text-red-400"
@@ -629,7 +629,7 @@ export default function CallsPage() {
                       <div className="flex items-center gap-3">
                         {detail.call.extra_data?.appointment_booked
                           ? <CheckCircle2 className="w-5 h-5 text-green-400" />
-                          : <XCircle className="w-5 h-5 text-gray-500" />}
+                          : <XCircle className="w-5 h-5 text-neutral-500" />}
                         <div>
                           <p className="text-sm font-medium text-neutral-900">
                             {detail.call.extra_data?.appointment_booked ? "Appointment booked" : "No appointment booked"}
@@ -722,7 +722,7 @@ export default function CallsPage() {
                     </Section>
 
                     {/* Recording */}
-                    <Section icon={<Mic2 className="w-4 h-4 text-gray-400" />} title="Recording">
+                    <Section icon={<Mic2 className="w-4 h-4 text-neutral-400" />} title="Recording">
                       {detail.call.has_recording ? (
                         <CallAudioPlayer src={getRecordingUrl(detail.call.id)} />
                       ) : (
@@ -743,8 +743,8 @@ export default function CallsPage() {
 
       {/* Dial modal */}
       {showDial && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl border border-neutral-200 shadow-lg w-full max-w-md">
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-lg w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-5 border-b border-neutral-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-neutral-900">Initiate Call</h2>
               <button onClick={() => setShowDial(false)} className="text-neutral-400 hover:text-neutral-900"><X className="w-4 h-4" /></button>
@@ -886,8 +886,8 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl border border-neutral-200 shadow-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50 sm:p-4">
+      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-lg w-full sm:max-w-2xl max-h-[90vh] flex flex-col">
         <div className="px-6 py-5 border-b border-neutral-200 flex items-center justify-between flex-shrink-0">
           <div>
             <h2 className="text-lg font-semibold text-neutral-900">Bulk Call Campaign</h2>

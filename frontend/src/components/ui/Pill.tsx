@@ -1,33 +1,34 @@
-// src/components/ui/Pill.tsx
 "use client";
 import React from "react";
-import { classes } from "@/lib/theme"; // corrected import
+import { X } from "lucide-react";
 
 type PillProps = {
   children: React.ReactNode;
-  selected: boolean;
+  selected?: boolean;
   onRemove?: () => void;
   className?: string;
 };
 
-export default function Pill({
-  children,
-  selected,
-  onRemove,
-  className = "",
-}: PillProps) {
-  const base = `${classes.pill(selected)} inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500`;
+export default function Pill({ children, selected = false, onRemove, className = "" }: PillProps) {
   return (
-    <span className={`${base} ${className}`.trim()}>
+    <span
+      className={[
+        "inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full border transition-colors",
+        selected
+          ? "bg-brand-50 text-brand-700 border-brand-200"
+          : "bg-neutral-100 text-neutral-600 border-neutral-200",
+        className,
+      ].filter(Boolean).join(" ")}
+    >
       {children}
       {onRemove && (
         <button
           type="button"
           onClick={onRemove}
-          aria-label="Remove language"
-          className="ml-0.5 text-xs"
+          aria-label="Remove"
+          className="ml-0.5 rounded-full hover:text-red-500 transition-colors"
         >
-          ×
+          <X className="w-3 h-3" />
         </button>
       )}
     </span>

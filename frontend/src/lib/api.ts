@@ -3,7 +3,12 @@ import { getToken, clearToken } from "@/lib/auth";
 
 const BASE = (process.env.NEXT_PUBLIC_API_URL as string) || "http://localhost:8000";
 
-export const api = axios.create({ baseURL: BASE });
+export const api = axios.create({
+  baseURL: BASE,
+  headers: {
+    "ngrok-skip-browser-warning": "1",
+  },
+});
 
 // Attach JWT on every request
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {

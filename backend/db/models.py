@@ -53,6 +53,22 @@ class User(Base):
     __table_args__ = (Index("idx_users_email", "email"),)
 
 
+# ─── Notification Preferences ──────────────────────────────────────────────────
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), unique=True, nullable=False)
+    welcome_email: Mapped[bool] = mapped_column(Boolean, default=True)
+    announcement_emails: Mapped[bool] = mapped_column(Boolean, default=True)
+    low_credits_alert: Mapped[bool] = mapped_column(Boolean, default=True)
+    call_summary_emails: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User", backref="notification_prefs")
+
+
 # ─── API Keys ──────────────────────────────────────────────────────────────────
 
 class ApiKey(Base):

@@ -135,7 +135,7 @@ export default function BillingPage() {
           key: order.key_id,
           amount: order.amount,
           currency: "INR",
-          name: "Tierce Voice AI",
+          name: "Vaaniq Voice AI",
           description: `${pack.label} — ${pack.minutes} minutes`,
           order_id: order.order_id,
           handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
@@ -190,13 +190,13 @@ export default function BillingPage() {
   const currentPacks = packs ? (currency === "inr" ? packs.inr : packs.usd) : {};
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
 
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Billing</h1>
-          <p className="text-neutral-500 mt-1">Manage your credits, plans, and transaction history</p>
+          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Billing</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Manage your credits, plans, and transaction history</p>
         </div>
         <button
           onClick={refresh}
@@ -218,7 +218,7 @@ export default function BillingPage() {
                 Buy any pack to unlock dedicated phone numbers
               </p>
               <p className="text-xs text-neutral-500 leading-relaxed">
-                You&apos;re on the free trial — your agents make outbound calls using Tierce&apos;s shared number.
+                You&apos;re on the free trial — your agents make outbound calls using Vaaniq&apos;s shared number.
                 Once you buy any pack below, you can purchase your own dedicated number for inbound calls and branded caller ID.
               </p>
             </div>
@@ -308,7 +308,7 @@ export default function BillingPage() {
                 <p className="text-xs text-neutral-500 mt-0.5">{pack.minutes} minutes</p>
               </div>
               <div className="flex items-baseline gap-1 mb-1">
-                <span className="text-2xl font-bold text-neutral-900">{symbol}{price}</span>
+                <span className="text-[22px] font-semibold text-neutral-900 tracking-tight">{symbol}{price}</span>
               </div>
               {perMin && (
                 <p className="text-xs text-neutral-400 mb-2">{symbol}{perMin}/min</p>
@@ -322,8 +322,8 @@ export default function BillingPage() {
                 disabled={isBuying}
                 className={`mt-auto w-full py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                   isPopular
-                    ? "bg-brand-500 hover:bg-brand-600 text-white"
-                    : "bg-neutral-900 hover:bg-neutral-700 text-white"
+                    ? "bg-brand-500 hover:bg-brand-600 text-white shadow-xs"
+                    : "bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-200 hover:border-neutral-300"
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isBuying ? (

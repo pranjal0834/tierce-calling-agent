@@ -17,26 +17,31 @@ const VOICE_LABELS: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    completed:     { label: "Completed",    cls: "bg-green-50 text-green-600" },
-    "in-progress": { label: "Live",         cls: "bg-teal-50 text-teal-600 animate-pulse" },
-    in_progress:   { label: "Live",         cls: "bg-teal-50 text-teal-600 animate-pulse" },
-    ringing:       { label: "Ringing",      cls: "bg-yellow-50 text-yellow-700 animate-pulse" },
-    initiated:     { label: "Initiated",    cls: "bg-yellow-50 text-yellow-700" },
-    not_answered:  { label: "Not Answered", cls: "bg-neutral-100 text-neutral-500" },
-    failed:        { label: "Failed",       cls: "bg-red-50 text-red-600" },
-    cancelled:     { label: "Cancelled",    cls: "bg-neutral-100 text-neutral-500" },
-    voicemail:     { label: "Voicemail",    cls: "bg-orange-50 text-orange-600" },
+  const map: Record<string, { label: string; dot: string; text: string; bg: string }> = {
+    completed:     { label: "Completed", dot: "bg-emerald-400",             text: "text-emerald-700", bg: "bg-emerald-50"  },
+    "in-progress": { label: "Live",      dot: "bg-brand-400 animate-pulse", text: "text-brand-700",   bg: "bg-brand-50"    },
+    in_progress:   { label: "Live",      dot: "bg-brand-400 animate-pulse", text: "text-brand-700",   bg: "bg-brand-50"    },
+    ringing:       { label: "Ringing",   dot: "bg-amber-400 animate-pulse", text: "text-amber-700",   bg: "bg-amber-50"    },
+    initiated:     { label: "Initiated", dot: "bg-amber-400",               text: "text-amber-700",   bg: "bg-amber-50"    },
+    not_answered:  { label: "No Answer", dot: "bg-neutral-400",             text: "text-neutral-600", bg: "bg-neutral-100" },
+    failed:        { label: "Failed",    dot: "bg-red-400",                 text: "text-red-700",     bg: "bg-red-50"      },
+    cancelled:     { label: "Cancelled", dot: "bg-neutral-400",             text: "text-neutral-600", bg: "bg-neutral-100" },
+    voicemail:     { label: "Voicemail", dot: "bg-orange-400",              text: "text-orange-700",  bg: "bg-orange-50"   },
   };
-  const b = map[status] ?? { label: status, cls: "bg-neutral-100 text-neutral-500" };
-  return <span className={`text-xs px-2 py-0.5 rounded font-medium ${b.cls}`}>{b.label}</span>;
+  const b = map[status] ?? { label: status, dot: "bg-neutral-400", text: "text-neutral-600", bg: "bg-neutral-100" };
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${b.bg} ${b.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${b.dot}`} />
+      {b.label}
+    </span>
+  );
 }
 
 function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-4">
       <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-2xl font-bold text-neutral-900">{value}</p>
+      <p className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">{value}</p>
       {sub && <p className="text-xs text-neutral-500 mt-0.5">{sub}</p>}
     </div>
   );
@@ -44,7 +49,7 @@ function Stat({ label, value, sub }: { label: string; value: string | number; su
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-3 flex-wrap">
       <span className="text-sm text-neutral-500">{label}</span>
       {children}
     </div>
@@ -88,7 +93,7 @@ export default function AgentViewPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -97,7 +102,7 @@ export default function AgentViewPage() {
     return (
       <div className="text-center py-24 text-neutral-500">
         Agent not found.{" "}
-        <Link href="/agents" className="text-teal-500 hover:underline">Back to agents</Link>
+        <Link href="/agents" className="text-brand-500 hover:underline">Back to agents</Link>
       </div>
     );
   }
@@ -115,9 +120,9 @@ export default function AgentViewPage() {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-start gap-4">
           <Link href="/agents" className="mt-1 text-neutral-400 hover:text-neutral-900 transition-colors">
             <ArrowLeft className="w-5 h-5" />
@@ -132,7 +137,7 @@ export default function AgentViewPage() {
                   : <Layers className="w-5 h-5 text-blue-400" />}
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-neutral-900">{agent.name}</h1>
+                <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">{agent.name}</h1>
                 {agent.description && <p className="text-sm text-neutral-500">{agent.description}</p>}
               </div>
             </div>
@@ -141,13 +146,13 @@ export default function AgentViewPage() {
         <div className="flex items-center gap-2">
           <Link
             href={`/agents?edit=${id}`}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-neutral-600 hover:text-neutral-900 bg-white hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 rounded-lg shadow-xs transition-all duration-150"
           >
             <Pencil className="w-3.5 h-3.5" /> Edit
           </Link>
           <button
             onClick={handleDelete}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" /> Delete
           </button>
@@ -176,16 +181,16 @@ export default function AgentViewPage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
               activeTab === tab
-                ? "border-teal-500 text-teal-600"
-                : "border-transparent text-neutral-500 hover:text-neutral-700"
+                ? "border-brand-500 text-neutral-900"
+                : "border-transparent text-neutral-500 hover:text-neutral-800"
             }`}
           >
             {tab === "overview" ? <Layers className="w-4 h-4" /> : <Wrench className="w-4 h-4" />}
             {tab === "overview" ? "Overview" : "Tools"}
             {tab === "tools" && toolsCount > 0 && (
-              <span className="text-xs bg-teal-500/20 text-teal-400 px-1.5 py-0.5 rounded-full">
+              <span className="text-xs bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded-full">
                 {toolsCount}
               </span>
             )}
@@ -253,12 +258,12 @@ export default function AgentViewPage() {
               {features.map(({ key, label, icon: Icon, color }) => {
                 const enabled = agent.config?.[key];
                 return (
-                  <div key={key} className="flex items-center justify-between">
+                  <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${enabled ? color : "text-neutral-300"}`} />
+                      <Icon className={`w-4 h-4 ${enabled ? color : "text-neutral-400"}`} />
                       <span className={`text-sm ${enabled ? "text-neutral-800" : "text-neutral-400"}`}>{label}</span>
                     </div>
-                    <span className={`text-xs font-medium ${enabled ? "text-green-600" : "text-neutral-300"}`}>
+                    <span className={`text-xs font-medium ${enabled ? "text-green-600" : "text-neutral-400"}`}>
                       {enabled ? "ON" : "OFF"}
                     </span>
                   </div>

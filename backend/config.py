@@ -5,6 +5,12 @@ load_dotenv()
 
 _DEFAULTS = {
     "ALGORITHM": "HS256",
+    # ── Email / SMTP ──────────────────────────────────────────────────────────
+    "SMTP_HOST":      "smtp.gmail.com",
+    "SMTP_PORT":      587,
+    "SMTP_USER":      "",
+    "SMTP_PASSWORD":  "",
+    "SMTP_FROM_NAME": "Vaaniq Voice",
     # Super admin — comma-separated email whitelist
     "ADMIN_EMAILS": "",
     # Billing — Razorpay (India/INR)

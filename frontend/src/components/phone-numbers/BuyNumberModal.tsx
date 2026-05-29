@@ -123,7 +123,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
           key: order.key,
           amount: order.amount,
           currency: "INR",
-          name: "Tierce Voice",
+          name: "Vaaniq Voice",
           description: `First month: ${n.phone_number}`,
           order_id: order.order_id,
           handler: async (response: any) => {
@@ -179,15 +179,15 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
     : "First month's rental paid via Razorpay at purchase. Twilio rates apply (~₹85–460/mo depending on country).";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-xl shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4">
+      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 w-full sm:max-w-xl shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+        <div className="flex items-center justify-between p-5 border-b border-neutral-100">
           <div>
-            <h2 className="text-base font-semibold text-white">Buy Phone Number</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{costNote}</p>
+            <h2 className="text-base font-semibold text-neutral-900">Buy Phone Number</h2>
+            <p className="text-xs text-neutral-500 mt-0.5">{costNote}</p>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+          <button onClick={onClose} className="text-neutral-500 hover:text-neutral-900 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -195,7 +195,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
         <div className="p-5 space-y-4">
           {/* Provider badge */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Searching via</span>
+            <span className="text-xs text-neutral-500">Searching via</span>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
               provider === "plivo"
                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
@@ -212,15 +212,15 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
               <select
                 value={country}
                 onChange={e => { setCountry(e.target.value); setResults([]); }}
-                className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+                className="bg-neutral-100 border border-neutral-200 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
               >
                 {countries.map(c => (
                   <option key={c.code} value={c.code}>{c.name}</option>
                 ))}
               </select>
             ) : (
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-sm text-gray-300 shrink-0">
-                <span className="text-xs font-mono text-gray-500">{countries[0]?.code}</span>
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-neutral-100 border border-neutral-200 rounded-xl text-sm text-neutral-600 shrink-0">
+                <span className="text-xs font-mono text-neutral-500">{countries[0]?.code}</span>
                 {countries[0]?.name}
               </div>
             )}
@@ -229,12 +229,12 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
               onChange={e => setAreaCode(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
               placeholder={country === "US" ? "Area code (e.g. 415)" : country === "IN" ? "STD code (e.g. 80)" : "Area code (optional)"}
-              className="flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+              className="flex-1 bg-neutral-100 border border-neutral-200 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
             />
             <button
               onClick={search}
               disabled={searching}
-              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
+              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2 shadow-xs"
             >
               {searching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               Search
@@ -244,11 +244,11 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
           {/* Agent assignment */}
           {agents.length > 0 && (
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">Route inbound calls to</label>
+              <label className="block text-xs text-neutral-500 mb-1.5">Route inbound calls to</label>
               <select
                 value={selectedAgent}
                 onChange={e => setSelectedAgent(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+                className="w-full bg-neutral-100 border border-neutral-200 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
               >
                 <option value="">— No agent (unrouted) —</option>
                 {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -259,16 +259,16 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
           {/* Results */}
           {results.length > 0 && (
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              <p className="text-xs text-gray-500">{results.length} numbers available</p>
+              <p className="text-xs text-neutral-500">{results.length} numbers available</p>
               {results.map(n => {
                 const rateUsd = n.monthly_rate_usd ?? 1.0;
                 const rateInr = Math.round(rateUsd * 83);
                 return (
                   <div key={n.phone_number}
-                    className="flex items-center justify-between bg-gray-800/60 border border-gray-700 rounded-xl px-4 py-3">
+                    className="flex items-center justify-between bg-neutral-100/60 border border-neutral-200 rounded-xl px-4 py-3">
                     <div>
-                      <p className="text-sm font-semibold text-white font-mono">{n.phone_number}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="text-sm font-semibold text-neutral-900 font-mono">{n.phone_number}</p>
+                      <p className="text-xs text-neutral-500 mt-0.5">
                         {[n.locality, n.region, n.iso_country].filter(Boolean).join(", ")}
                       </p>
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -282,7 +282,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
                     <button
                       onClick={() => buy(n)}
                       disabled={!!buying}
-                      className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                      className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-neutral-900 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
                     >
                       {buying === n.phone_number
                         ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Buying…</>

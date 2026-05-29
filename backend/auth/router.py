@@ -10,7 +10,11 @@ from datetime import datetime, timedelta
 
 import bcrypt as _bcrypt
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+import asyncio
+import base64
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from jose import jwt
 from sqlalchemy import select
@@ -22,7 +26,9 @@ from backend.auth.dependencies import get_current_user, require_workspace
 from backend.auth.google_oauth import exchange_code_for_user, get_google_auth_url
 from backend.config import settings
 from backend.db.database import get_db
-from backend.db.models import ApiKey, User, Workspace
+from backend.db.models import ApiKey, NotificationPreference, User, Workspace
+from backend.notifications import email as mailer
+from backend.notifications import templates as tmpl
 from backend.models.schemas import (
     ApiKeyCreate,
     ApiKeyCreated,
@@ -93,7 +99,16 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
     await db.commit()
 
+    # Create default notification preferences
+    db.add(NotificationPreference(user_id=user.id))
+    await db.commit()
+
     log.info("New workspace registered", workspace_id=workspace.id, email=user.email)
+
+    # Send welcome email (fire-and-forget)
+    subject, html = tmpl.welcome(workspace.name, user.email, settings.FRONTEND_URL or "")
+    asyncio.create_task(mailer.send_email(user.email, subject, html))
+
     return TokenOut(access_token=_create_access_token(user.id))
 
 
@@ -116,24 +131,55 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 
+def _extract_origin(url: str) -> str:
+    """Extract scheme+host from a URL, e.g. https://foo.devtunnels.ms"""
+    try:
+        p = urlparse(url)
+        if p.scheme and p.netloc:
+            return f"{p.scheme}://{p.netloc}"
+    except Exception:
+        pass
+    return ""
+
+
 @router.get("/google")
-async def google_login():
+async def google_login(request: Request, origin: str = ""):
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=501, detail="Google OAuth not configured")
-    url = get_google_auth_url()
+    frontend_origin = (
+        origin
+        or _extract_origin(request.headers.get("referer", ""))
+        or request.headers.get("origin", "")
+        or settings.FRONTEND_URL
+        or "http://localhost:3000"
+    )
+    # base64 encode so the state is safe alphanumeric chars — no URL encoding issues
+    state = base64.urlsafe_b64encode(frontend_origin.encode()).decode().rstrip("=")
+    log.info("Google OAuth initiated", frontend_origin=frontend_origin, state=state)
+    url = get_google_auth_url(state=state)
     return RedirectResponse(url)
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
+async def google_callback(code: str, state: str = "", db: AsyncSession = Depends(get_db)):
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=501, detail="Google OAuth not configured")
+
+    # Decode base64 state → frontend origin
+    if state:
+        try:
+            padded = state + "=" * (4 - len(state) % 4)
+            frontend_url = base64.urlsafe_b64decode(padded).decode()
+        except Exception:
+            frontend_url = settings.FRONTEND_URL or "http://localhost:3000"
+    else:
+        frontend_url = settings.FRONTEND_URL or "http://localhost:3000"
+    log.info("Google OAuth callback", state=state, frontend_url=frontend_url)
 
     try:
         info = await exchange_code_for_user(code)
     except Exception as exc:
         log.error("Google OAuth exchange failed", error=repr(exc))
-        frontend_url = settings.FRONTEND_URL or "http://localhost:3000"
         return RedirectResponse(f"{frontend_url}/login?error=oauth_failed")
 
     google_id = info.get("sub")
@@ -166,15 +212,25 @@ async def google_callback(code: str, db: AsyncSession = Depends(get_db)):
         )
         db.add(user)
         await db.flush()
+        is_new_user = True
     else:
         # Link google_id if not already set
         if not user.google_id:
             user.google_id = google_id
+        is_new_user = False
+
+    # Create notification preferences for new users
+    if is_new_user:
+        db.add(NotificationPreference(user_id=user.id))
 
     await db.commit()
 
+    # Send welcome email to new Google OAuth users (fire-and-forget)
+    if is_new_user:
+        subject, html = tmpl.welcome(name, user.email, frontend_url)
+        asyncio.create_task(mailer.send_email(user.email, subject, html))
+
     token = _create_access_token(user.id)
-    frontend_url = settings.FRONTEND_URL or "http://localhost:3000"
     return RedirectResponse(f"{frontend_url}/callback?token={token}")
 
 

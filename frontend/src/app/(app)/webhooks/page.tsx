@@ -272,7 +272,7 @@ function EndpointCard({
               <code className="flex-1 text-xs text-amber-700 font-mono break-all">{ep.secret}</code>
               <CopyBtn text={ep.secret} />
             </div>
-            <p className="text-xs text-neutral-500 mt-1.5">Store this in your environment variables and use it to verify incoming requests.</p>
+            <p className="text-xs text-sm text-neutral-500 mt-0.5.5">Store this in your environment variables and use it to verify incoming requests.</p>
           </div>
         )}
       </div>
@@ -347,7 +347,7 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
       <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-md shadow-xl">
 
         {/* Modal header */}
@@ -358,7 +358,7 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
             </div>
             <div>
               <h2 className="text-sm font-semibold text-neutral-900">Add webhook endpoint</h2>
-              <p className="text-xs text-neutral-500 mt-0.5">Tierce will POST events to this URL</p>
+              <p className="text-xs text-neutral-500 mt-0.5">Vaaniq will POST events to this URL</p>
             </div>
           </div>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900 transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-neutral-100 text-lg leading-none">×</button>
@@ -419,7 +419,7 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
             <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-xs text-neutral-600">
               A <span className="text-amber-700 font-medium">signing secret</span> will be generated and shown once after creation.
-              Use it to verify that events came from Tierce, not a third party.
+              Use it to verify that events came from Vaaniq, not a third party.
             </p>
           </div>
 
@@ -507,17 +507,21 @@ function SignatureInfo() {
       {open && (
         <div className="border-t border-neutral-200 px-5 py-4 space-y-4 bg-neutral-50">
           <p className="text-xs text-neutral-600 leading-relaxed">
-            Every request includes two headers. Use them to confirm the event genuinely came from Tierce and wasn&apos;t tampered with.
+            Every request includes two headers. Use them to confirm the event genuinely came from Vaaniq and wasn&apos;t tampered with.
           </p>
           <div className="space-y-2">
-            <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-3.5">
-              <p className="text-xs text-neutral-400 mb-2 font-medium">Headers sent on every request</p>
-              <pre className="text-xs text-neutral-200 font-mono">{`X-Tierce-Signature: sha256=<hex>
-X-Tierce-Timestamp: 1716820000`}</pre>
+            <div className="rounded-xl border border-neutral-200 overflow-hidden shadow-xs">
+              <div className="px-4 py-2 bg-neutral-100 border-b border-neutral-200">
+                <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">Headers</span>
+              </div>
+              <pre className="bg-white px-4 py-3 text-xs text-neutral-800 font-mono leading-relaxed">{`X-Vaaniq-Signature: sha256=<hex>
+X-Vaaniq-Timestamp: 1716820000`}</pre>
             </div>
-            <div className="bg-neutral-900 border border-neutral-700 rounded-xl p-3.5">
-              <p className="text-xs text-neutral-400 mb-2 font-medium">How to verify (Python example)</p>
-              <pre className="text-xs text-green-400 font-mono leading-relaxed">{`import hmac, hashlib
+            <div className="rounded-xl border border-neutral-200 overflow-hidden shadow-xs">
+              <div className="px-4 py-2 bg-neutral-100 border-b border-neutral-200">
+                <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-widest">Python</span>
+              </div>
+              <pre className="bg-white px-4 py-3 text-xs text-neutral-800 font-mono leading-relaxed">{`import hmac, hashlib
 
 def verify(secret, timestamp, body, signature):
     expected = hmac.new(
@@ -569,13 +573,13 @@ export default function WebhooksPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
 
       {/* Page header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Webhooks</h1>
-          <p className="text-neutral-500 mt-1">
+          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Webhooks</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">
             Automatically notify your systems when calls happen — connect to CRMs, Zapier, Google Sheets, and more.
           </p>
         </div>

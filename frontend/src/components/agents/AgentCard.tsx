@@ -8,53 +8,86 @@ interface AgentCardProps {
   onDelete: (id: string) => void;
 }
 
+const featurePills: Record<string, { label: string; cls: string }> = {
+  backchannel_enabled:     { label: "Backchannel", cls: "bg-emerald-50 text-emerald-700 border-emerald-100" },
+  emotional_intelligence:  { label: "Emotions",    cls: "bg-pink-50 text-pink-700 border-pink-100" },
+  memory_graph:            { label: "Memory",      cls: "bg-blue-50 text-blue-700 border-blue-100" },
+};
+
 export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
+  const isNative = agent.pipeline_mode === "native";
+
   return (
-    <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 flex items-start justify-between">
-      <div className="flex items-start gap-4">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-          agent.pipeline_mode === "native" ? "bg-purple-500/20" : "bg-blue-500/20"
+    <div className="group bg-white rounded-xl border border-neutral-200 shadow-card p-4 flex items-start justify-between hover:shadow-hover hover:border-neutral-300 transition-all duration-200">
+      <div className="flex items-start gap-3.5 min-w-0">
+        {/* Icon */}
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          isNative ? "bg-violet-50" : "bg-blue-50"
         }`}>
-          {agent.pipeline_mode === "native"
-            ? <Zap className="w-5 h-5 text-purple-400" />
-            : <Layers className="w-5 h-5 text-blue-400" />}
+          {isNative
+            ? <Zap    className="w-4 h-4 text-violet-500" />
+            : <Layers className="w-4 h-4 text-blue-500" />}
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-neutral-900">{agent.name}</h3>
+
+        {/* Info */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-[14px] font-semibold text-neutral-900 leading-tight">{agent.name}</h3>
             {agent.is_personal && (
-              <span className="flex items-center gap-1 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-100 px-1.5 py-0.5 rounded-full">
                 <Lock className="w-2.5 h-2.5" /> Personal
               </span>
             )}
           </div>
-          {agent.description && <p className="text-sm text-neutral-500 mt-0.5">{agent.description}</p>}
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="text-xs bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded">
-              {agent.pipeline_mode === "native" ? "Native Audio" : "Classic Pipeline"}
+
+          {agent.description && (
+            <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed truncate max-w-[380px]">
+              {agent.description}
+            </p>
+          )}
+
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border ${
+              isNative ? "bg-violet-50 text-violet-700 border-violet-100" : "bg-blue-50 text-blue-700 border-blue-100"
+            }`}>
+              {isNative ? "Native Audio" : "Classic Pipeline"}
             </span>
-            <span className="text-xs bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded">{agent.llm_model}</span>
-            {agent.config?.backchannel_enabled && (
-              <span className="text-xs bg-green-500/10 text-green-400 px-2 py-0.5 rounded">Backchannel</span>
-            )}
-            {agent.config?.emotional_intelligence && (
-              <span className="text-xs bg-pink-500/10 text-pink-400 px-2 py-0.5 rounded">Emotions</span>
-            )}
-            {agent.config?.memory_graph && (
-              <span className="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">Memory</span>
+            <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+              {agent.llm_model}
+            </span>
+            {Object.entries(featurePills).map(([key, { label, cls }]) =>
+              agent.config?.[key] ? (
+                <span key={key} className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border ${cls}`}>
+                  {label}
+                </span>
+              ) : null
             )}
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-1">
-        <Link href={`/agents/${agent.id}`} className="text-neutral-400 hover:text-brand-400 transition-colors p-1" title="View agent">
-          <Eye className="w-4 h-4" />
+
+      {/* Actions */}
+      <div className="flex items-center gap-0.5 flex-shrink-0 ml-3 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <Link
+          href={`/agents/${agent.id}`}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-500 hover:bg-brand-50 transition-colors"
+          title="View agent"
+        >
+          <Eye className="w-3.5 h-3.5" />
         </Link>
-        <button onClick={() => onEdit(agent)} className="text-neutral-400 hover:text-brand-400 transition-colors p-1" title="Edit agent">
-          <Pencil className="w-4 h-4" />
+        <button
+          onClick={() => onEdit(agent)}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-500 hover:bg-brand-50 transition-colors"
+          title="Edit agent"
+        >
+          <Pencil className="w-3.5 h-3.5" />
         </button>
-        <button onClick={() => onDelete(agent.id)} className="text-neutral-400 hover:text-red-400 transition-colors p-1" title="Delete agent">
-          <Trash2 className="w-4 h-4" />
+        <button
+          onClick={() => onDelete(agent.id)}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          title="Delete agent"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>

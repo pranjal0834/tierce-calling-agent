@@ -264,6 +264,54 @@ async def list_all_users(
     return rows
 
 
+# ── Delete user ───────────────────────────────────────────────────────────────
+
+@router.delete("/users/{user_id}", status_code=204)
+async def delete_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_superadmin),
+):
+    """
+    Permanently delete a user account.
+    If they are the sole member of their workspace, the workspace is also
+    deleted (agents, calls, transactions removed in dependency order).
+    Super admins cannot delete themselves.
+    """
+    from sqlalchemy import text
+
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.id == admin.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own super admin account")
+
+    ws_id = target.workspace_id
+    members_count = (await db.execute(
+        select(func.count(User.id)).where(User.workspace_id == ws_id)
+    )).scalar() or 0
+
+    is_sole_member = members_count <= 1
+
+    if is_sole_member:
+        # Delete in FK dependency order so no constraint violations
+        await db.execute(text("DELETE FROM notification_preferences WHERE user_id = :uid"), {"uid": user_id})
+        await db.execute(text("DELETE FROM api_keys WHERE workspace_id = :ws"), {"ws": ws_id})
+        await db.execute(text("DELETE FROM credit_transactions WHERE workspace_id = :ws"), {"ws": ws_id})
+        await db.execute(text("DELETE FROM calls WHERE workspace_id = :ws"), {"ws": ws_id})
+        await db.execute(text("DELETE FROM agents WHERE workspace_id = :ws"), {"ws": ws_id})
+        await db.execute(text("DELETE FROM users WHERE workspace_id = :ws"), {"ws": ws_id})
+        await db.execute(text("DELETE FROM workspaces WHERE id = :ws"), {"ws": ws_id})
+    else:
+        # Multi-member workspace — remove only this user and their prefs
+        await db.execute(text("DELETE FROM notification_preferences WHERE user_id = :uid"), {"uid": user_id})
+        await db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+
+    await db.commit()
+    log.info("User deleted by admin", user_id=user_id, email=target.email,
+             workspace_deleted=is_sole_member, admin=admin.email)
+
+
 # ── Calls ─────────────────────────────────────────────────────────────────────
 
 @router.get("/calls")

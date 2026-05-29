@@ -1,12 +1,30 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Menu, Zap } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import { getToken, clearToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 
+const SIDEBAR_KEY = "vaaniq_sidebar_collapsed";
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(SIDEBAR_KEY);
+    if (stored === "true") setCollapsed(true);
+  }, []);
+
+  const toggleSidebar = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem(SIDEBAR_KEY, String(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!getToken()) {
@@ -18,7 +36,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         if (r.data?.is_superadmin) window.location.href = "/admin";
       })
       .catch((err: { response?: { status?: number } }) => {
-        // Stale or invalid token — force re-login
         if (!err.response || err.response.status === 401 || err.response.status === 403) {
           clearToken();
           router.replace("/login");
@@ -28,8 +45,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50">
-      <Sidebar />
-      <main className="flex-1 overflow-auto p-6 bg-neutral-50">{children}</main>
+      <Sidebar
+        collapsed={collapsed}
+        onToggle={toggleSidebar}
+        mobileOpen={mobileMenuOpen}
+        onMobileClose={() => setMobileMenuOpen(false)}
+      />
+
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Mobile top bar — hidden on lg+ */}
+        <header className="lg:hidden flex items-center gap-3 px-4 h-14 border-b border-neutral-200 bg-white flex-shrink-0 z-30">
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-brand-500 rounded-lg flex items-center justify-center shadow-brand">
+              <Zap className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="font-semibold text-[15px] text-neutral-900 tracking-tight">Vaaniq</span>
+          </div>
+        </header>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto scroll-thin">
+          <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 page-enter">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

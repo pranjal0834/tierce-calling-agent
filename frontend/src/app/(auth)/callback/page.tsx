@@ -30,7 +30,7 @@ export default function CallbackPage() {
       <div className="w-10 h-10 bg-brand-500 rounded-xl flex items-center justify-center animate-pulse">
         <Zap className="w-5 h-5 text-white" />
       </div>
-      <p className="text-gray-400 text-sm">Signing you in...</p>
+      <p className="text-neutral-400 text-sm">Signing you in...</p>
       <Suspense>
         <CallbackHandler />
       </Suspense>

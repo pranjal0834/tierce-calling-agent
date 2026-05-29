@@ -1,4 +1,4 @@
-const TOKEN_KEY = "tierce_token";
+const TOKEN_KEY = "vaaniq_token";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;

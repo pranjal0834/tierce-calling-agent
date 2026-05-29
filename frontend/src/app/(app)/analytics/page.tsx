@@ -135,8 +135,8 @@ function KpiCard({ label, value, sub, icon: Icon, color }: {
           <Icon className={`w-3.5 h-3.5 ${color}`} />
         </div>
       </div>
-      <p className="text-2xl font-bold text-neutral-900">{value}</p>
-      {sub && <p className="text-xs text-neutral-500 mt-1">{sub}</p>}
+      <p className="text-[22px] font-semibold text-neutral-900 tracking-tight">{value}</p>
+      {sub && <p className="text-xs text-sm text-neutral-500 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -333,9 +333,9 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
   const sl = sentimentLabel(data.avg_sentiment_score);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard label="Total Calls"   value={data.total_calls}                     sub={period}                          icon={Phone}      color="text-blue-400"   />
         <KpiCard label="Active Agents" value={data.active_agents}                   sub="in workspace"                    icon={Bot}        color="text-brand-400" />
         <KpiCard label="Avg Duration"  value={`${data.avg_duration_s.toFixed(0)}s`} sub={`${(data.avg_duration_s/60).toFixed(1)} min`} icon={Clock} color="text-green-400" />
@@ -364,7 +364,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
 
       {/* Call outcomes: donut + stacked bar */}
       {data.status_distribution.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
             <SectionHeader title="Call outcomes" />
             <div className="flex items-center gap-6">
@@ -614,7 +614,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
               </div>
               <div className="pt-2 border-t border-neutral-200">
                 <p className="text-xs text-neutral-500">FCR rate</p>
-                <p className="text-2xl font-bold text-neutral-900 mt-0.5">
+                <p className="text-[22px] font-semibold text-neutral-900 tracking-tight mt-0.5">
                   {Math.round(data.first_call_resolution.rate * 100)}%
                   <span className="text-sm font-normal text-neutral-500 ml-2">of {data.first_call_resolution.total_contacts} contacts</span>
                 </p>
@@ -756,7 +756,7 @@ export default function AnalyticsPage() {
   const [range, setRange] = useState<AnalyticsRange>({ preset: 30, startDate: "", endDate: "" });
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-4">
@@ -764,8 +764,8 @@ export default function AnalyticsPage() {
             <BarChart3 className="w-5 h-5 text-brand-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Analytics</h1>
-            <p className="text-sm text-neutral-500 mt-1">Performance metrics, sentiment trends, and agent quality scores</p>
+            <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Analytics</h1>
+            <p className="text-sm text-sm text-neutral-500 mt-0.5">Performance metrics, sentiment trends, and agent quality scores</p>
           </div>
         </div>
         <DateRangeFilter range={range} onChange={setRange} />

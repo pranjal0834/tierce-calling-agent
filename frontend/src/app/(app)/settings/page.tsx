@@ -2,12 +2,13 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Users, Globe, Copy, Check,
-  Trash2, UserPlus, Shield, Crown,
+  Trash2, UserPlus, Shield, Crown, Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   getWorkspace, getMe, updateWorkspace,
   getMembers, removeMember, createInvite,
+  api,
 } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -94,7 +95,7 @@ function GeneralTab({ workspace, me, onSaved }: { workspace: Workspace; me: Me; 
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-4">
         <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
           <p className="text-xs text-neutral-500 mb-1">Workspace ID</p>
           <div className="flex items-center gap-2">
@@ -272,10 +273,107 @@ function TeamTab({ me }: { me: Me }) {
   );
 }
 
+// ── Notifications Tab ─────────────────────────────────────────────────────────
+
+interface NotifPrefs {
+  announcement_emails: boolean;
+  low_credits_alert: boolean;
+  call_summary_emails: boolean;
+}
+
+function ToggleRow({ label, description, checked, onChange }: {
+  label: string; description: string; checked: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between py-4 border-b border-neutral-100 last:border-0">
+      <div className="pr-6">
+        <p className="text-sm font-medium text-neutral-900">{label}</p>
+        <p className="text-xs text-neutral-500 mt-0.5">{description}</p>
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        className={`relative w-10 h-6 rounded-full transition-colors duration-150 flex-shrink-0 ${
+          checked ? "bg-brand-500" : "bg-neutral-200"
+        }`}
+      >
+        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-xs transition-transform duration-150 ${
+          checked ? "translate-x-5" : "translate-x-1"
+        }`} />
+      </button>
+    </div>
+  );
+}
+
+function NotificationsTab() {
+  const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get<NotifPrefs>("/api/notifications/preferences")
+      .then(r => setPrefs(r.data))
+      .catch(() => toast.error("Failed to load notification preferences"));
+  }, []);
+
+  const update = async (patch: Partial<NotifPrefs>) => {
+    if (!prefs) return;
+    const next = { ...prefs, ...patch };
+    setPrefs(next);
+    setSaving(true);
+    try {
+      const r = await api.put<NotifPrefs>("/api/notifications/preferences", patch);
+      setPrefs(r.data);
+    } catch {
+      toast.error("Failed to save preferences");
+      setPrefs(prefs);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!prefs) return (
+    <div className="flex items-center justify-center py-16">
+      <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-neutral-200 rounded-xl shadow-card p-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-semibold text-neutral-900">Email Notifications</h3>
+          {saving && <span className="text-xs text-neutral-400 animate-pulse">Saving…</span>}
+        </div>
+        <p className="text-xs text-neutral-500 mb-5">
+          Choose which emails you receive from Vaaniq. Welcome and billing emails are always sent automatically.
+        </p>
+
+        <ToggleRow
+          label="Product announcements"
+          description="New features, improvements, and platform updates from the Vaaniq team."
+          checked={prefs.announcement_emails}
+          onChange={v => update({ announcement_emails: v })}
+        />
+        <ToggleRow
+          label="Low credits alert"
+          description="Get notified when your call minutes balance drops below 5 minutes."
+          checked={prefs.low_credits_alert}
+          onChange={v => update({ low_credits_alert: v })}
+        />
+        <ToggleRow
+          label="Call summary emails"
+          description="Receive a summary email after each completed call with transcript and insights."
+          checked={prefs.call_summary_emails}
+          onChange={v => update({ call_summary_emails: v })}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<"general" | "team">("general");
+  const [tab, setTab] = useState<"general" | "team" | "notifications">("general");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -303,21 +401,23 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Settings</h1>
-        <p className="text-neutral-500 mt-1">Manage your workspace, team, and account preferences</p>
+        <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Settings</h1>
+        <p className="text-sm text-neutral-500 mt-0.5">Manage your workspace, team, and account preferences</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-0 border-b border-neutral-200">
-        <Tab label="General" icon={Globe}  active={tab === "general"} onClick={() => setTab("general")} />
-        <Tab label="Team"    icon={Users}  active={tab === "team"}    onClick={() => setTab("team")}    />
+      <div className="flex gap-0 border-b border-neutral-200 overflow-x-auto">
+        <Tab label="General"       icon={Globe}  active={tab === "general"}       onClick={() => setTab("general")}       />
+        <Tab label="Team"          icon={Users}  active={tab === "team"}           onClick={() => setTab("team")}          />
+        <Tab label="Notifications" icon={Bell}   active={tab === "notifications"}  onClick={() => setTab("notifications")} />
       </div>
 
       {/* Content */}
-      {tab === "general" && <GeneralTab workspace={workspace} me={me} onSaved={load} />}
-      {tab === "team"    && <TeamTab me={me} />}
+      {tab === "general"       && <GeneralTab workspace={workspace} me={me} onSaved={load} />}
+      {tab === "team"          && <TeamTab me={me} />}
+      {tab === "notifications" && <NotificationsTab />}
     </div>
   );
 }

@@ -58,10 +58,10 @@ export default function MemoryPage() {
   }, {});
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Memory Graph</h1>
-        <p className="text-neutral-500 mt-1">
+        <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Memory Graph</h1>
+        <p className="text-sm text-neutral-500 mt-0.5">
           Hyper-personalized contact knowledge — every fact remembered across all calls
         </p>
       </div>

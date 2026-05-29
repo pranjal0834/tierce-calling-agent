@@ -28,7 +28,7 @@ export function LanguagePicker({ value, onChange }: LanguagePickerProps) {
   };
 
   return (
-    <Card className="space-y-2 bg-white p-4 rounded-lg border border-gray-200">
+    <Card className="space-y-2 bg-white p-4 rounded-lg border border-neutral-200">
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-1">
           {value.map(l => (
@@ -41,14 +41,14 @@ export function LanguagePicker({ value, onChange }: LanguagePickerProps) {
             </Pill>
           ))}
           {value.length > 1 && (
-            <span className="text-xs text-gray-500 self-center">
+            <span className="text-xs text-neutral-500 self-center">
               First selected = primary language
             </span>
           )}
         </div>
       )}
       <input
-        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-gray-900 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+        className="input-base"
         placeholder="Search languages..."
         value={search}
         onChange={e => setSearch(e.target.value)}
@@ -56,7 +56,7 @@ export function LanguagePicker({ value, onChange }: LanguagePickerProps) {
       <div className="max-h-48 overflow-y-auto space-y-3 pr-1">
         {filtered.map(g => (
           <div key={g.group}>
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1.5">{g.group}</p>
+            <p className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5">{g.group}</p>
             <div className="flex flex-wrap gap-1.5">
               {g.langs.map(l => (
                 <Button

@@ -22,6 +22,7 @@ from backend.api import phone_numbers as phone_numbers_api
 from backend.api import kyc as kyc_api
 from backend.auth import router as auth_router
 from backend.billing import router as billing_router
+from backend.notifications import router as notifications_router
 from backend.auth.middleware import WorkspaceScopeMiddleware
 from backend.core.assistant_manager import AssistantManager
 
@@ -398,6 +399,7 @@ app.include_router(admin_api.router,    prefix="/api/admin",  tags=["Admin"])
 app.include_router(webhooks_api.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(phone_numbers_api.router, prefix="/api/phone-numbers", tags=["PhoneNumbers"])
 app.include_router(kyc_api.router, prefix="/api/kyc", tags=["KYC"])
+app.include_router(notifications_router.router)
 app.include_router(exotel_telephony_api.router, prefix="/telephony/exotel", tags=["ExotelTelephony"])
 app.include_router(plivo_telephony_api.router, prefix="/telephony/plivo", tags=["PlivoTelephony"])
 

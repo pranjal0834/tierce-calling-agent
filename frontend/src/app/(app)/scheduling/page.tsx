@@ -253,24 +253,24 @@ export default function SchedulingPage() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="space-y-6">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Call Scheduling</h1>
-          <p className="text-neutral-500 mt-1">Schedule outbound calls for a future date and time</p>
+          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Call Scheduling</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Schedule outbound calls for a future date and time</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulk(true)}
-            className="flex items-center gap-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-sm font-medium border border-neutral-300"
+            className="flex items-center gap-2 bg-white hover:bg-neutral-50 text-neutral-700 h-9 px-4 rounded-lg text-sm font-medium border border-neutral-200 hover:border-neutral-300 shadow-xs transition-all duration-150"
           >
             <Users className="w-4 h-4" /> Bulk Schedule
           </button>
           <button
             onClick={() => setShowSchedule(true)}
-            className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            className="inline-flex items-center gap-1.5 h-9 bg-brand-500 hover:bg-brand-600 text-white h-9 px-4 rounded-lg text-sm font-medium shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" /> Schedule Call
           </button>
@@ -389,9 +389,9 @@ export default function SchedulingPage() {
 
       {/* ── Schedule Call Modal ── */}
       {showSchedule && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
           <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-6 w-full max-w-md space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <h2 className="text-lg font-semibold text-neutral-900">Schedule a Call</h2>
               <button onClick={() => setShowSchedule(false)} className="text-neutral-400 hover:text-neutral-900">
                 <X className="w-5 h-5" />
@@ -491,9 +491,9 @@ export default function SchedulingPage() {
 
       {/* ── Bulk Schedule Modal ── */}
       {showBulk && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
           <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-6 w-full max-w-lg space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               <h2 className="text-lg font-semibold text-neutral-900">Bulk Schedule</h2>
               <button onClick={() => setShowBulk(false)} className="text-neutral-400 hover:text-neutral-900">
                 <X className="w-5 h-5" />

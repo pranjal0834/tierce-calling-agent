@@ -17,22 +17,12 @@ export default function AgentsPage() {
 
   useEffect(() => { loadAgents(); }, []);
 
-  const openCreate = () => {
-    setEditingAgent(null);
-    setShowForm(true);
-  };
-
-  const openEdit = (agent: any) => {
-    setEditingAgent(agent);
-    setShowForm(true);
-  };
+  const openCreate = () => { setEditingAgent(null); setShowForm(true); };
+  const openEdit   = (agent: any) => { setEditingAgent(agent); setShowForm(true); };
 
   const handleSaved = (agent: any, isEdit: boolean) => {
-    if (isEdit) {
-      setAgents(a => a.map(x => x.id === agent.id ? agent : x));
-    } else {
-      setAgents(a => [...a, agent]);
-    }
+    if (isEdit) setAgents(a => a.map(x => x.id === agent.id ? agent : x));
+    else        setAgents(a => [...a, agent]);
     setShowForm(false);
   };
 
@@ -47,71 +37,74 @@ export default function AgentsPage() {
     }
   };
 
+  const workspace = agents.filter((a: any) => !a.is_personal);
+  const personal  = agents.filter((a: any) => a.is_personal);
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Agents</h1>
-          <p className="text-neutral-500 mt-1">Configure and manage your voice AI agents</p>
+          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Agents</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Configure and manage your voice AI agents</p>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          className="inline-flex items-center gap-1.5 h-9 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors shadow-xs"
         >
           <Plus className="w-4 h-4" /> New Agent
         </button>
       </div>
 
-      {/* Agent list */}
+      {/* Empty state */}
       {agents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-4 border border-dashed border-neutral-300 rounded-2xl">
-          <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
-            <Bot className="w-7 h-7 text-neutral-400" />
+        <div className="flex flex-col items-center justify-center py-16 gap-4 bg-white border border-dashed border-neutral-300 rounded-2xl">
+          <div className="w-12 h-12 bg-neutral-100 rounded-2xl flex items-center justify-center">
+            <Bot className="w-6 h-6 text-neutral-400" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-neutral-500">No agents yet</p>
+            <p className="text-sm font-semibold text-neutral-700">No agents yet</p>
             <p className="text-xs text-neutral-400 mt-1">Create your first agent to start making calls.</p>
           </div>
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors shadow-xs"
           >
             <Plus className="w-4 h-4" /> New Agent
           </button>
         </div>
       ) : (
-        <>
+        <div className="space-y-8">
           {/* Workspace agents */}
-          {agents.filter((a: any) => !a.is_personal).length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-neutral-400" />
-                <h2 className="text-sm font-medium text-neutral-500">Workspace Agents</h2>
-                <span className="text-xs text-neutral-400">— visible to all team members</span>
+          {workspace.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2 px-0.5 mb-3">
+                <Globe className="w-3.5 h-3.5 text-neutral-400" />
+                <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Workspace</span>
+                <span className="text-xs text-neutral-400">· visible to all team members</span>
               </div>
-              {agents.filter((a: any) => !a.is_personal).map((agent: any) => (
+              {workspace.map((agent: any) => (
                 <AgentCard key={agent.id} agent={agent} onEdit={openEdit} onDelete={handleDelete} />
               ))}
             </div>
           )}
 
           {/* Personal agents */}
-          {agents.filter((a: any) => a.is_personal).length > 0 && (
-            <div className="space-y-3 mt-6">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-500" />
-                <h2 className="text-sm font-medium text-neutral-500">My Personal Agents</h2>
-                <span className="text-xs text-neutral-400">— only visible to you</span>
+          {personal.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2 px-0.5 mb-3">
+                <Lock className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Personal</span>
+                <span className="text-xs text-neutral-400">· only visible to you</span>
               </div>
-              {agents.filter((a: any) => a.is_personal).map((agent: any) => (
+              {personal.map((agent: any) => (
                 <AgentCard key={agent.id} agent={agent} onEdit={openEdit} onDelete={handleDelete} />
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {/* Create / Edit modal */}
       {showForm && (
         <AgentFormModal
           editingAgent={editingAgent}
