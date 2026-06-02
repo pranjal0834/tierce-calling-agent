@@ -41,7 +41,7 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
           </div>
 
           {agent.description && (
-            <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed truncate max-w-[380px]">
+            <p className="text-xs text-neutral-500 mt-0.5 leading-relaxed truncate max-w-full sm:max-w-[380px]">
               {agent.description}
             </p>
           )}
@@ -66,8 +66,8 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-0.5 flex-shrink-0 ml-3 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+      {/* Actions — always visible on touch, hover-reveal on desktop */}
+      <div className="flex items-center gap-0.5 flex-shrink-0 ml-2 sm:ml-3 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-150">
         <Link
           href={`/agents/${agent.id}`}
           className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-500 hover:bg-brand-50 transition-colors"

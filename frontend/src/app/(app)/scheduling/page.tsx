@@ -264,26 +264,26 @@ export default function SchedulingPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulk(true)}
-            className="flex items-center gap-2 bg-white hover:bg-neutral-50 text-neutral-700 h-9 px-4 rounded-lg text-sm font-medium border border-neutral-200 hover:border-neutral-300 shadow-xs transition-all duration-150"
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-neutral-50 text-neutral-700 h-9 px-3 sm:px-4 rounded-lg text-sm font-medium border border-neutral-200 hover:border-neutral-300 shadow-xs transition-all duration-150"
           >
-            <Users className="w-4 h-4" /> Bulk Schedule
+            <Users className="w-4 h-4" /> <span className="hidden sm:inline">Bulk Schedule</span>
           </button>
           <button
             onClick={() => setShowSchedule(true)}
-            className="inline-flex items-center gap-1.5 h-9 bg-brand-500 hover:bg-brand-600 text-white h-9 px-4 rounded-lg text-sm font-medium shadow-xs transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 bg-brand-500 hover:bg-brand-600 text-white px-3 sm:px-4 rounded-lg text-sm font-medium shadow-xs transition-colors"
           >
-            <Plus className="w-4 h-4" /> Schedule Call
+            <Plus className="w-4 h-4" /> <span className="whitespace-nowrap">Schedule Call</span>
           </button>
         </div>
       </div>
 
       {/* ── Filter tabs ── */}
-      <div className="flex gap-1 bg-neutral-100 border border-neutral-200 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-neutral-100 border border-neutral-200 rounded-xl p-1 w-full sm:w-fit overflow-x-auto">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => handleFilterChange(t.key)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap shrink-0 ${
               filter === t.key
                 ? "bg-brand-500 text-white"
                 : "text-neutral-500 hover:text-neutral-900"
@@ -294,8 +294,8 @@ export default function SchedulingPage() {
         ))}
       </div>
 
-      {/* ── Table ── */}
-      <div className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
+      {/* ── Table (desktop) ── */}
+      <div className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -387,10 +387,98 @@ export default function SchedulingPage() {
         </div>
       </div>
 
+      {/* ── Cards (mobile) ── */}
+      <div className="md:hidden space-y-3">
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-12 gap-2 bg-white rounded-xl border border-neutral-200 shadow-sm">
+            <Loader2 className="w-5 h-5 animate-spin text-neutral-400" />
+            <span className="text-sm text-neutral-500">Loading…</span>
+          </div>
+        )}
+        {!loading && items.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-14 gap-3 bg-white rounded-xl border border-neutral-200 shadow-sm">
+            <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
+              <CalendarClock className="w-7 h-7 text-neutral-400" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-neutral-500">No scheduled calls yet</p>
+              <p className="text-xs text-neutral-400 mt-1">Use the buttons above to schedule a call.</p>
+            </div>
+          </div>
+        )}
+        {!loading && items.map(sc => {
+          const agent = agents.find(a => a.id === sc.agent_id);
+          return (
+            <div key={sc.id} className="bg-white border border-neutral-200 rounded-xl shadow-sm p-4">
+              {/* Top: phone + status */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-sm font-semibold text-neutral-900 break-all">{sc.phone_number}</p>
+                  {sc.contact_name && (
+                    <p className="text-xs text-neutral-500 mt-0.5 flex items-center gap-1">
+                      <User className="w-3 h-3 text-neutral-400 shrink-0" />{sc.contact_name}
+                    </p>
+                  )}
+                </div>
+                <StatusBadge status={sc.status} />
+              </div>
+
+              {/* Details */}
+              <div className="mt-3 pt-3 border-t border-neutral-100 grid grid-cols-2 gap-x-3 gap-y-2.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide mb-0.5">Agent</p>
+                  <p className="text-xs text-neutral-700 truncate">
+                    {agent?.name ?? <span className="font-mono">{sc.agent_id.slice(0, 8)}…</span>}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wide mb-0.5">Scheduled (IST)</p>
+                  <p className="text-xs text-neutral-700">{fmtScheduled(sc.scheduled_at)}</p>
+                </div>
+              </div>
+
+              {sc.notes && (
+                <p className="text-xs text-neutral-500 mt-2.5 line-clamp-2">
+                  <span className="text-neutral-400">Notes: </span>{sc.notes}
+                </p>
+              )}
+              {sc.error_message && (
+                <div className="mt-2.5 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2.5 py-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>{sc.error_message}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              {(sc.call_id || sc.status === "pending") && (
+                <div className="mt-3 pt-3 border-t border-neutral-100 flex items-center gap-3">
+                  {sc.call_id && (
+                    <a
+                      href={`/calls?highlight=${sc.call_id}`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      <ExternalLink className="w-3 h-3" /> View Call
+                    </a>
+                  )}
+                  {sc.status === "pending" && (
+                    <button
+                      onClick={() => handleCancel(sc)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 ml-auto"
+                    >
+                      <Trash2 className="w-3 h-3" /> Cancel
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* ── Schedule Call Modal ── */}
       {showSchedule && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-6 w-full max-w-md space-y-4">
+          <div className="bg-white border border-neutral-200 sm:rounded-2xl rounded-t-2xl shadow-lg p-6 w-full sm:max-w-md space-y-4 max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h2 className="text-lg font-semibold text-neutral-900">Schedule a Call</h2>
               <button onClick={() => setShowSchedule(false)} className="text-neutral-400 hover:text-neutral-900">
@@ -492,7 +580,7 @@ export default function SchedulingPage() {
       {/* ── Bulk Schedule Modal ── */}
       {showBulk && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl shadow-lg p-6 w-full max-w-lg space-y-4">
+          <div className="bg-white border border-neutral-200 sm:rounded-2xl rounded-t-2xl shadow-lg p-6 w-full sm:max-w-lg space-y-4 max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h2 className="text-lg font-semibold text-neutral-900">Bulk Schedule</h2>
               <button onClick={() => setShowBulk(false)} className="text-neutral-400 hover:text-neutral-900">
@@ -500,7 +588,7 @@ export default function SchedulingPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-neutral-500 mb-1">Agent *</label>
                 <select

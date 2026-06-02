@@ -206,8 +206,8 @@ function EndpointCard({
       <div className={`h-0.5 w-full ${ep.is_active ? "bg-gradient-to-r from-green-500/60 to-green-500/10" : "bg-neutral-200"}`} />
 
       {/* Main row */}
-      <div className="p-5">
-        <div className="flex items-start gap-4">
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start gap-3 sm:gap-4">
           {/* Icon */}
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${ep.is_active ? "bg-green-50 border border-green-200" : "bg-neutral-100 border border-neutral-200"}`}>
             <Globe className={`w-4 h-4 ${ep.is_active ? "text-green-600" : "text-neutral-400"}`} />
@@ -229,18 +229,8 @@ function EndpointCard({
             <p className="text-xs text-neutral-400">Added {fmtDate(ep.created_at)}</p>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={sendTest}
-              disabled={testing || !ep.is_active}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-neutral-500 hover:text-yellow-600 hover:bg-yellow-50 transition-colors disabled:opacity-40"
-              title="Send test event"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              {testing ? "Sending…" : "Test"}
-            </button>
-
+          {/* Toggle + delete (always inline) */}
+          <div className="flex items-center gap-0.5 shrink-0">
             <button
               onClick={() => onToggle(ep.id, !ep.is_active)}
               className="p-2 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
@@ -261,18 +251,29 @@ function EndpointCard({
           </div>
         </div>
 
+        {/* Test button — full width on mobile, compact inline on desktop */}
+        <button
+          onClick={sendTest}
+          disabled={testing || !ep.is_active}
+          className="mt-3 sm:mt-2 w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 text-xs font-medium rounded-lg text-neutral-600 bg-neutral-50 sm:bg-transparent border border-neutral-200 sm:border-transparent hover:text-yellow-600 hover:bg-yellow-50 hover:border-yellow-200 transition-colors disabled:opacity-40"
+          title="Send test event"
+        >
+          <Zap className="w-3.5 h-3.5" />
+          {testing ? "Sending…" : "Send test event"}
+        </button>
+
         {/* Secret one-time reveal */}
         {ep.secret && (
           <div className="mt-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
             <p className="text-xs text-amber-700 font-semibold mb-1.5 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5" />
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
               Signing Secret — copy now, it won&apos;t be shown again
             </p>
             <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
-              <code className="flex-1 text-xs text-amber-700 font-mono break-all">{ep.secret}</code>
+              <code className="flex-1 text-xs text-amber-700 font-mono break-all min-w-0">{ep.secret}</code>
               <CopyBtn text={ep.secret} />
             </div>
-            <p className="text-xs text-sm text-neutral-500 mt-0.5.5">Store this in your environment variables and use it to verify incoming requests.</p>
+            <p className="text-xs text-neutral-500 mt-1.5">Store this in your environment variables and use it to verify incoming requests.</p>
           </div>
         )}
       </div>
@@ -348,10 +349,10 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
-      <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-md shadow-xl">
+      <div className="bg-white border border-neutral-200 sm:rounded-2xl rounded-t-2xl w-full sm:max-w-md shadow-xl max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
 
         {/* Modal header */}
-        <div className="px-6 py-5 border-b border-neutral-200 flex items-center justify-between">
+        <div className="px-5 sm:px-6 py-5 border-b border-neutral-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-brand-500/10 border border-brand-500/25 rounded-lg flex items-center justify-center">
               <Webhook className="w-4 h-4 text-brand-500" />
@@ -465,20 +466,20 @@ function HowItWorks() {
   ];
 
   return (
-    <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+    <div className="bg-white border border-neutral-200 rounded-2xl p-4 sm:p-5 shadow-sm">
       <h2 className="text-sm font-semibold text-neutral-900 mb-4">How it works</h2>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {steps.map((s, i) => (
-          <div key={i} className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
+          <div key={i} className="flex flex-row sm:flex-col gap-3">
+            <div className="flex sm:items-center gap-3">
               <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${s.cls}`}>
                 <s.icon className="w-4 h-4" />
               </div>
               {i < steps.length - 1 && (
-                <ArrowRight className="w-4 h-4 text-neutral-300 shrink-0" />
+                <ArrowRight className="w-4 h-4 text-neutral-300 shrink-0 hidden sm:block" />
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-neutral-900 mb-1">{s.title}</p>
               <p className="text-xs text-neutral-500 leading-relaxed">{s.desc}</p>
             </div>
@@ -500,8 +501,8 @@ function SignatureInfo() {
         className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50 transition-colors text-left"
       >
         <Code2 className="w-4 h-4 text-neutral-400 shrink-0" />
-        <span className="text-sm text-neutral-700 font-medium">Verifying webhook signatures (for developers)</span>
-        <span className="ml-auto text-xs text-neutral-400">Optional but recommended</span>
+        <span className="text-sm text-neutral-700 font-medium">Verifying webhook signatures <span className="hidden sm:inline">(for developers)</span></span>
+        <span className="ml-auto text-xs text-neutral-400 hidden sm:inline shrink-0">Optional but recommended</span>
         {open ? <ChevronUp className="w-4 h-4 text-neutral-400" /> : <ChevronDown className="w-4 h-4 text-neutral-400" />}
       </button>
       {open && (
@@ -576,8 +577,8 @@ export default function WebhooksPage() {
     <div className="space-y-6">
 
       {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
           <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Webhooks</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             Automatically notify your systems when calls happen — connect to CRMs, Zapier, Google Sheets, and more.
@@ -585,7 +586,7 @@ export default function WebhooksPage() {
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors shrink-0"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors shrink-0 w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" />
           Add endpoint

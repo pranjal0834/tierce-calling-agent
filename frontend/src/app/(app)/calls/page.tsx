@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import {
-  Phone, PhoneCall, Clock, Zap, Activity, ChevronRight, Upload,
+  Phone, PhoneCall, Clock, Zap, Activity, ChevronRight, ChevronLeft, Upload,
   Users, X, FileSpreadsheet, Calendar, MessageSquare, BarChart2,
   User, Globe, TrendingUp, CheckCircle2, XCircle, Mic2, ArrowUpRight,
   ArrowDownLeft, Database, Repeat, DollarSign, PhoneOff,
@@ -174,6 +174,8 @@ export default function CallsPage() {
   const [showDial, setShowDial] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [dialForm, setDialForm] = useState({ agent_id: "", phone_number: "" });
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
 
   useEffect(() => {
     getCalls().then(setCalls).catch((e: unknown) => { console.error("getCalls failed:", e); });
@@ -255,6 +257,14 @@ export default function CallsPage() {
     }
   };
 
+  const closeDetail = () => { setDetail(null); setDetailLoading(false); };
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(calls.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCalls = calls.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const detailOpen = !!detail || detailLoading;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -280,11 +290,11 @@ export default function CallsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* ── Call list ── */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col">
+        <div className={`lg:col-span-2 bg-white rounded-xl border border-neutral-200 shadow-sm flex-col ${detailOpen ? "hidden lg:flex" : "flex"}`}>
           <div className="px-4 py-3 border-b border-neutral-200 text-xs font-semibold text-neutral-500 uppercase tracking-wide">
-            All Calls ({calls.length})
+            Call Logs ({calls.length})
           </div>
-          <div className="divide-y divide-neutral-100 overflow-y-auto" style={{ maxHeight: "60vh" }}>
+          <div className="divide-y divide-neutral-100 overflow-y-auto lg:max-h-[60vh]">
             {calls.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 gap-4">
                 <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
@@ -296,7 +306,7 @@ export default function CallsPage() {
                 </div>
               </div>
             )}
-            {calls.map((call: any) => {
+            {pagedCalls.map((call: any) => {
               const isSelected = detail?.call?.id === call.id;
               return (
                 <button
@@ -332,12 +342,45 @@ export default function CallsPage() {
               );
             })}
           </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-neutral-200 mt-auto">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 hover:text-neutral-900 disabled:opacity-40 disabled:pointer-events-none px-2 py-1 rounded-lg hover:bg-neutral-100 transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-xs text-neutral-500">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="inline-flex items-center gap-1 text-xs font-medium text-neutral-600 hover:text-neutral-900 disabled:opacity-40 disabled:pointer-events-none px-2 py-1 rounded-lg hover:bg-neutral-100 transition-colors"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* ── Detail panel ── */}
-        <div className="lg:col-span-3 bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col min-h-[400px] lg:min-h-[75vh]">
+        <div className={`lg:col-span-3 bg-white rounded-xl border border-neutral-200 shadow-sm flex-col min-h-[400px] lg:min-h-[75vh] ${detailOpen ? "flex" : "hidden lg:flex"}`}>
+          {/* Mobile back button */}
+          {detailOpen && (
+            <button
+              onClick={closeDetail}
+              className="lg:hidden flex items-center gap-1.5 px-4 py-3 border-b border-neutral-200 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" /> Back to call logs
+            </button>
+          )}
+
           {detailLoading && (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center flex-1 py-20">
               <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
@@ -352,37 +395,49 @@ export default function CallsPage() {
           {!detailLoading && detail && (
             <div className="flex flex-col h-full overflow-hidden">
               {/* Header */}
-              <div className="px-5 py-4 border-b border-neutral-200 flex-shrink-0">
-                <div className="flex items-start justify-between gap-4">
+              <div className="px-3 sm:px-5 py-4 border-b border-neutral-200 flex-shrink-0">
+                <div className="flex flex-col gap-3 sm:gap-4">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-neutral-400" />
-                      <p className="font-semibold text-neutral-900 text-lg">
-                        {detail.contact?.name || "Unknown Caller"}
-                      </p>
-                      {detail.contact?.company && (
-                        <span className="text-sm text-neutral-500">· {detail.contact.company}</span>
-                      )}
+                    <div className="flex items-start gap-2 mb-2">
+                      <User className="w-4 h-4 text-neutral-400 flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-neutral-900 text-lg break-words">
+                          {detail.contact?.name || "Unknown Caller"}
+                        </p>
+                        {detail.contact?.company && (
+                          <p className="text-sm text-neutral-500 mt-0.5 break-words">{detail.contact.company}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-sm text-neutral-500 font-mono">{detail.call.phone_number}</span>
-                      <StatusBadge status={detail.call.status} />
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        detail.call.direction === "outbound"
-                          ? "bg-brand-500/10 text-brand-400"
-                          : "bg-green-500/10 text-green-400"
-                      }`}>
-                        {detail.call.direction === "outbound" ? "↑ Outbound" : "↓ Inbound"}
-                      </span>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mt-2 flex-wrap">
+                      <span className="text-sm text-neutral-500 font-mono break-all">{detail.call.phone_number}</span>
+                      <div className="flex flex-wrap gap-2">
+                        <StatusBadge status={detail.call.status} />
+                        <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
+                          detail.call.direction === "outbound"
+                            ? "bg-brand-500/10 text-brand-400"
+                            : "bg-green-500/10 text-green-400"
+                        }`}>
+                          {detail.call.direction === "outbound" ? "↑ Outbound" : "↓ Inbound"}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <p className="text-xs text-neutral-500">{fmtDate(detail.call.created_at)}</p>
-                    <p className="text-sm font-medium text-neutral-900">{fmtDuration(detail.call.duration_seconds)}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-neutral-200">
+                    <div className="flex items-center gap-4 text-sm">
+                      <div>
+                        <p className="text-xs text-neutral-500 mb-0.5">Start</p>
+                        <p className="text-neutral-900 font-medium">{fmtDate(detail.call.created_at)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-neutral-500 mb-0.5">Duration</p>
+                        <p className="text-neutral-900 font-medium">{fmtDuration(detail.call.duration_seconds)}</p>
+                      </div>
+                    </div>
                     {["initiated", "ringing", "in_progress"].includes(detail.call.status) && (
                       <button
                         onClick={() => handleHangup(detail.call.id)}
-                        className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors"
+                        className="flex items-center justify-center sm:justify-start gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap"
                       >
                         <PhoneOff className="w-3.5 h-3.5" /> Hang Up
                       </button>
@@ -391,7 +446,7 @@ export default function CallsPage() {
                 </div>
 
                 {/* Quick stats row */}
-                <div className="grid grid-cols-5 gap-2 mt-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
                   <StatChip
                     icon={<Globe className="w-3 h-3" />}
                     label="Language"
@@ -430,12 +485,12 @@ export default function CallsPage() {
               </div>
 
               {/* Tabs */}
-              <div className="flex border-b border-neutral-200 flex-shrink-0">
+              <div className="flex border-b border-neutral-200 flex-shrink-0 overflow-x-auto">
                 {(["overview", "transcript", "data"] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    className={`px-3 sm:px-5 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                       activeTab === tab
                         ? "border-brand-500 text-neutral-900"
                         : "border-transparent text-neutral-500 hover:text-neutral-700"
@@ -447,24 +502,24 @@ export default function CallsPage() {
               </div>
 
               {/* Tab content */}
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-4">
 
                 {/* ── OVERVIEW TAB ── */}
                 {activeTab === "overview" && (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {/* Summary */}
                     {detail.call.summary && (
                       <Section icon={<MessageSquare className="w-4 h-4 text-brand-400" />} title="Summary">
-                        <p className="text-sm text-neutral-700 leading-relaxed">{detail.call.summary}</p>
+                        <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed break-words">{detail.call.summary}</p>
                       </Section>
                     )}
 
                     {/* Appointment */}
                     {detail.call.extra_data?.appointment_booked && (
                       <Section icon={<Calendar className="w-4 h-4 text-green-400" />} title="Appointment Booked">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-green-400" />
-                          <p className="text-sm text-neutral-900 font-medium">
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs sm:text-sm text-neutral-900 font-medium break-words">
                             {detail.call.extra_data.appointment_datetime
                               ? fmtDateTime(detail.call.extra_data.appointment_datetime)
                               : "Appointment booked — time not specified"}
@@ -475,7 +530,7 @@ export default function CallsPage() {
 
                     {/* Agent + call info */}
                     <Section icon={<Zap className="w-4 h-4 text-purple-400" />} title="Call Info">
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-2">
                         <InfoRow label="Agent" value={detail.agent?.name || "—"} />
                         <InfoRow label="Pipeline" value={detail.call.pipeline_mode} />
                         <InfoRow label="Start time" value={fmtDate(detail.call.started_at)} />
@@ -492,7 +547,7 @@ export default function CallsPage() {
 
                     {/* Caller profile */}
                     <Section icon={<User className="w-4 h-4 text-blue-400" />} title="Caller Profile">
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-2">
                         <InfoRow label="Name" value={detail.contact?.name || detail.call.extra_data?.caller_name || "—"} />
                         <InfoRow label="Phone" value={detail.contact?.phone_number || detail.call.phone_number} mono />
                         <InfoRow label="Email" value={detail.contact?.email || "—"} />
@@ -509,16 +564,16 @@ export default function CallsPage() {
                     {/* Call history */}
                     {detail.call_history?.length > 0 && (
                       <Section icon={<Repeat className="w-4 h-4 text-orange-400" />} title={`Call History (${detail.contact?.total_calls} total)`}>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 overflow-x-auto">
                           {detail.call_history.map((h: any) => (
-                            <div key={h.id} className="flex items-center justify-between bg-neutral-50 rounded-lg px-3 py-2">
-                              <div className="flex items-center gap-2">
+                            <div key={h.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-neutral-50 rounded-lg px-2 sm:px-3 py-2 gap-2 min-w-[250px]">
+                              <div className="flex items-center gap-2 min-w-0">
                                 {h.direction === "outbound"
-                                  ? <ArrowUpRight className="w-3 h-3 text-brand-400" />
-                                  : <ArrowDownLeft className="w-3 h-3 text-green-400" />}
-                                <span className="text-xs text-neutral-500">{fmtDate(h.created_at)}</span>
+                                  ? <ArrowUpRight className="w-3 h-3 text-brand-400 flex-shrink-0" />
+                                  : <ArrowDownLeft className="w-3 h-3 text-green-400 flex-shrink-0" />}
+                                <span className="text-xs text-neutral-500 truncate">{fmtDate(h.created_at)}</span>
                               </div>
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2 sm:gap-3">
                                 {h.duration_seconds && (
                                   <span className="text-xs text-neutral-400">{fmtDuration(h.duration_seconds)}</span>
                                 )}
@@ -534,74 +589,74 @@ export default function CallsPage() {
 
                 {/* ── TRANSCRIPT TAB ── */}
                 {activeTab === "transcript" && (
-                  <div className="space-y-2">
+                  <div className="space-y-2 overflow-x-hidden">
                     {detail.turns.length === 0 && (
-                      <p className="text-neutral-500 text-sm text-center py-10">No transcript available</p>
+                      <p className="text-neutral-500 text-xs sm:text-sm text-center py-10">No transcript available</p>
                     )}
                     {detail.turns.map((turn: any, idx: number) => (
                       <div key={turn.id}>
-                        {/* Transfer divider — show once before the first post-transfer turn */}
+                        {/* Transfer divider */}
                         {turn.from_transfer && (idx === 0 || !detail.turns[idx - 1].from_transfer) && (
                           <div className="flex items-center gap-2 my-3">
                             <div className="flex-1 border-t border-orange-500/40" />
-                            <span className="text-xs text-orange-400 font-medium px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/30">
-                              Call Transferred to Human
+                            <span className="text-xs text-orange-400 font-medium px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/30 whitespace-nowrap">
+                              Call Transferred
                             </span>
                             <div className="flex-1 border-t border-orange-500/40" />
                           </div>
                         )}
-                      <div
-                        className={`rounded-lg p-3 ${
-                          turn.from_transfer
-                            ? turn.role === "user"
-                              ? "bg-neutral-100 ml-6 border border-orange-500/10"
-                              : "bg-orange-500/10 border border-orange-500/20 mr-6"
-                            : turn.role === "user"
-                            ? "bg-neutral-100 ml-6"
-                            : "bg-brand-500/10 border border-brand-500/20 mr-6"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-xs font-semibold ${
+                        <div
+                          className={`rounded-lg p-2 sm:p-3 ${
                             turn.from_transfer
-                              ? turn.role === "user" ? "text-neutral-500" : "text-orange-400"
-                              : turn.role === "user" ? "text-neutral-500" : "text-brand-400"
-                          }`}>
-                            {turn.from_transfer
-                              ? turn.role === "user" ? "Caller" : "Human Agent"
-                              : turn.role === "user" ? "Caller" : "Agent"}
-                          </span>
-                          {turn.sentiment && (
-                            <span className="text-xs text-neutral-400">· {turn.sentiment}</span>
-                          )}
-                          {turn.created_at && (
-                            <span className="text-xs text-neutral-400 ml-auto">{fmtTime(turn.created_at)}</span>
-                          )}
-                          {turn.latency_ms && (
-                            <span className="text-xs text-neutral-400 flex items-center gap-0.5">
-                              <Clock className="w-3 h-3" />{turn.latency_ms}ms
+                              ? turn.role === "user"
+                                ? "bg-neutral-100 sm:ml-6 border border-orange-500/10"
+                                : "bg-orange-500/10 border border-orange-500/20 sm:mr-6"
+                              : turn.role === "user"
+                              ? "bg-neutral-100 sm:ml-6"
+                              : "bg-brand-500/10 border border-brand-500/20 sm:mr-6"
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center gap-1 mb-1">
+                            <span className={`text-xs font-semibold whitespace-nowrap ${
+                              turn.from_transfer
+                                ? turn.role === "user" ? "text-neutral-500" : "text-orange-400"
+                                : turn.role === "user" ? "text-neutral-500" : "text-brand-400"
+                            }`}>
+                              {turn.from_transfer
+                                ? turn.role === "user" ? "Caller" : "Human Agent"
+                                : turn.role === "user" ? "Caller" : "Agent"}
                             </span>
-                          )}
-                          {turn.from_prediction_cache && (
-                            <span className="text-xs text-green-400 flex items-center gap-0.5">
-                              <Zap className="w-3 h-3" />cached
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-neutral-700">{turn.transcript || "(audio only)"}</p>
-                        {turn.eval_score != null && (
-                          <div className="mt-1.5 flex items-center gap-1">
-                            <Activity className="w-3 h-3 text-neutral-500" />
-                            <span className={`text-xs ${
-                              turn.eval_score >= 7 ? "text-green-400" :
-                              turn.eval_score >= 5 ? "text-yellow-400" : "text-red-400"
-                            }`}>score: {turn.eval_score.toFixed(1)}</span>
-                            {turn.eval_feedback && (
-                              <span className="text-xs text-neutral-400"> — {turn.eval_feedback}</span>
+                            {turn.sentiment && (
+                              <span className="text-xs text-neutral-400">· {turn.sentiment}</span>
+                            )}
+                            {turn.created_at && (
+                              <span className="text-xs text-neutral-400 ml-auto sm:ml-0">{fmtTime(turn.created_at)}</span>
+                            )}
+                            {turn.latency_ms && (
+                              <span className="text-xs text-neutral-400 flex items-center gap-0.5 whitespace-nowrap">
+                                <Clock className="w-3 h-3" />{turn.latency_ms}ms
+                              </span>
+                            )}
+                            {turn.from_prediction_cache && (
+                              <span className="text-xs text-green-400 flex items-center gap-0.5 whitespace-nowrap">
+                                <Zap className="w-3 h-3" />cached
+                              </span>
                             )}
                           </div>
-                        )}
-                      </div>
+                          <p className="text-xs sm:text-sm text-neutral-700 break-words">{turn.transcript || "(audio only)"}</p>
+                          {turn.eval_score != null && (
+                            <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                              <Activity className="w-3 h-3 text-neutral-500 flex-shrink-0" />
+                              <span className={`text-xs ${
+                                turn.eval_score >= 7 ? "text-green-400" :
+                                turn.eval_score >= 5 ? "text-yellow-400" : "text-red-400"
+                              }`}>score: {turn.eval_score.toFixed(1)}</span>
+                              {turn.eval_feedback && (
+                                <span className="text-xs text-neutral-400 break-words"> — {turn.eval_feedback}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -609,15 +664,15 @@ export default function CallsPage() {
 
                 {/* ── EXTRACTED DATA TAB ── */}
                 {activeTab === "data" && (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {/* Key points */}
                     {Array.isArray(detail.call.extra_data?.key_points) && detail.call.extra_data.key_points.length > 0 && (
                       <Section icon={<BarChart2 className="w-4 h-4 text-brand-400" />} title="Key Points">
                         <ul className="space-y-1.5">
                           {detail.call.extra_data.key_points.map((pt: string, i: number) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-neutral-700">
+                            <li key={i} className="flex items-start gap-2 text-xs sm:text-sm text-neutral-700">
                               <span className="w-5 h-5 rounded-full bg-brand-500/20 text-brand-400 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</span>
-                              {pt}
+                              <span className="break-words">{pt}</span>
                             </li>
                           ))}
                         </ul>
@@ -626,16 +681,16 @@ export default function CallsPage() {
 
                     {/* Appointment */}
                     <Section icon={<Calendar className="w-4 h-4 text-green-400" />} title="Appointment">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start gap-3">
                         {detail.call.extra_data?.appointment_booked
-                          ? <CheckCircle2 className="w-5 h-5 text-green-400" />
-                          : <XCircle className="w-5 h-5 text-neutral-500" />}
-                        <div>
-                          <p className="text-sm font-medium text-neutral-900">
+                          ? <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          : <XCircle className="w-5 h-5 text-neutral-500 flex-shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-neutral-900 break-words">
                             {detail.call.extra_data?.appointment_booked ? "Appointment booked" : "No appointment booked"}
                           </p>
                           {detail.call.extra_data?.appointment_datetime && (
-                            <p className="text-xs text-green-400 mt-0.5">
+                            <p className="text-xs text-green-400 mt-0.5 break-words">
                               {fmtDateTime(detail.call.extra_data.appointment_datetime)}
                             </p>
                           )}
@@ -645,7 +700,7 @@ export default function CallsPage() {
 
                     {/* Caller info extracted */}
                     <Section icon={<User className="w-4 h-4 text-blue-400" />} title="Extracted Caller Info">
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-2">
                         <InfoRow label="Name" value={detail.call.extra_data?.caller_name || "—"} />
                         <InfoRow
                           label="Interest"
@@ -659,13 +714,12 @@ export default function CallsPage() {
 
                     {/* Sentiment */}
                     <Section icon={<TrendingUp className="w-4 h-4 text-pink-400" />} title="Sentiment & Emotions">
-                      <div className="space-y-2">
+                      <div className="space-y-2 overflow-hidden">
                         {detail.call.sentiment_score != null && (() => {
-                          // Score stored as 0–10 from evaluator
                           const pct = Math.min(100, Math.round((detail.call.sentiment_score / 10) * 100));
                           return (
                             <div>
-                              <div className="flex items-center justify-between mb-1">
+                              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                                 <span className="text-xs text-neutral-500">Overall positivity</span>
                                 <span className={`text-sm font-bold ${
                                   pct >= 70 ? "text-green-400" : pct >= 40 ? "text-yellow-400" : "text-red-400"
@@ -686,7 +740,6 @@ export default function CallsPage() {
                           !Array.isArray(detail.call.emotion_profile) &&
                           Object.keys(detail.call.emotion_profile || {}).length > 0 && (() => {
                             const entries = Object.entries(detail.call.emotion_profile || {});
-                            // Detect per-turn nested structure vs flat primitive map
                             const isPerTurn = entries.some(([, v]) => v !== null && typeof v === "object");
                             if (isPerTurn) {
                               const turnCount = entries.length;
@@ -697,11 +750,11 @@ export default function CallsPage() {
                               return (
                                 <div className="mt-2 space-y-2">
                                   <p className="text-xs text-neutral-400">{turnCount} turns analyzed</p>
-                                  <div className="flex flex-wrap gap-2">
+                                  <div className="flex flex-wrap gap-1">
                                     {emotions.map((e) => (
-                                      <span key={e} className="text-xs bg-neutral-100 text-neutral-600 px-2 py-1 rounded-full capitalize">{e}</span>
+                                      <span key={e} className="text-xs bg-neutral-100 text-neutral-600 px-2 py-1 rounded-full capitalize whitespace-nowrap">{e}</span>
                                     ))}
-                                    <span className="text-xs bg-neutral-100 text-neutral-500 px-2 py-1 rounded-full">
+                                    <span className="text-xs bg-neutral-100 text-neutral-500 px-2 py-1 rounded-full whitespace-nowrap">
                                       engagement {Math.round(avgEngagement * 100)}%
                                     </span>
                                   </div>
@@ -709,9 +762,9 @@ export default function CallsPage() {
                               );
                             }
                             return (
-                              <div className="flex flex-wrap gap-2 mt-2">
+                              <div className="flex flex-wrap gap-1 mt-2">
                                 {entries.map(([k, v]: any) => (
-                                  <span key={k} className="text-xs bg-neutral-100 text-neutral-600 px-2 py-1 rounded-full capitalize">
+                                  <span key={k} className="text-xs bg-neutral-100 text-neutral-600 px-2 py-1 rounded-full capitalize whitespace-nowrap">
                                     {k}: {typeof v === "number" ? `${Math.round(v * 100)}%` : String(v ?? "")}
                                   </span>
                                 ))}
@@ -724,9 +777,11 @@ export default function CallsPage() {
                     {/* Recording */}
                     <Section icon={<Mic2 className="w-4 h-4 text-neutral-400" />} title="Recording">
                       {detail.call.has_recording ? (
-                        <CallAudioPlayer src={getRecordingUrl(detail.call.id)} />
+                        <div className="overflow-x-auto">
+                          <CallAudioPlayer src={getRecordingUrl(detail.call.id)} />
+                        </div>
                       ) : (
-                        <p className="text-sm text-neutral-500">
+                        <p className="text-xs sm:text-sm text-neutral-500 break-words">
                           {detail.call.status === "completed"
                             ? "Recording is being processed — check back in a moment."
                             : "No recording available for this call."}
@@ -803,33 +858,33 @@ export default function CallsPage() {
 
 function StatChip({ icon, label, value, valueClass }: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) {
   return (
-    <div className="bg-neutral-50 rounded-lg px-3 py-2">
-      <div className="flex items-center gap-1 text-neutral-500 mb-0.5">
+    <div className="bg-neutral-50 rounded-lg px-2.5 sm:px-3 py-2 min-w-0">
+      <div className="flex items-center gap-1 text-neutral-500 mb-0.5 min-w-0">
         {icon}
-        <span className="text-[10px] uppercase tracking-wide">{label}</span>
+        <span className="text-[9px] sm:text-[10px] uppercase tracking-wide truncate">{label}</span>
       </div>
-      <p className={`text-sm font-semibold ${valueClass || "text-neutral-900"} truncate`}>{value}</p>
+      <p className={`text-xs sm:text-sm font-semibold ${valueClass || "text-neutral-900"} break-words`}>{value}</p>
     </div>
   );
 }
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-neutral-50 rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="bg-neutral-50 rounded-xl p-3 sm:p-4">
+      <div className="flex items-center gap-2 mb-3 min-w-0">
         {icon}
-        <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">{title}</h3>
+        <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide truncate">{title}</h3>
       </div>
-      {children}
+      <div className="overflow-hidden">{children}</div>
     </div>
   );
 }
 
 function InfoRow({ label, value, mono, valueClass }: { label: string; value: string; mono?: boolean; valueClass?: string }) {
   return (
-    <div>
-      <p className="text-[10px] text-neutral-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-sm mt-0.5 ${mono ? "font-mono" : ""} ${valueClass || "text-neutral-700"}`}>{value}</p>
+    <div className="min-w-0">
+      <p className="text-[9px] sm:text-[10px] text-neutral-500 uppercase tracking-wide truncate">{label}</p>
+      <p className={`text-xs sm:text-sm mt-0.5 ${mono ? "font-mono" : ""} ${valueClass || "text-neutral-700"} break-words`}>{value}</p>
     </div>
   );
 }

@@ -57,11 +57,11 @@ export default function ToolsPage() {
         </div>
 
         {/* Tool type cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
           {TOOL_TYPES.map(({ icon: Icon, name, color, bg, description, useCases }) => (
             <div
               key={name}
-              className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 flex flex-col gap-4"
+              className="bg-white rounded-xl border border-neutral-200 shadow-sm p-4 sm:p-5 flex flex-col gap-4"
             >
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${bg}`}>

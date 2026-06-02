@@ -76,7 +76,7 @@ function GeneralTab({ workspace, me, onSaved }: { workspace: Workspace; me: Me; 
     <div className="space-y-6 max-w-lg">
       <div>
         <label className="block text-sm text-neutral-700 font-medium mb-1.5">Workspace Name</label>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -87,7 +87,7 @@ function GeneralTab({ workspace, me, onSaved }: { workspace: Workspace; me: Me; 
             <button
               onClick={save}
               disabled={saving || name.trim() === workspace.name}
-              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 shrink-0"
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -183,11 +183,11 @@ function TeamTab({ me }: { me: Me }) {
     <div className="space-y-6">
       {/* Invite */}
       {isOwner && (
-        <div className="bg-white border border-neutral-200 rounded-xl p-5 space-y-4">
+        <div className="bg-white border border-neutral-200 rounded-xl p-4 sm:p-5 space-y-4">
           <h3 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
             <UserPlus className="w-4 h-4 text-brand-500" /> Invite Team Member
           </h3>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="email"
               placeholder="colleague@example.com"
@@ -195,21 +195,23 @@ function TeamTab({ me }: { me: Me }) {
               onChange={(e) => setInviteEmail(e.target.value)}
               className="flex-1 bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
             />
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value)}
-              className="bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
-            >
-              <option value="member">Member</option>
-              <option value="owner">Owner</option>
-            </select>
-            <button
-              onClick={invite}
-              disabled={inviting || !inviteEmail.trim()}
-              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-            >
-              {inviting ? "…" : "Generate Link"}
-            </button>
+            <div className="flex gap-2">
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value)}
+                className="flex-1 sm:flex-none bg-white border border-neutral-300 rounded-lg px-3 py-2.5 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
+              >
+                <option value="member">Member</option>
+                <option value="owner">Owner</option>
+              </select>
+              <button
+                onClick={invite}
+                disabled={inviting || !inviteEmail.trim()}
+                className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 shrink-0 whitespace-nowrap"
+              >
+                {inviting ? "…" : "Generate Link"}
+              </button>
+            </div>
           </div>
 
           {inviteLink && (
@@ -237,17 +239,17 @@ function TeamTab({ me }: { me: Me }) {
           <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
             <div className="divide-y divide-neutral-100">
               {members.map((m) => (
-                <div key={m.id} className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-brand-500/15 border border-brand-500/25 flex items-center justify-center text-xs font-medium text-brand-600">
+                <div key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-brand-500/15 border border-brand-500/25 flex items-center justify-center text-xs font-medium text-brand-600 shrink-0">
                       {m.email[0].toUpperCase()}
                     </div>
-                    <div>
-                      <p className="text-sm text-neutral-900">{m.email}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm text-neutral-900 truncate">{m.email}</p>
                       <div className="flex items-center gap-1 mt-0.5">
                         {m.role === "owner"
-                          ? <Crown className="w-3 h-3 text-yellow-500" />
-                          : <Shield className="w-3 h-3 text-blue-500" />}
+                          ? <Crown className="w-3 h-3 text-yellow-500 shrink-0" />
+                          : <Shield className="w-3 h-3 text-blue-500 shrink-0" />}
                         <p className="text-xs text-neutral-500 capitalize">{m.role}</p>
                       </div>
                     </div>
@@ -255,13 +257,13 @@ function TeamTab({ me }: { me: Me }) {
                   {isOwner && m.id !== me.id && (
                     <button
                       onClick={() => remove(m.id, m.email)}
-                      className="text-neutral-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                      className="text-neutral-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 shrink-0"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}
                   {m.id === me.id && (
-                    <span className="text-xs text-neutral-400 px-2 py-1 bg-neutral-100 rounded-full">You</span>
+                    <span className="text-xs text-neutral-400 px-2 py-1 bg-neutral-100 rounded-full shrink-0">You</span>
                   )}
                 </div>
               ))}

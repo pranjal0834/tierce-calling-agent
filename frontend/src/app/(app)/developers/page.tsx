@@ -110,14 +110,14 @@ function ApiKeysSection() {
   return (
     <div className="space-y-4">
       {/* Create */}
-      <div className="bg-white border border-neutral-200 shadow-sm rounded-xl p-5 space-y-4">
+      <div className="bg-white border border-neutral-200 shadow-sm rounded-xl p-4 sm:p-5 space-y-4">
         <h3 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
           <Key className="w-4 h-4 text-brand-500" /> Create New API Key
         </h3>
         <p className="text-xs text-neutral-500">
           Give each key a descriptive name so you know where it&apos;s used. The raw key is shown only once — store it securely.
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             placeholder="e.g. Production, CRM Integration, Zapier"
             value={newName}
@@ -128,7 +128,7 @@ function ApiKeysSection() {
           <button
             onClick={create}
             disabled={creating || !newName.trim()}
-            className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 shrink-0 whitespace-nowrap"
           >
             {creating ? "Creating…" : "Create Key"}
           </button>
@@ -162,21 +162,21 @@ function ApiKeysSection() {
           <div className="bg-white border border-neutral-200 shadow-sm rounded-xl overflow-hidden">
             <div className="divide-y divide-neutral-100">
               {keys.map((k) => (
-                <div key={k.id} className="flex items-center justify-between px-4 py-3 hover:bg-neutral-50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/25 flex items-center justify-center">
+                <div key={k.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/25 flex items-center justify-center shrink-0">
                       <Key className="w-3.5 h-3.5 text-brand-500" />
                     </div>
-                    <div>
-                      <p className="text-sm text-neutral-900 font-medium">{k.name}</p>
-                      <p className="text-xs text-neutral-400">
+                    <div className="min-w-0">
+                      <p className="text-sm text-neutral-900 font-medium truncate">{k.name}</p>
+                      <p className="text-xs text-neutral-400 truncate">
                         Created {fmtDate(k.created_at)} · Last used {fmtDate(k.last_used_at)}
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={() => revoke(k.id, k.name)}
-                    className="text-neutral-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                    className="text-neutral-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 shrink-0"
                     title="Revoke key"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -262,16 +262,16 @@ console.log(call.id); // call ID for tracking`;
       </div>
 
       {/* Base URL */}
-      <div className="bg-white border border-neutral-200 shadow-sm rounded-xl p-5">
+      <div className="bg-white border border-neutral-200 shadow-sm rounded-xl p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-3">
-          <Globe className="w-4 h-4 text-neutral-400" />
+          <Globe className="w-4 h-4 text-neutral-400 shrink-0" />
           <h2 className="text-sm font-semibold text-neutral-900">Base URL</h2>
           {workspace && (
-            <span className="ml-auto text-xs text-neutral-400">Workspace: <span className="text-neutral-700">{workspace.name}</span></span>
+            <span className="ml-auto text-xs text-neutral-400 truncate min-w-0">Workspace: <span className="text-neutral-700">{workspace.name}</span></span>
           )}
         </div>
         <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2.5">
-          <code className="flex-1 text-sm text-brand-600 font-mono">{BASE_URL}/api</code>
+          <code className="flex-1 text-xs sm:text-sm text-brand-600 font-mono break-all min-w-0">{BASE_URL}/api</code>
           <CopyButton text={`${BASE_URL}/api`} />
         </div>
       </div>

@@ -123,7 +123,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4">
-      <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white border border-neutral-200 sm:rounded-2xl rounded-t-2xl w-full sm:max-w-lg shadow-2xl max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-neutral-100 shrink-0">
           <div>
@@ -150,8 +150,8 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
                   onClick={() => set({ business_type: t })}
                   className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${
                     form.business_type === t
-                      ? "bg-brand-500 border-brand-500 text-neutral-900"
-                      : "bg-neutral-100 border-neutral-200 text-neutral-400 hover:text-neutral-900"
+                      ? "bg-brand-500 border-brand-500 text-white"
+                      : "bg-neutral-100 border-neutral-200 text-neutral-500 hover:text-neutral-900"
                   }`}
                 >
                   {t === "company" ? "Company / Business" : "Individual"}
@@ -227,20 +227,20 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
             </div>
           </div>
 
-          <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-300">
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">
               Your details are used for regulatory compliance. You will not be charged until KYC is approved.
             </p>
           </div>
 
           <div className="flex justify-end gap-3 pt-1">
             <button type="button" onClick={onClose}
-              className="px-4 py-2.5 text-sm text-neutral-400 hover:text-neutral-900 transition-colors">
+              className="px-4 py-2.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
               Cancel
             </button>
             <button type="submit" disabled={saving}
-              className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-neutral-900 text-sm font-medium rounded-xl transition-colors">
+              className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors shadow-xs">
               {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               Submit KYC
             </button>

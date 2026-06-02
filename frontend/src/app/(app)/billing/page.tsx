@@ -193,16 +193,16 @@ export default function BillingPage() {
     <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Billing</h1>
           <p className="text-sm text-neutral-500 mt-0.5">Manage your credits, plans, and transaction history</p>
         </div>
         <button
           onClick={refresh}
-          className="text-sm text-neutral-500 hover:text-neutral-900 flex items-center gap-1.5 transition-colors mt-1"
+          className="text-sm text-neutral-500 hover:text-neutral-900 flex items-center gap-1.5 transition-colors mt-1 shrink-0"
         >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          <RefreshCw className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Refresh</span>
         </button>
       </div>
 
@@ -227,15 +227,15 @@ export default function BillingPage() {
       )}
 
       {/* Balance card */}
-      <div className="bg-gradient-to-br from-brand-500/15 to-purple-600/15 border border-brand-500/25 rounded-2xl p-6">
-        <div className="flex items-start justify-between">
-          <div>
+      <div className="bg-gradient-to-br from-brand-500/15 to-purple-600/15 border border-brand-500/25 rounded-2xl p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-sm text-brand-600 mb-1 font-medium">Available Balance</p>
             <div className="flex items-baseline gap-2">
-              <span className="text-5xl font-bold text-neutral-900">
+              <span className="text-4xl sm:text-5xl font-bold text-neutral-900">
                 {balance != null ? balance.toFixed(1) : "—"}
               </span>
-              <span className="text-lg text-brand-500">minutes</span>
+              <span className="text-base sm:text-lg text-brand-500">minutes</span>
             </div>
             {balance != null && balance <= 5 && balance > 0 && (
               <p className="mt-2 text-sm text-yellow-600 flex items-center gap-1">
@@ -248,7 +248,7 @@ export default function BillingPage() {
               </p>
             )}
           </div>
-          <TrendingUp className="w-10 h-10 text-brand-400/30" />
+          <TrendingUp className="w-10 h-10 text-brand-400/30 shrink-0" />
         </div>
         <div className="mt-4 pt-4 border-t border-brand-500/15 text-xs text-neutral-500">
           Free trial: 20 minutes on signup &nbsp;·&nbsp; Pay-as-you-go: ₹10/min (INR) or $0.12/min (USD)
@@ -256,8 +256,8 @@ export default function BillingPage() {
       </div>
 
       {/* Currency toggle */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-neutral-500 mr-2">Buy credits in:</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm text-neutral-500 mr-1 w-full sm:w-auto">Buy credits in:</span>
         <button
           onClick={() => setCurrency("inr")}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
@@ -292,7 +292,7 @@ export default function BillingPage() {
           return (
             <div
               key={packId}
-              className={`relative flex flex-col rounded-2xl border p-5 transition-all ${
+              className={`relative flex flex-col rounded-2xl border p-4 sm:p-5 transition-all ${
                 isPopular
                   ? "border-brand-500/60 bg-brand-500/8 shadow-sm"
                   : "border-neutral-200 bg-white shadow-sm hover:border-neutral-300"
@@ -350,7 +350,7 @@ export default function BillingPage() {
               {transactions.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center gap-4 px-4 py-3 hover:bg-neutral-50 transition-colors"
+                  className="flex items-center gap-3 sm:gap-4 px-4 py-3 hover:bg-neutral-50 transition-colors"
                 >
                   <div className="flex-shrink-0">
                     {TX_ICONS[tx.type] ?? <CreditCard className="w-4 h-4 text-neutral-400" />}
@@ -369,7 +369,7 @@ export default function BillingPage() {
                       </p>
                     )}
                   </div>
-                  <div className="text-right flex-shrink-0 w-20">
+                  <div className="text-right flex-shrink-0 w-20 hidden sm:block">
                     <p className="text-xs text-neutral-500">{tx.balance_after.toFixed(1)} min</p>
                     <p className="text-xs text-neutral-400">balance</p>
                   </div>

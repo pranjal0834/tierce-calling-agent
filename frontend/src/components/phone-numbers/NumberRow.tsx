@@ -83,14 +83,14 @@ export default function NumberRow({
   }
 
   return (
-    <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
+    <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 sm:gap-4 min-w-0">
           <div className="w-10 h-10 bg-brand-500/10 border border-brand-500/25 rounded-xl flex items-center justify-center shrink-0">
             <Phone className="w-5 h-5 text-brand-500" />
           </div>
-          <div>
-            <p className="text-base font-semibold text-neutral-900 font-mono tracking-wide">{number.phone_number}</p>
+          <div className="min-w-0">
+            <p className="text-sm sm:text-base font-semibold text-neutral-900 font-mono tracking-wide break-all">{number.phone_number}</p>
             {number.friendly_name && (
               <p className="text-xs text-neutral-400 mt-0.5">{number.friendly_name}</p>
             )}
@@ -185,7 +185,7 @@ export default function NumberRow({
         </button>
       </div>
 
-      <p className="text-xs text-neutral-400 mt-3 font-mono">
+      <p className="text-xs text-neutral-400 mt-3 font-mono break-all">
         Purchased {new Date(number.purchased_at + "Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         &nbsp;·&nbsp;{number.twilio_sid}
       </p>

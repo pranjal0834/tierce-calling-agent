@@ -128,15 +128,15 @@ function KpiCard({ label, value, sub, icon: Icon, color }: {
   label: string; value: string | number; sub?: string; icon: React.ElementType; color: string;
 }) {
   return (
-    <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-neutral-500 font-medium uppercase tracking-wide">{label}</span>
+    <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-4 sm:p-5">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <span className="text-xs text-neutral-500 font-medium uppercase tracking-wide truncate">{label}</span>
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color.replace("text-", "bg-").replace("400", "400/10")}`}>
           <Icon className={`w-3.5 h-3.5 ${color}`} />
         </div>
       </div>
-      <p className="text-[22px] font-semibold text-neutral-900 tracking-tight">{value}</p>
-      {sub && <p className="text-xs text-sm text-neutral-500 mt-0.5">{sub}</p>}
+      <p className="text-xl sm:text-[22px] font-semibold text-neutral-900 tracking-tight">{value}</p>
+      {sub && <p className="text-xs text-neutral-500 mt-0.5 truncate">{sub}</p>}
     </div>
   );
 }
@@ -229,14 +229,14 @@ function DateRangeFilter({ range, onChange }: { range: AnalyticsRange; onChange:
   }
 
   return (
-    <div className="flex items-center gap-2 flex-wrap justify-end">
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:flex-wrap lg:justify-end w-full lg:w-auto">
       {/* Preset pills */}
-      <div className="flex gap-1 bg-neutral-100 rounded-xl p-1">
+      <div className="flex gap-1 bg-neutral-100 rounded-xl p-1 overflow-x-auto">
         {[7, 30, 90].map(d => (
           <button
             key={d}
             onClick={() => { onChange({ preset: d, startDate: "", endDate: "" }); setShowPicker(false); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
               !isCustom && range.preset === d ? "bg-brand-500 text-white" : "text-neutral-500 hover:text-neutral-900"
             }`}
           >
@@ -245,7 +245,7 @@ function DateRangeFilter({ range, onChange }: { range: AnalyticsRange; onChange:
         ))}
         <button
           onClick={() => setShowPicker(v => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 whitespace-nowrap ${
             isCustom ? "bg-brand-500 text-white" : "text-neutral-500 hover:text-neutral-900"
           }`}
         >
@@ -256,39 +256,41 @@ function DateRangeFilter({ range, onChange }: { range: AnalyticsRange; onChange:
 
       {/* Inline date picker — shown when Custom is clicked */}
       {showPicker && (
-        <div className="flex items-center gap-2 bg-white border border-neutral-300 rounded-xl px-3 py-2 shadow-sm">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-neutral-500">From</span>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white border border-neutral-300 rounded-xl px-3 py-2.5 sm:py-2 shadow-sm">
+          <div className="flex items-center justify-between sm:justify-start gap-1.5">
+            <span className="text-xs text-neutral-500 w-10 sm:w-auto">From</span>
             <input
               type="date"
               value={localStart}
               max={localEnd || today}
               onChange={e => setLocalStart(e.target.value)}
-              className="bg-white border border-neutral-300 text-neutral-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-500"
+              className="flex-1 sm:flex-none bg-white border border-neutral-300 text-neutral-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-500"
             />
           </div>
-          <span className="text-neutral-400 text-xs">→</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-neutral-500">To</span>
+          <span className="text-neutral-400 text-xs hidden sm:inline">→</span>
+          <div className="flex items-center justify-between sm:justify-start gap-1.5">
+            <span className="text-xs text-neutral-500 w-10 sm:w-auto">To</span>
             <input
               type="date"
               value={localEnd}
               min={localStart}
               max={today}
               onChange={e => setLocalEnd(e.target.value)}
-              className="bg-white border border-neutral-300 text-neutral-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-500"
+              className="flex-1 sm:flex-none bg-white border border-neutral-300 text-neutral-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand-500"
             />
           </div>
-          <button
-            onClick={applyCustom}
-            disabled={!canApply}
-            className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors"
-          >
-            Apply
-          </button>
-          <button onClick={() => setShowPicker(false)} className="text-neutral-400 hover:text-neutral-900 transition-colors">
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={applyCustom}
+              disabled={!canApply}
+              className="flex-1 sm:flex-none px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors"
+            >
+              Apply
+            </button>
+            <button onClick={() => setShowPicker(false)} className="text-neutral-400 hover:text-neutral-900 transition-colors shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -367,7 +369,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
             <SectionHeader title="Call outcomes" />
-            <div className="flex items-center gap-6">
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
               <ResponsiveContainer width={160} height={160}>
                 <PieChart>
                   <Pie
@@ -476,7 +478,7 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
       {data.direction_distribution.length > 0 && (
         <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
           <SectionHeader title="Call direction" />
-          <div className="flex items-center gap-8">
+          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
             <ResponsiveContainer width={160} height={160}>
               <PieChart>
                 <Pie data={data.direction_distribution} dataKey="count" nameKey="direction"
@@ -725,20 +727,24 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
 
           <div className="bg-white border border-neutral-200 shadow-sm rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-neutral-900 mb-4">Self-Improving Feedback Loop</h3>
-            <div className="flex items-center gap-3 overflow-x-auto pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
               {[
-                { label: "Live Calls",      desc: `${data.total_calls} total`,                color: "bg-blue-500/15 text-blue-400 border-blue-500/20"   },
-                { label: "Auto Evaluation", desc: `${data.avg_eval_score.toFixed(1)}/10 avg`,  color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
-                { label: "Failure Mining",  desc: "Low-score turns",                          color: "bg-orange-500/15 text-orange-400 border-orange-500/20" },
-                { label: "Fine-Tuning",     desc: `${data.fine_tuning_runs} runs`,             color: "bg-purple-500/15 text-purple-400 border-purple-500/20" },
-                { label: "Better Model",    desc: data.latest_model ? "Custom model" : "Pending", color: "bg-green-500/15 text-green-400 border-green-500/20" },
+                { label: "Live Calls",      desc: `${data.total_calls} total`,                    color: "bg-blue-50 text-blue-700 border-blue-200"     },
+                { label: "Auto Evaluation", desc: `${data.avg_eval_score.toFixed(1)}/10 avg`,      color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+                { label: "Failure Mining",  desc: "Low-score turns",                              color: "bg-orange-50 text-orange-700 border-orange-200" },
+                { label: "Fine-Tuning",     desc: `${data.fine_tuning_runs} runs`,                 color: "bg-purple-50 text-purple-700 border-purple-200" },
+                { label: "Better Model",    desc: data.latest_model ? "Custom model" : "Pending",  color: "bg-green-50 text-green-700 border-green-200"   },
               ].map((step, i, arr) => (
-                <div key={step.label} className="flex items-center gap-3 shrink-0">
-                  <div className={`rounded-xl px-4 py-3 border ${step.color} text-center min-w-[110px]`}>
+                <div key={step.label} className="flex flex-col sm:flex-1 sm:flex-row sm:items-stretch">
+                  <div className={`flex-1 rounded-xl px-4 py-3 border ${step.color} text-center`}>
                     <p className="text-xs font-semibold">{step.label}</p>
                     <p className="text-xs opacity-70 mt-0.5">{step.desc}</p>
                   </div>
-                  {i < arr.length - 1 && <span className="text-neutral-400 text-lg">→</span>}
+                  {i < arr.length - 1 && (
+                    <div className="flex items-center justify-center text-neutral-300 py-1 sm:py-0 sm:px-1">
+                      <span className="rotate-90 sm:rotate-0 text-lg leading-none">→</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -756,23 +762,23 @@ export default function AnalyticsPage() {
   const [range, setRange] = useState<AnalyticsRange>({ preset: 30, startDate: "", endDate: "" });
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-start gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div className="flex items-start gap-3 sm:gap-4 min-w-0">
           <div className="w-10 h-10 bg-brand-500/20 border border-brand-500/30 rounded-xl flex items-center justify-center shrink-0">
-            <BarChart3 className="w-5 h-5 text-brand-400" />
+            <BarChart3 className="w-5 h-5 text-brand-500" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Analytics</h1>
-            <p className="text-sm text-sm text-neutral-500 mt-0.5">Performance metrics, sentiment trends, and agent quality scores</p>
+            <p className="text-sm text-neutral-500 mt-0.5">Performance metrics, sentiment trends, and agent quality scores</p>
           </div>
         </div>
         <DateRangeFilter range={range} onChange={setRange} />
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-neutral-200 pb-0">
+      <div className="flex gap-1 border-b border-neutral-200 pb-0 overflow-x-auto">
         {[
           { key: "overview", label: "Workspace Overview", icon: BarChart3 },
           { key: "agent",    label: "Per Agent",           icon: Bot },
@@ -780,9 +786,9 @@ export default function AnalyticsPage() {
           <button
             key={key}
             onClick={() => setTab(key as any)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap shrink-0 ${
               tab === key
-                ? "border-brand-500 text-brand-400"
+                ? "border-brand-500 text-brand-600"
                 : "border-transparent text-neutral-500 hover:text-neutral-700"
             }`}
           >

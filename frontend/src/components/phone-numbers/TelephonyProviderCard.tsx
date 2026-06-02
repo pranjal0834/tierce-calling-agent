@@ -97,7 +97,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
             <p className="text-xs text-amber-700">
               Exotel supports Indian numbers (₹). You need an{" "}
               <span className="font-medium text-amber-700">Exotel account</span> and a virtual number.
@@ -105,7 +105,7 @@ export function TelephonyProviderCard({ config, onChange }: TelephonyProviderCar
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs text-neutral-500 mb-1.5">API Key</label>
               <input

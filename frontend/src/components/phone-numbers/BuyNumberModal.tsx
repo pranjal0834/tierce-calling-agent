@@ -180,9 +180,9 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4">
-      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 w-full sm:max-w-xl shadow-2xl">
+      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 w-full sm:max-w-xl shadow-2xl max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-neutral-100">
+        <div className="flex items-center justify-between p-5 border-b border-neutral-100 flex-shrink-0">
           <div>
             <h2 className="text-base font-semibold text-neutral-900">Buy Phone Number</h2>
             <p className="text-xs text-neutral-500 mt-0.5">{costNote}</p>
@@ -192,21 +192,21 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
           {/* Provider badge */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-neutral-500">Searching via</span>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
               provider === "plivo"
-                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                : "bg-blue-50 text-blue-600 border-blue-200"
             }`}>
               {providerLabel}
             </span>
           </div>
 
           {/* Search controls */}
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             {/* Only show country dropdown when there are multiple choices */}
             {countries.length > 1 ? (
               <select
@@ -234,7 +234,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
             <button
               onClick={search}
               disabled={searching}
-              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2 shadow-xs"
+              className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-xs"
             >
               {searching ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               Search
@@ -274,7 +274,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <CapBadge label="Voice" enabled={n.capabilities?.voice} icon={Mic} />
                         <CapBadge label="SMS" enabled={n.capabilities?.sms} icon={MessageSquare} />
-                        <span className="text-xs text-emerald-400 font-medium">
+                        <span className="text-xs text-emerald-600 font-medium">
                           ₹{rateInr}/month
                         </span>
                       </div>
@@ -282,7 +282,7 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
                     <button
                       onClick={() => buy(n)}
                       disabled={!!buying}
-                      className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-neutral-900 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
+                      className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 shrink-0"
                     >
                       {buying === n.phone_number
                         ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Buying…</>
@@ -296,9 +296,9 @@ export function BuyNumberModal({ agents, provider, onClose, onBought, onNeedKyc 
           )}
 
           {/* Cost warning */}
-          <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-300">
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">
               The first month&apos;s rental is collected via Razorpay at purchase. Renewals are billed every 30 days. Releasing a number stops future charges.
             </p>
           </div>

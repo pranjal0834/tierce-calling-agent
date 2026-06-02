@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Brain, User, Building, ShoppingBag, AlertCircle, Heart, Calendar, Trash2 } from "lucide-react";
+import { Brain, User, Building, ShoppingBag, AlertCircle, Heart, Calendar, Trash2, ChevronLeft } from "lucide-react";
 import { getContacts, getMemoryGraph, clearMemory } from "@/lib/api";
 import toast from "react-hot-toast";
 
@@ -66,13 +66,13 @@ export default function MemoryPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Contact list */}
-        <div className="bg-white rounded-xl border border-neutral-200 shadow-sm">
+        <div className={`bg-white rounded-xl border border-neutral-200 shadow-sm ${selected ? "hidden lg:block" : "block"}`}>
           <div className="px-5 py-4 border-b border-neutral-200 text-sm font-medium text-neutral-700">
             Contacts ({contacts.length})
           </div>
-          <div className="divide-y divide-neutral-100 max-h-[600px] overflow-y-auto">
+          <div className="divide-y divide-neutral-100 lg:max-h-[600px] overflow-y-auto">
             {contacts.length === 0 && (
               <div className="p-8 text-center text-neutral-500 text-sm">No contacts yet</div>
             )}
@@ -98,7 +98,7 @@ export default function MemoryPage() {
         </div>
 
         {/* Memory graph detail */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-neutral-200 shadow-sm">
+        <div className={`lg:col-span-2 bg-white rounded-xl border border-neutral-200 shadow-sm ${selected ? "block" : "hidden lg:block"}`}>
           {!selected ? (
             <div className="flex flex-col items-center justify-center h-full p-12 text-center">
               <Brain className="w-12 h-12 text-neutral-300 mb-3" />
@@ -106,18 +106,26 @@ export default function MemoryPage() {
             </div>
           ) : (
             <div>
-              <div className="px-5 py-4 border-b border-neutral-200 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-neutral-900">{selected.name || selected.phone_number}</p>
+              {/* Mobile back button */}
+              <button
+                onClick={() => { setSelected(null); setGraph(null); }}
+                className="lg:hidden flex items-center gap-1.5 px-5 py-3 border-b border-neutral-200 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-colors w-full"
+              >
+                <ChevronLeft className="w-4 h-4" /> Back to contacts
+              </button>
+
+              <div className="px-5 py-4 border-b border-neutral-200 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-neutral-900 truncate">{selected.name || selected.phone_number}</p>
                   <p className="text-xs text-neutral-500 mt-0.5">
                     {graph?.nodes?.length || 0} memory nodes · {graph?.edges?.length || 0} relationships
                   </p>
                 </div>
                 <button
                   onClick={handleClearMemory}
-                  className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-red-500 transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-red-500 transition-colors shrink-0"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Clear Memory
+                  <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Clear Memory</span>
                 </button>
               </div>
 
@@ -166,7 +174,7 @@ export default function MemoryPage() {
                     <h4 className="text-sm font-medium text-neutral-700 mb-2">Relationships</h4>
                     <div className="space-y-1">
                       {graph.edges.map((e: any, i: number) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-neutral-500">
+                        <div key={i} className="flex items-center gap-2 text-xs text-neutral-500 flex-wrap">
                           <span className="text-neutral-700">{e.from.replace(/_/g, " ")}</span>
                           <span className="text-neutral-400">—{e.relation.replace(/_/g, " ")}→</span>
                           <span className="text-neutral-700">{e.to.replace(/_/g, " ")}</span>

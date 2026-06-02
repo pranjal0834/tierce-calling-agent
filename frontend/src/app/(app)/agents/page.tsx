@@ -79,9 +79,9 @@ export default function AgentsPage() {
           {workspace.length > 0 && (
             <div className="space-y-2.5">
               <div className="flex items-center gap-2 px-0.5 mb-3">
-                <Globe className="w-3.5 h-3.5 text-neutral-400" />
+                <Globe className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
                 <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Workspace</span>
-                <span className="text-xs text-neutral-400">· visible to all team members</span>
+                <span className="text-xs text-neutral-400 truncate">· visible to all team members</span>
               </div>
               {workspace.map((agent: any) => (
                 <AgentCard key={agent.id} agent={agent} onEdit={openEdit} onDelete={handleDelete} />
@@ -93,9 +93,9 @@ export default function AgentsPage() {
           {personal.length > 0 && (
             <div className="space-y-2.5">
               <div className="flex items-center gap-2 px-0.5 mb-3">
-                <Lock className="w-3.5 h-3.5 text-amber-500" />
+                <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Personal</span>
-                <span className="text-xs text-neutral-400">· only visible to you</span>
+                <span className="text-xs text-neutral-400 truncate">· only visible to you</span>
               </div>
               {personal.map((agent: any) => (
                 <AgentCard key={agent.id} agent={agent} onEdit={openEdit} onDelete={handleDelete} />

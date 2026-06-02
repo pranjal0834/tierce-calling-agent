@@ -113,27 +113,27 @@ export function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: KycSta
   );
 
   return (
-    <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-card">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3">
+    <div className="bg-white border border-neutral-200 rounded-2xl p-4 sm:p-5 shadow-card">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-center shrink-0">
             <ShieldCheck className="w-4 h-4 text-amber-500" />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-neutral-900">KYC / Regulatory Compliance</p>
             <p className="text-xs text-neutral-500 mt-0.5">Verify your business identity for countries that require it</p>
           </div>
         </div>
-        <div className="relative shrink-0">
+        <div className="relative sm:shrink-0">
           <button
             onClick={() => { setShowAddPicker(v => !v); setAddSearch(""); }}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-white hover:bg-neutral-50 text-neutral-600 border border-neutral-200 hover:border-neutral-300 rounded-lg shadow-xs transition-all duration-150"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 text-xs px-3 py-2 sm:py-1.5 bg-white hover:bg-neutral-50 text-neutral-600 border border-neutral-200 hover:border-neutral-300 rounded-lg shadow-xs transition-all duration-150"
           >
             <Plus className="w-3 h-3" />
             Verify another country
           </button>
           {showAddPicker && (
-            <div className="absolute right-0 top-full mt-1 z-20 w-64 bg-white border border-neutral-200 rounded-xl shadow-hover overflow-hidden">
+            <div className="absolute left-0 right-0 sm:left-auto sm:right-0 top-full mt-1 z-20 w-auto sm:w-64 bg-white border border-neutral-200 rounded-xl shadow-hover overflow-hidden">
               <div className="p-2 border-b border-neutral-100">
                 <input
                   autoFocus
@@ -180,22 +180,33 @@ export function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: KycSta
             "Not submitted";
 
           return (
-            <div key={code} className="flex items-center justify-between gap-3 py-2.5 border-b border-neutral-100 last:border-0">
-              <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-                <span className="text-[10px] font-mono text-neutral-400 w-6 shrink-0">{code}</span>
-                <span className="text-sm text-neutral-800 font-medium">{name}</span>
-                {required && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200 shrink-0">
-                    Required
-                  </span>
-                )}
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusStyle}`}>
-                  {statusLabel}
-                </span>
+            <div key={code} className="flex items-start justify-between gap-3 py-3 border-b border-neutral-100 last:border-0">
+              {/* Country name + badges below */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-neutral-400 shrink-0">{code}</span>
+                  <span className="text-sm text-neutral-800 font-medium">{name}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  {required && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">
+                      Required
+                    </span>
+                  )}
+                  {/* Only show a status pill once something has actually been submitted */}
+                  {status && (
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusStyle}`}>
+                      {statusLabel}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              {/* Action */}
+              <div className="flex items-center shrink-0">
                 {status === "approved" ? (
-                  <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                  <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                    <ShieldCheck className="w-4 h-4" /> Verified
+                  </span>
                 ) : status === "submitted" ? (
                   <button
                     onClick={async () => {
@@ -207,7 +218,7 @@ export function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: KycSta
                         else toast(`Status: ${updated.status}`, { icon: "ℹ️" });
                       } catch { toast.error("Could not refresh status"); }
                     }}
-                    className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-colors font-medium"
+                    className="inline-flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-colors font-medium"
                   >
                     <RefreshCw className="w-3 h-3" />
                     Refresh
@@ -215,7 +226,7 @@ export function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: KycSta
                 ) : (
                   <button
                     onClick={() => onOpenForm(code)}
-                    className="text-xs px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors font-medium shadow-xs"
+                    className="text-xs px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors font-medium shadow-xs whitespace-nowrap"
                   >
                     {status === "rejected" || status === "failed" ? "Resubmit" : "Submit KYC"}
                   </button>
