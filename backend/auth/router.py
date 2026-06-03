@@ -26,7 +26,7 @@ from backend.auth.dependencies import get_current_user, require_workspace
 from backend.auth.google_oauth import exchange_code_for_user, get_google_auth_url
 from backend.config import settings
 from backend.db.database import get_db
-from backend.db.models import ApiKey, NotificationPreference, User, Workspace
+from backend.db.models import ApiKey, NotificationPreference, PasswordResetToken, User, Workspace
 from backend.notifications import email as mailer
 from backend.notifications import templates as tmpl
 from backend.models.schemas import (
@@ -48,6 +48,24 @@ class UpdateWorkspaceRequest(_BaseModel):
 class InviteRequest(_BaseModel):
     email: str
     role: str = "member"
+
+
+class ForgotPasswordRequest(_BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(_BaseModel):
+    token: str
+    new_password: str
+
+
+class ChangePasswordRequest(_BaseModel):
+    current_password: str = ""
+    new_password: str
+
+
+# Password-reset link validity (minutes)
+PASSWORD_RESET_TTL_MINUTES = 30
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -126,6 +144,113 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
+    return TokenOut(access_token=_create_access_token(user.id))
+
+
+# ── Forgot / Reset password ────────────────────────────────────────────────────
+
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send a password-reset link to the user's email.
+    Always returns a generic success response — never reveals whether the
+    email exists (prevents account enumeration).
+    """
+    email = payload.email.lower().strip()
+    generic = {"message": "If an account exists for that email, a reset link has been sent."}
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    # Proceed for any real, active account. OAuth-only users (no password yet)
+    # can use this flow to set a password for the first time — the link still
+    # only ever goes to their own verified inbox.
+    if not user or not user.is_active:
+        return generic
+
+    # Invalidate any existing unused tokens for this user
+    existing = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used == False,  # noqa: E712
+        )
+    )
+    for t in existing.scalars().all():
+        t.used = True
+
+    # Generate a fresh single-use token; store only its hash
+    raw_token = secrets.token_urlsafe(48)
+    db.add(PasswordResetToken(
+        user_id=user.id,
+        token_hash=_hash_token(raw_token),
+        expires_at=datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_TTL_MINUTES),
+    ))
+    await db.commit()
+
+    # Build reset URL pointing at the frontend origin the request came from
+    origin = (
+        _extract_origin(request.headers.get("origin", ""))
+        or _extract_origin(request.headers.get("referer", ""))
+        or settings.FRONTEND_URL
+        or "http://localhost:3000"
+    )
+    reset_url = f"{origin}/reset-password?token={raw_token}"
+
+    subject, html = tmpl.password_reset(user.email, reset_url, PASSWORD_RESET_TTL_MINUTES, origin)
+    asyncio.create_task(mailer.send_email(user.email, subject, html))
+
+    log.info("Password reset requested", user_id=user.id, email=user.email)
+    return generic
+
+
+@router.post("/reset-password", response_model=TokenOut)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Validate a reset token and set a new password (single-use, expiring)."""
+    if not payload.new_password or len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    token_hash = _hash_token(payload.token)
+    result = await db.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+    )
+    reset = result.scalar_one_or_none()
+
+    if not reset or reset.used or reset.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Please request a new one.")
+
+    user = await db.get(User, reset.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="Account not found or disabled")
+
+    # Update password and consume the token
+    user.hashed_password = _hash_password(payload.new_password)
+    reset.used = True
+
+    # Invalidate any other outstanding tokens for this user
+    others = await db.execute(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used == False,  # noqa: E712
+        )
+    )
+    for t in others.scalars().all():
+        t.used = True
+
+    await db.commit()
+    log.info("Password reset completed", user_id=user.id, email=user.email)
+
+    # Log the user straight in
     return TokenOut(access_token=_create_access_token(user.id))
 
 
@@ -241,7 +366,39 @@ async def get_me(user: User = Depends(get_current_user)):
     admin_emails = [e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()]
     data = UserOut.model_validate(user)
     data.is_superadmin = user.email.lower() in admin_emails
+    data.has_password = bool(user.hashed_password)
     return data
+
+
+# ── Change password (authenticated) ─────────────────────────────────────────────
+
+@router.post("/change-password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Change the current user's password.
+    - If the account already has a password, the correct current password is required.
+    - If the account is OAuth-only (no password yet), this sets one for the first time.
+    """
+    if not payload.new_password or len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    if user.hashed_password:
+        if not payload.current_password:
+            raise HTTPException(status_code=400, detail="Current password is required")
+        if not _verify_password(payload.current_password, user.hashed_password):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        if _verify_password(payload.new_password, user.hashed_password):
+            raise HTTPException(status_code=400, detail="New password must be different from the current one")
+
+    user.hashed_password = _hash_password(payload.new_password)
+    await db.commit()
+
+    log.info("Password changed", user_id=user.id, email=user.email)
+    return {"message": "Password updated successfully", "has_password": True}
 
 
 @router.get("/workspace", response_model=WorkspaceOut)

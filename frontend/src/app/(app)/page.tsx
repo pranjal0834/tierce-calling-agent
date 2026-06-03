@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import {
   Phone, Bot, Brain, Zap, TrendingUp, Activity,
-  AlertCircle, ArrowRight, CreditCard, ArrowUpRight, CheckCircle2,
+  AlertCircle, ArrowRight, CreditCard, ArrowUpRight,
 } from "lucide-react";
 import Link from "next/link";
 import { getAgents, getCalls, getBillingBalance } from "@/lib/api";
@@ -19,95 +19,24 @@ const STATUS_MAP: Record<string, { label: string; dot: string; text: string; bg:
   cancelled:    { label: "Cancelled",    dot: "bg-neutral-400", text: "text-neutral-600", bg: "bg-neutral-100" },
 };
 
-function toUTC(iso: string) {
-  if (!iso) return iso;
-  return iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z";
-}
-
-// Build last-7-days buckets from real call data
-function last7Days(calls: any[]) {
-  const days: { key: string; label: string; count: number }[] = [];
-  const now = new Date();
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    days.push({
-      key: d.toISOString().split("T")[0],
-      label: d.toLocaleDateString("en-US", { weekday: "short" }).charAt(0),
-      count: 0,
-    });
-  }
-  calls.forEach((c) => {
-    if (!c.created_at) return;
-    const key = new Date(toUTC(c.created_at)).toISOString().split("T")[0];
-    const bucket = days.find((x) => x.key === key);
-    if (bucket) bucket.count++;
-  });
-  return days;
-}
-
-// ── Enhanced stat card ──────────────────────────────────────────────────────
-type Accent = { rail: string; chip: string };
-const ACCENTS: Record<string, Accent> = {
-  brand:   { rail: "bg-brand-500",   chip: "from-brand-400 to-brand-600"     },
-  emerald: { rail: "bg-emerald-500", chip: "from-emerald-400 to-emerald-600" },
-  amber:   { rail: "bg-amber-500",   chip: "from-amber-400 to-amber-500"     },
-  violet:  { rail: "bg-violet-500",  chip: "from-violet-400 to-violet-600"   },
-};
-
-function StatCard({ label, value, sub, icon: Icon, accent }: {
-  label: string; value: string | number; sub?: string;
-  icon: React.ElementType; accent: keyof typeof ACCENTS;
+function StatCard({ label, value, icon: Icon, iconColor, iconBg, trend }: {
+  label: string; value: string | number;
+  icon: React.ElementType; iconColor: string; iconBg: string;
+  trend?: string;
 }) {
-  const a = ACCENTS[accent];
   return (
-    <div className="relative bg-white rounded-xl border border-neutral-200 shadow-card p-5 overflow-hidden hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
-      <div className={`absolute inset-x-0 top-0 h-1 ${a.rail} opacity-80`} />
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white rounded-xl border border-neutral-200 shadow-card p-5 flex flex-col gap-3 hover:shadow-hover transition-shadow duration-200">
+      <div className="flex items-center justify-between">
         <span className="text-[13px] font-medium text-neutral-500">{label}</span>
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-br ${a.chip} shadow-xs`}>
-          <Icon className="w-4 h-4 text-white" />
+        <div className={`w-8 h-8 ${iconBg} rounded-lg flex items-center justify-center`}>
+          <Icon className={`w-4 h-4 ${iconColor}`} />
         </div>
       </div>
-      <div className="text-2xl font-bold text-neutral-900 leading-none tracking-tight">{value}</div>
-      {sub && <p className="text-xs text-neutral-400 mt-1.5 truncate">{sub}</p>}
-    </div>
-  );
-}
-
-// ── 7-day activity bar chart (real data, dependency-free) ───────────────────
-function ActivityChart({ days }: { days: { label: string; count: number }[] }) {
-  const max = Math.max(1, ...days.map((d) => d.count));
-  return (
-    <div className="flex items-end justify-between gap-1.5 sm:gap-2 h-28">
-      {days.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-          <div className="w-full flex items-end justify-center h-full">
-            <div
-              className="w-full max-w-[26px] rounded-t-md bg-gradient-to-t from-brand-500/60 to-brand-400 hover:from-brand-500 hover:to-brand-400 transition-all duration-200"
-              style={{ height: `${(d.count / max) * 100}%`, minHeight: d.count > 0 ? "6px" : "3px", opacity: d.count > 0 ? 1 : 0.3 }}
-              title={`${d.count} call${d.count !== 1 ? "s" : ""}`}
-            />
-          </div>
-          <span className="text-[10px] text-neutral-400 font-medium">{d.label}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Loading skeleton ─────────────────────────────────────────────────────────
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="h-8 w-48 skeleton rounded-lg" />
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {[0, 1, 2, 3].map((i) => <div key={i} className="h-28 skeleton rounded-xl" />)}
-      </div>
-      <div className="h-44 skeleton rounded-xl" />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="h-64 skeleton rounded-xl" />
-        <div className="lg:col-span-2 h-64 skeleton rounded-xl" />
+      <div className="flex items-end gap-2">
+        <span className="text-2xl font-bold text-neutral-900 leading-none tracking-tight">{value}</span>
+        {trend && (
+          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full mb-0.5">{trend}</span>
+        )}
       </div>
     </div>
   );
@@ -141,19 +70,14 @@ export default function Dashboard() {
   const recentCalls  = calls.slice(0, 6);
   const activeCalls  = calls.filter((c: any) => c.status === "in_progress");
   const nativeAgents = agents.filter((a: any) => a.pipeline_mode === "native").length;
-  const classicAgents = agents.length - nativeAgents;
-  const completedCalls = calls.filter((c: any) => c.status === "completed").length;
-  const completedRate = calls.length > 0 ? Math.round((completedCalls / calls.length) * 100) : 0;
 
-  // Real derived metrics
-  const todayKey = new Date().toISOString().split("T")[0];
-  const todayCount = calls.filter((c: any) =>
-    c.created_at && new Date(toUTC(c.created_at)).toISOString().split("T")[0] === todayKey
-  ).length;
-  const days = last7Days(calls);
-  const weekTotal = days.reduce((s, d) => s + d.count, 0);
-
-  if (loading) return <DashboardSkeleton />;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -208,61 +132,29 @@ export default function Dashboard() {
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
-          label="Total Agents" value={agents.length} icon={Bot} accent="brand"
-          sub={agents.length > 0 ? `${nativeAgents} native · ${classicAgents} classic` : "No agents yet"}
-        />
-        <StatCard
-          label="Total Calls" value={calls.length} icon={Phone} accent="emerald"
-          sub={`${todayCount} today`}
-        />
-        <StatCard
-          label="Active Now" value={activeCalls.length} icon={Activity} accent="amber"
-          sub={activeCalls.length > 0 ? "Live calls in progress" : "No live calls"}
-        />
-        <StatCard
-          label="Completed" value={completedCalls} icon={CheckCircle2} accent="violet"
-          sub={calls.length > 0 ? `${completedRate}% success rate` : "—"}
-        />
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard label="Total Agents"  value={agents.length}      icon={Bot}      iconColor="text-brand-500"    iconBg="bg-brand-50"   />
+        <StatCard label="Total Calls"   value={calls.length}       icon={Phone}    iconColor="text-emerald-600"  iconBg="bg-emerald-50" />
+        <StatCard label="Active Now"    value={activeCalls.length} icon={Activity} iconColor="text-amber-600"    iconBg="bg-amber-50"   />
+        <StatCard label="Native Audio"  value={`${nativeAgents}`}  icon={Zap}      iconColor="text-violet-600"   iconBg="bg-violet-50"  />
       </div>
 
       {/* Empty onboarding state */}
       {!apiError && agents.length === 0 && (
-        <div className="relative bg-white border border-dashed border-neutral-300 rounded-2xl p-10 text-center overflow-hidden">
-          <div className="absolute inset-0 bg-grid opacity-40 pointer-events-none" />
-          <div className="relative">
-            <div className="w-14 h-14 bg-gradient-to-br from-brand-400 to-brand-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-brand">
-              <Bot className="w-7 h-7 text-white" />
-            </div>
-            <h2 className="text-base font-semibold text-neutral-900 mb-2">Create your first agent</h2>
-            <p className="text-sm text-neutral-500 max-w-sm mx-auto mb-6 leading-relaxed">
-              Set up a voice AI agent with a system prompt, voice, and language. Once created, you can make your first call in seconds.
-            </p>
-            <Link
-              href="/agents"
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors shadow-xs"
-            >
-              Go to Agents <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+        <div className="bg-white border border-dashed border-neutral-300 rounded-2xl p-10 text-center">
+          <div className="w-12 h-12 bg-brand-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Bot className="w-6 h-6 text-brand-500" />
           </div>
-        </div>
-      )}
-
-      {/* Call activity — real 7-day chart */}
-      {calls.length > 0 && (
-        <div className="bg-white rounded-xl border border-neutral-200 shadow-card p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-[14px] font-semibold text-neutral-900">Call Activity</h2>
-              <p className="text-xs text-neutral-400 mt-0.5">Last 7 days</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xl font-bold text-neutral-900 leading-none">{weekTotal}</p>
-              <p className="text-[10px] text-neutral-400 mt-1">calls this week</p>
-            </div>
-          </div>
-          <ActivityChart days={days} />
+          <h2 className="text-base font-semibold text-neutral-900 mb-2">Create your first agent</h2>
+          <p className="text-sm text-neutral-500 max-w-sm mx-auto mb-6 leading-relaxed">
+            Set up a voice AI agent with a system prompt, voice, and language. Once created, you can make your first call in seconds.
+          </p>
+          <Link
+            href="/agents"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors shadow-xs"
+          >
+            Go to Agents <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
       )}
 
@@ -272,27 +164,27 @@ export default function Dashboard() {
         <div className="space-y-3">
           {[
             {
-              icon: Zap, iconCls: "from-violet-400 to-violet-600",
+              icon: Zap, iconCls: "text-violet-600", bg: "bg-violet-50",
               title: "Native Audio",
               desc: "GPT-4o Realtime API — raw audio in/out. No STT/TTS latency.",
               badge: "~300ms faster",
             },
             {
-              icon: Brain, iconCls: "from-pink-400 to-pink-600",
+              icon: Brain, iconCls: "text-pink-600", bg: "bg-pink-50",
               title: "Emotional Intelligence",
               desc: "Pitch, energy & sentiment fused — agent adapts in real-time.",
               badge: "Live",
             },
             {
-              icon: TrendingUp, iconCls: "from-emerald-400 to-emerald-600",
+              icon: TrendingUp, iconCls: "text-emerald-600", bg: "bg-emerald-50",
               title: "Self-Improving Loop",
               desc: "Every 50 calls triggers a fine-tuning run automatically.",
               badge: "Auto",
             },
-          ].map(({ icon: Icon, iconCls, title, desc, badge }) => (
-            <div key={title} className="bg-white rounded-xl border border-neutral-200 shadow-card p-4 flex items-start gap-3 hover:shadow-hover hover:-translate-y-0.5 transition-all duration-200">
-              <div className={`w-9 h-9 bg-gradient-to-br ${iconCls} rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 shadow-xs`}>
-                <Icon className="w-4 h-4 text-white" />
+          ].map(({ icon: Icon, iconCls, bg, title, desc, badge }) => (
+            <div key={title} className="bg-white rounded-xl border border-neutral-200 shadow-card p-4 flex items-start gap-3 hover:shadow-hover transition-shadow duration-200">
+              <div className={`w-8 h-8 ${bg} rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                <Icon className={`w-4 h-4 ${iconCls}`} />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">

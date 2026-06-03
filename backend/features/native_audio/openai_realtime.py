@@ -257,10 +257,21 @@ class OpenAIRealtimeHandler:
                 "Never randomly switch languages on your own. Be consistent."
             )
 
+        kb_block = ""
+        if (self.agent.config or {}).get("knowledge_base_ids"):
+            kb_block = (
+                "\n\nKNOWLEDGE BASE RULE: You have access to a company knowledge base via the "
+                "query_knowledge_base tool. Whenever the caller asks anything not explicitly covered "
+                "in your instructions above (products, pricing, policies, services, company details, etc.), "
+                "call query_knowledge_base with their question BEFORE answering. Base your answer on what it "
+                "returns. Only say you don't have the information if the tool returns nothing relevant."
+            )
+
         instructions = (
             self.system_prompt
             + speech_style_block
             + language_block
+            + kb_block
             + "\n\nFOCUS RULE: You are on a phone call. Only respond to the primary caller speaking directly to you. "
             "Completely ignore any background noise, TV audio, music, other people talking nearby, or any voice that is not directly addressing you. "
             "If the audio is unclear or sounds like background noise rather than a direct question or statement, do not respond — wait for the caller to speak clearly."
@@ -302,6 +313,31 @@ class OpenAIRealtimeHandler:
             ),
             "parameters": SCHEDULE_CALLBACK_PARAMS,
         })
+
+        # Inject knowledge-base retrieval tool when the agent has KBs attached
+        kb_ids = cfg.get("knowledge_base_ids") or []
+        if kb_ids:
+            openai_tools.append({
+                "type": "function",
+                "name": "query_knowledge_base",
+                "description": (
+                    "Search the company knowledge base for information to answer the caller's question. "
+                    "Use this whenever the caller asks something that isn't covered in your instructions — "
+                    "about products, pricing, policies, services, company details, etc. "
+                    "Pass the caller's question (or a concise version of it) as the query. "
+                    "Always call this before saying you don't know something."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The caller's question or the key information to look up.",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            })
         session_update = {
             "type": "session.update",
             "session": {
@@ -857,13 +893,22 @@ class OpenAIRealtimeHandler:
 
     async def _execute_and_respond(self, call_id: str, tool_name: str, arguments: dict):
         """Execute a tool call and send the result back to OpenAI Realtime."""
-        cfg_tools = (self.agent.config or {}).get("tools") or []
-        tool = next((t for t in cfg_tools if t.get("name") == tool_name), None)
-        # Built-in tools not stored in agent config
-        if tool is None and tool_name == "schedule_callback":
-            tool = {"type": "schedule_callback", "name": "schedule_callback"}
-        result = await execute_tool(tool, arguments, call=self.call) if tool else f"Tool '{tool_name}' not found"
-        log.info("Tool result", tool=tool_name, result=result[:100])
+        # Built-in: knowledge-base retrieval (RAG)
+        if tool_name == "query_knowledge_base":
+            from backend.knowledge.retrieval import search_knowledge
+            kb_ids = (self.agent.config or {}).get("knowledge_base_ids") or []
+            query = arguments.get("query", "")
+            passages = await search_knowledge(kb_ids, query)
+            result = passages or "No relevant information was found in the knowledge base for that question."
+            log.info("KB query", query=query[:80], found=bool(passages))
+        else:
+            cfg_tools = (self.agent.config or {}).get("tools") or []
+            tool = next((t for t in cfg_tools if t.get("name") == tool_name), None)
+            # Built-in tools not stored in agent config
+            if tool is None and tool_name == "schedule_callback":
+                tool = {"type": "schedule_callback", "name": "schedule_callback"}
+            result = await execute_tool(tool, arguments, call=self.call) if tool else f"Tool '{tool_name}' not found"
+            log.info("Tool result", tool=tool_name, result=result[:100])
 
         if result == "__END_CALL__":
             self._pending_hangup = True

@@ -69,6 +69,23 @@ class NotificationPreference(Base):
     user: Mapped["User"] = relationship("User", backref="notification_prefs")
 
 
+# ─── Password Reset Tokens ─────────────────────────────────────────────────────
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)  # SHA-256 hex
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User")
+
+    __table_args__ = (Index("idx_reset_token_hash", "token_hash"),)
+
+
 # ─── API Keys ──────────────────────────────────────────────────────────────────
 
 class ApiKey(Base):
@@ -190,6 +207,66 @@ class Agent(Base):
     calls: Mapped[list["Call"]] = relationship("Call", back_populates="agent")
 
     __table_args__ = (Index("idx_agents_workspace_id", "workspace_id"),)
+
+
+# ─── Knowledge Base ────────────────────────────────────────────────────────────
+
+class KnowledgeBase(Base):
+    __tablename__ = "knowledge_bases"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    documents: Mapped[list["KnowledgeDocument"]] = relationship(
+        "KnowledgeDocument", back_populates="knowledge_base", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (Index("idx_kb_workspace_id", "workspace_id"),)
+
+
+class KnowledgeDocument(Base):
+    __tablename__ = "knowledge_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    kb_id: Mapped[str] = mapped_column(String(36), ForeignKey("knowledge_bases.id"), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False)  # pdf | url | text
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_ref: Mapped[str | None] = mapped_column(Text)                  # URL or original filename
+    status: Mapped[str] = mapped_column(String(20), default="processing") # processing | ready | failed
+    error_message: Mapped[str | None] = mapped_column(Text)
+    char_count: Mapped[int] = mapped_column(Integer, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    knowledge_base: Mapped["KnowledgeBase"] = relationship("KnowledgeBase", back_populates="documents")
+    chunks: Mapped[list["KnowledgeChunk"]] = relationship(
+        "KnowledgeChunk", back_populates="document", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (Index("idx_kbdoc_kb_id", "kb_id"),)
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "knowledge_chunks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("knowledge_documents.id"), nullable=False)
+    kb_id: Mapped[str] = mapped_column(String(36), ForeignKey("knowledge_bases.id"), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    idx: Mapped[int] = mapped_column(Integer, default=0)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list] = mapped_column(JSONB, default=list)   # list[float] — in-app cosine search
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    document: Mapped["KnowledgeDocument"] = relationship("KnowledgeDocument", back_populates="chunks")
+
+    __table_args__ = (Index("idx_kbchunk_kb_id", "kb_id"),)
 
 
 # ─── Contacts ──────────────────────────────────────────────────────────────────

@@ -43,6 +43,28 @@ export const createAgent = (data: unknown) => api.post("/api/agents", data).then
 export const updateAgent = (id: string, data: unknown) => api.put(`/api/agents/${id}`, data).then((r: AxiosResponse) => r.data);
 export const deleteAgent = (id: string) => api.delete(`/api/agents/${id}`);
 
+// ── Knowledge Base ───────────────────────────────────────────────────────────
+
+export const getKnowledgeBases = () => api.get("/api/knowledge").then((r: AxiosResponse) => r.data);
+export const createKnowledgeBase = (data: { name: string; description?: string }) =>
+  api.post("/api/knowledge", data).then((r: AxiosResponse) => r.data);
+export const getKnowledgeBase = (id: string) =>
+  api.get(`/api/knowledge/${id}`).then((r: AxiosResponse) => r.data);
+export const deleteKnowledgeBase = (id: string) => api.delete(`/api/knowledge/${id}`);
+export const addKbTextDoc = (kbId: string, data: { title: string; content: string }) =>
+  api.post(`/api/knowledge/${kbId}/documents/text`, data).then((r: AxiosResponse) => r.data);
+export const addKbUrlDoc = (kbId: string, data: { url: string; title?: string }) =>
+  api.post(`/api/knowledge/${kbId}/documents/url`, data).then((r: AxiosResponse) => r.data);
+export const uploadKbPdf = (kbId: string, file: File) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  return api.post(`/api/knowledge/${kbId}/documents/upload`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  }).then((r: AxiosResponse) => r.data);
+};
+export const deleteKbDoc = (kbId: string, docId: string) =>
+  api.delete(`/api/knowledge/${kbId}/documents/${docId}`);
+
 // ── Calls ────────────────────────────────────────────────────────────────────
 
 export const getCalls = (agentId?: string) =>

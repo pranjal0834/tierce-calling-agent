@@ -6,6 +6,7 @@ import { Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { setToken } from "@/lib/auth";
 import { api } from "@/lib/api";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 function OAuthErrorToast() {
   const params = useSearchParams();
@@ -104,14 +105,16 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="label-base">Password</label>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
-              className="input-base"
-              placeholder="••••••••"
               value={form.password}
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
             />
+            <div className="flex justify-end mt-1.5">
+              <Link href="/forgot-password" className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <button

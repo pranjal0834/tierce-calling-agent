@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Users, Globe, Copy, Check,
-  Trash2, UserPlus, Shield, Crown, Bell,
+  Trash2, UserPlus, Shield, Crown, Bell, KeyRound, UserCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
@@ -10,30 +10,13 @@ import {
   getMembers, removeMember, createInvite,
   api,
 } from "@/lib/api";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Workspace { id: string; name: string; plan: string; credits_balance: number; created_at: string; }
-interface Me { id: string; email: string; role: string; }
+interface Me { id: string; email: string; role: string; has_password?: boolean; }
 interface Member { id: string; email: string; role: string; is_active: boolean; created_at: string; }
-
-// ── Tab pill ──────────────────────────────────────────────────────────────────
-
-function Tab({ label, icon: Icon, active, onClick }: { label: string; icon: React.ElementType; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-        active
-          ? "border-brand-500 text-brand-500"
-          : "border-transparent text-neutral-500 hover:text-neutral-900"
-      }`}
-    >
-      <Icon className="w-4 h-4" />
-      {label}
-    </button>
-  );
-}
 
 // ── Copy helper ───────────────────────────────────────────────────────────────
 
@@ -51,9 +34,36 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// ── General Tab ───────────────────────────────────────────────────────────────
+// ── Section card wrapper ────────────────────────────────────────────────────────
 
-function GeneralTab({ workspace, me, onSaved }: { workspace: Workspace; me: Me; onSaved: () => void }) {
+function SectionCard({ title, description, icon: Icon, action, children }: {
+  title: string; description?: string; icon?: React.ElementType;
+  action?: React.ReactNode; children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl shadow-card overflow-hidden">
+      <div className="px-5 py-4 border-b border-neutral-100 flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          {Icon && (
+            <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+              <Icon className="w-4 h-4 text-brand-500" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
+            {description && <p className="text-xs text-neutral-500 mt-0.5">{description}</p>}
+          </div>
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      <div className="p-5">{children}</div>
+    </div>
+  );
+}
+
+// ── General section (workspace) ──────────────────────────────────────────────────
+
+function GeneralSection({ workspace, me, onSaved }: { workspace: Workspace; me: Me; onSaved: () => void }) {
   const [name, setName] = useState(workspace.name);
   const [saving, setSaving] = useState(false);
   const isOwner = me.role === "owner";
@@ -73,10 +83,10 @@ function GeneralTab({ workspace, me, onSaved }: { workspace: Workspace; me: Me; 
   }
 
   return (
-    <div className="space-y-6 max-w-lg">
-      <div>
+    <div className="space-y-5">
+      <SectionCard title="Workspace" description="Your workspace name is visible to all team members." icon={Globe}>
         <label className="block text-sm text-neutral-700 font-medium mb-1.5">Workspace Name</label>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 max-w-md">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -93,39 +103,150 @@ function GeneralTab({ workspace, me, onSaved }: { workspace: Workspace; me: Me; 
             </button>
           )}
         </div>
-      </div>
+        {!isOwner && (
+          <p className="text-xs text-neutral-400 mt-2">Only the workspace owner can change this.</p>
+        )}
+      </SectionCard>
 
-      <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-4">
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-          <p className="text-xs text-neutral-500 mb-1">Workspace ID</p>
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-neutral-700 font-mono truncate">{workspace.id}</p>
-            <CopyButton text={workspace.id} />
+      <SectionCard title="Workspace Details" description="Read-only information about this workspace.">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-xs text-neutral-500 sm:mb-1">Workspace ID</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-xs text-neutral-700 font-mono truncate">{workspace.id}</p>
+              <CopyButton text={workspace.id} />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-xs text-neutral-500 sm:mb-1">Plan</p>
+            <p className="text-sm font-medium text-neutral-900 capitalize">{workspace.plan}</p>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-xs text-neutral-500 sm:mb-1">Credit Balance</p>
+            <p className="text-sm font-medium text-neutral-900">{workspace.credits_balance.toFixed(1)} minutes</p>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-xs text-neutral-500 sm:mb-1">Your Role</p>
+            <div className="flex items-center gap-1.5">
+              {me.role === "owner" ? <Crown className="w-3.5 h-3.5 text-yellow-500" /> : <Shield className="w-3.5 h-3.5 text-blue-500" />}
+              <p className="text-sm font-medium text-neutral-900 capitalize">{me.role}</p>
+            </div>
           </div>
         </div>
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-          <p className="text-xs text-neutral-500 mb-1">Plan</p>
-          <p className="text-sm font-medium text-neutral-900 capitalize">{workspace.plan}</p>
-        </div>
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-          <p className="text-xs text-neutral-500 mb-1">Credit Balance</p>
-          <p className="text-sm font-medium text-neutral-900">{workspace.credits_balance.toFixed(1)} minutes</p>
-        </div>
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-          <p className="text-xs text-neutral-500 mb-1">Your Role</p>
-          <div className="flex items-center gap-1.5">
-            {me.role === "owner" ? <Crown className="w-3.5 h-3.5 text-yellow-500" /> : <Shield className="w-3.5 h-3.5 text-blue-500" />}
-            <p className="text-sm font-medium text-neutral-900 capitalize">{me.role}</p>
+      </SectionCard>
+    </div>
+  );
+}
+
+// ── Account section (profile + password) ─────────────────────────────────────────
+
+function AccountSection({ me, onSaved }: { me: Me; onSaved: () => void }) {
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Profile" description="Your account details." icon={UserCircle}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-xs text-neutral-500 sm:mb-1">Email</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-sm text-neutral-700 truncate">{me.email}</p>
+              <CopyButton text={me.email} />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:block">
+            <p className="text-xs text-neutral-500 sm:mb-1">Role</p>
+            <div className="flex items-center gap-1.5">
+              {me.role === "owner" ? <Crown className="w-3.5 h-3.5 text-yellow-500" /> : <Shield className="w-3.5 h-3.5 text-blue-500" />}
+              <p className="text-sm font-medium text-neutral-900 capitalize">{me.role}</p>
+            </div>
           </div>
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4">
-        <p className="text-xs text-neutral-500 mb-1">Your Email</p>
-        <div className="flex items-center gap-2">
-          <p className="text-sm text-neutral-700">{me.email}</p>
-          <CopyButton text={me.email} />
+      <ChangePasswordCard me={me} onSaved={onSaved} />
+    </div>
+  );
+}
+
+// ── Change password ─────────────────────────────────────────────────────────────
+
+function ChangePasswordCard({ me, onSaved }: { me: Me; onSaved: () => void }) {
+  const hasPassword = me.has_password !== false; // default to true unless explicitly false
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (hasPassword && !current) { toast.error("Enter your current password"); return; }
+    if (next.length < 8) { toast.error("New password must be at least 8 characters"); return; }
+    if (next !== confirm) { toast.error("New passwords do not match"); return; }
+    setSaving(true);
+    try {
+      await api.post("/auth/change-password", {
+        current_password: current,
+        new_password: next,
+      });
+      toast.success(hasPassword ? "Password changed" : "Password set");
+      setCurrent(""); setNext(""); setConfirm("");
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Failed to update password");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl shadow-card p-4 sm:p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <KeyRound className="w-4 h-4 text-brand-500" />
+        <h3 className="text-sm font-semibold text-neutral-900">
+          {hasPassword ? "Change Password" : "Set a Password"}
+        </h3>
+      </div>
+      <p className="text-xs text-neutral-500">
+        {hasPassword
+          ? "Enter your current password and choose a new one."
+          : "Your account uses Google sign-in. Set a password to also log in with email."}
+      </p>
+
+      <div className="space-y-3 max-w-md">
+        {hasPassword && (
+          <div>
+            <label className="label-base">Current password</label>
+            <PasswordInput
+              autoComplete="current-password"
+              placeholder="Your current password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+          </div>
+        )}
+        <div>
+          <label className="label-base">New password</label>
+          <PasswordInput
+            autoComplete="new-password"
+            placeholder="Minimum 8 characters"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
         </div>
+        <div>
+          <label className="label-base">Confirm new password</label>
+          <PasswordInput
+            autoComplete="new-password"
+            placeholder="Re-enter new password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </div>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="h-9 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 shadow-xs"
+        >
+          {saving ? "Saving…" : hasPassword ? "Change Password" : "Set Password"}
+        </button>
       </div>
     </div>
   );
@@ -375,7 +496,7 @@ function NotificationsTab() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<"general" | "team" | "notifications">("general");
+  const [tab, setTab] = useState<"general" | "account" | "notifications" | "team">("general");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -402,6 +523,13 @@ export default function SettingsPage() {
     );
   }
 
+  const SECTIONS = [
+    { key: "general",       label: "General",       icon: Globe },
+    { key: "account",       label: "Account",       icon: UserCircle },
+    { key: "notifications", label: "Notifications", icon: Bell },
+    { key: "team",          label: "Team",          icon: Users },
+  ] as const;
+
   return (
     <div className="space-y-6">
       <div>
@@ -409,17 +537,36 @@ export default function SettingsPage() {
         <p className="text-sm text-neutral-500 mt-0.5">Manage your workspace, team, and account preferences</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-0 border-b border-neutral-200 overflow-x-auto">
-        <Tab label="General"       icon={Globe}  active={tab === "general"}       onClick={() => setTab("general")}       />
-        <Tab label="Team"          icon={Users}  active={tab === "team"}           onClick={() => setTab("team")}          />
-        <Tab label="Notifications" icon={Bell}   active={tab === "notifications"}  onClick={() => setTab("notifications")} />
+      {/* Horizontal section tabs */}
+      <div className="border-b border-neutral-200 overflow-x-auto">
+        <div className="flex gap-1 min-w-max">
+          {SECTIONS.map((s) => {
+            const active = tab === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setTab(s.key)}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
+                  active
+                    ? "border-brand-500 text-brand-600"
+                    : "border-transparent text-neutral-500 hover:text-neutral-900"
+                }`}
+              >
+                <s.icon className={`w-4 h-4 ${active ? "text-brand-500" : "text-neutral-400"}`} />
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Content */}
-      {tab === "general"       && <GeneralTab workspace={workspace} me={me} onSaved={load} />}
-      {tab === "team"          && <TeamTab me={me} />}
-      {tab === "notifications" && <NotificationsTab />}
+      {/* Section content */}
+      <div className="max-w-3xl">
+        {tab === "general"       && <GeneralSection workspace={workspace} me={me} onSaved={load} />}
+        {tab === "account"       && <AccountSection me={me} onSaved={load} />}
+        {tab === "notifications" && <NotificationsTab />}
+        {tab === "team"          && <TeamTab me={me} />}
+      </div>
     </div>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Lock, X } from "lucide-react";
+import { Lock, X, BookOpen } from "lucide-react";
+import Link from "next/link";
 import toast from "react-hot-toast";
-import { createAgent, updateAgent } from "@/lib/api";
+import { createAgent, updateAgent, getKnowledgeBases } from "@/lib/api";
 import { VoicePicker } from "./VoicePicker";
 import { LanguagePicker } from "./LanguagePicker";
 
@@ -22,6 +23,7 @@ const DEFAULT_FORM = {
     accent: "",
     speech_pace: "natural",
     languages: ["English"] as string[],
+    knowledge_base_ids: [] as string[],
   },
 };
 
@@ -46,6 +48,11 @@ function Field({ label, children, required }: { label: string; children: React.R
 export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModalProps) {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
+  const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
+
+  useEffect(() => {
+    getKnowledgeBases().then(setKnowledgeBases).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (editingAgent) {
@@ -58,6 +65,8 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
         voice_id: editingAgent.voice_id || "alloy",
         is_personal: editingAgent.is_personal ?? false,
         config: {
+          // Preserve any existing config keys (e.g. tools) on edit
+          ...(editingAgent.config || {}),
           backchannel_enabled: editingAgent.config?.backchannel_enabled ?? true,
           emotional_intelligence: editingAgent.config?.emotional_intelligence ?? true,
           predictive_engine: editingAgent.config?.predictive_engine ?? true,
@@ -65,12 +74,22 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
           accent: editingAgent.config?.accent ?? "",
           speech_pace: editingAgent.config?.speech_pace ?? "natural",
           languages: editingAgent.config?.languages ?? ["English"],
+          knowledge_base_ids: editingAgent.config?.knowledge_base_ids ?? [],
         },
       });
     } else {
       setForm(DEFAULT_FORM);
     }
   }, [editingAgent]);
+
+  const selectedKbs: string[] = (form.config as any).knowledge_base_ids ?? [];
+  const toggleKb = (id: string) => {
+    setForm(f => {
+      const cur: string[] = (f.config as any).knowledge_base_ids ?? [];
+      const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
+      return { ...f, config: { ...f.config, knowledge_base_ids: next } };
+    });
+  };
 
   const handleSave = async () => {
     if (!form.name || !form.system_prompt) {
@@ -250,6 +269,52 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Knowledge Base */}
+          <div className="pt-1 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="label-base mb-0 flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-brand-500" /> Knowledge Base
+              </p>
+              <Link href="/knowledge" className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors">
+                Manage
+              </Link>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Attach knowledge bases so the agent can answer questions beyond its prompt during calls.
+            </p>
+            {knowledgeBases.length === 0 ? (
+              <div className="text-xs text-neutral-400 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-3">
+                No knowledge bases yet.{" "}
+                <Link href="/knowledge" className="font-medium text-brand-600 hover:text-brand-700">Create one</Link> to attach it here.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {knowledgeBases.map((kb) => {
+                  const checked = selectedKbs.includes(kb.id);
+                  return (
+                    <label
+                      key={kb.id}
+                      className={`flex items-start gap-2.5 cursor-pointer p-3 rounded-xl border transition-all duration-150 ${
+                        checked ? "border-brand-300 bg-brand-50/50" : "border-neutral-200 hover:border-brand-200 hover:bg-brand-50/20"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 w-4 h-4 accent-brand-500 rounded"
+                        checked={checked}
+                        onChange={() => toggleKb(kb.id)}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm text-neutral-800 font-medium truncate">{kb.name}</p>
+                        <p className="text-[11px] text-neutral-400">{kb.ready_count}/{kb.document_count} docs ready</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import toast from "react-hot-toast";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 function InviteForm() {
   const params = useSearchParams();
@@ -81,22 +82,20 @@ function InviteForm() {
                   Password
                   <span className="text-neutral-400 font-normal ml-1">(only needed for new accounts)</span>
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="input-base"
+                  autoComplete="new-password"
                   placeholder="Leave blank if you already have an account"
                 />
               </div>
               {password && (
                 <div>
                   <label className="label-base">Confirm password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={confirm}
                     onChange={e => setConfirm(e.target.value)}
-                    className="input-base"
+                    autoComplete="new-password"
                     placeholder="Repeat password"
                   />
                 </div>

@@ -72,6 +72,36 @@ def _render(subject: str, content: str, frontend_url: str = "") -> tuple[str, st
     return subject, html
 
 
+# ── Password reset ────────────────────────────────────────────────────────────
+
+def password_reset(user_email: str, reset_url: str, expires_minutes: int,
+                   frontend_url: str = "") -> tuple[str, str]:
+    content = f"""
+    <p class="greeting">Reset your password &#128273;</p>
+    <p class="text">
+      We received a request to reset the password for <strong>{user_email}</strong>.
+      Click the button below to choose a new password.
+    </p>
+
+    <a href="{reset_url}" class="btn">Reset Password &rarr;</a>
+
+    <div class="feature-box">
+      <p class="feature-desc">
+        This link expires in <strong>{expires_minutes} minutes</strong> and can only be used once.
+        If the button doesn&rsquo;t work, copy and paste this URL into your browser:
+      </p>
+      <p class="feature-desc" style="word-break:break-all;color:{BRAND_COLOR};margin-top:8px;">{reset_url}</p>
+    </div>
+
+    <hr class="divider" />
+    <p class="text" style="font-size:13px;color:#A3A3A0;">
+      If you didn&rsquo;t request a password reset, you can safely ignore this email &mdash;
+      your password won&rsquo;t change.
+    </p>
+    """
+    return _render(f"Reset your {BRAND_NAME} password", content, frontend_url)
+
+
 # ── Welcome email ─────────────────────────────────────────────────────────────
 
 def welcome(workspace_name: str, user_email: str, frontend_url: str = "") -> tuple[str, str]:

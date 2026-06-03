@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   Bot, Phone, BarChart3, Brain, Settings, Zap, LogOut,
   Wrench, CalendarClock, Hash, CreditCard, Webhook,
-  ShieldCheck, Code2, ChevronLeft, ChevronRight, LayoutDashboard, X,
+  ShieldCheck, Code2, ChevronLeft, ChevronRight, LayoutDashboard, X, BookOpen,
 } from "lucide-react";
 import { logout } from "@/lib/auth";
 import { api } from "@/lib/api";
@@ -24,6 +24,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/phone-numbers", icon: Hash,           label: "Phone Numbers" },
       { href: "/scheduling",    icon: CalendarClock,  label: "Scheduling"    },
+      { href: "/knowledge",     icon: BookOpen,       label: "Knowledge Base"},
       { href: "/analytics",     icon: BarChart3,      label: "Analytics"     },
       { href: "/memory",        icon: Brain,          label: "Memory"        },
     ],

@@ -5,6 +5,7 @@ import { Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { setToken } from "@/lib/auth";
 import { api } from "@/lib/api";
+import PasswordInput from "@/components/ui/PasswordInput";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
@@ -114,10 +115,8 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="label-base">Password</label>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
-              className="input-base"
               placeholder="Minimum 8 characters"
               value={form.password}
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
@@ -125,11 +124,8 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="label-base">Confirm Password</label>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
-              className="input-base"
-              placeholder="••••••••"
               value={form.confirm_password}
               onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))}
             />

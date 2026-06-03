@@ -42,6 +42,9 @@ aiohttp==3.11.10
 transformers==4.47.0
 torch==2.5.1
 
+# Knowledge base — document parsing
+pypdf==5.1.0
+
 # Background tasks
 celery[redis]==5.4.0
 flower==2.0.1

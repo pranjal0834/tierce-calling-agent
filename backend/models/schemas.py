@@ -40,6 +40,7 @@ class UserOut(BaseModel):
     role: str
     is_active: bool
     is_superadmin: bool = False
+    has_password: bool = False
     created_at: datetime
 
     class Config:
