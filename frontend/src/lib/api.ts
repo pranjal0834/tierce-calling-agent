@@ -43,6 +43,11 @@ export const createAgent = (data: unknown) => api.post("/api/agents", data).then
 export const updateAgent = (id: string, data: unknown) => api.put(`/api/agents/${id}`, data).then((r: AxiosResponse) => r.data);
 export const deleteAgent = (id: string) => api.delete(`/api/agents/${id}`);
 
+// ── Templates ────────────────────────────────────────────────────────────────
+export const getTemplates = () => api.get("/api/templates").then((r: AxiosResponse) => r.data);
+export const importTemplate = (id: string, data: { name?: string; is_personal?: boolean }) =>
+  api.post(`/api/templates/${id}/import`, data).then((r: AxiosResponse) => r.data);
+
 // ── Knowledge Base ───────────────────────────────────────────────────────────
 
 export const getKnowledgeBases = () => api.get("/api/knowledge").then((r: AxiosResponse) => r.data);

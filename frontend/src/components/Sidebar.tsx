@@ -6,6 +6,7 @@ import {
   Bot, Phone, BarChart3, Brain, Settings, Zap, LogOut,
   Wrench, CalendarClock, Hash, CreditCard, Webhook,
   ShieldCheck, Code2, ChevronLeft, ChevronRight, LayoutDashboard, X, BookOpen,
+  LayoutTemplate,
 } from "lucide-react";
 import { logout } from "@/lib/auth";
 import { api } from "@/lib/api";
@@ -16,6 +17,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/",             icon: LayoutDashboard, label: "Dashboard"     },
       { href: "/agents",       icon: Bot,             label: "Agents"        },
+      { href: "/templates",    icon: LayoutTemplate,  label: "Templates"     },
       { href: "/calls",        icon: Phone,           label: "Calls"         },
     ],
   },
