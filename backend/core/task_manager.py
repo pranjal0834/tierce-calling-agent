@@ -1,8 +1,6 @@
 """
 TaskManager — orchestrates a single call session.
-Supports two pipeline modes:
-  - native: raw audio ↔ GPT-4o Realtime / Gemini Live  (no STT/TTS)
-  - classic: audio → STT → LLM → TTS → audio (Bolna-style)
+Uses the native audio pipeline: raw audio ↔ GPT-4o Realtime / Gemini Live (no STT/TTS)
 """
 import asyncio
 import time
@@ -64,7 +62,7 @@ class TaskManager:
         self.turn_index = 0
         self._running = True
 
-        self.pipeline_mode = agent.pipeline_mode  # "native" | "classic"
+        self.pipeline_mode = agent.pipeline_mode
 
     # ── Entry point ─────────────────────────────────────────────────────────
 
@@ -86,10 +84,8 @@ class TaskManager:
             memory_context_chars=len(memory_context),
         )
 
-        if self.pipeline_mode == "native":
-            await self._run_native_pipeline()
-        else:
-            await self._run_classic_pipeline()
+        # Native audio is the only supported pipeline
+        await self._run_native_pipeline()
 
         await self.call_logger.finalize()
 
@@ -117,25 +113,6 @@ class TaskManager:
             speculation_engine=self.speculation_engine,
             call_logger=self.call_logger,
             db=self.db,
-        )
-        await handler.run()
-
-    # ── Classic pipeline (STT → LLM → TTS) ───────────────────────────────────
-
-    async def _run_classic_pipeline(self):
-        from backend.features.native_audio.classic_pipeline import ClassicPipelineHandler
-
-        handler = ClassicPipelineHandler(
-            agent=self.agent,
-            call=self.call,
-            websocket=self.ws,
-            conversation_history=self.conversation_history,
-            interruption_manager=self.interruption_manager,
-            emotion_engine=self.emotion_engine,
-            backchannel_engine=self.backchannel_engine,
-            speculation_engine=self.speculation_engine,
-            call_logger=self.call_logger,
-            config=self.config,
         )
         await handler.run()
 

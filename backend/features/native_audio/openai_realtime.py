@@ -2,7 +2,7 @@
 Feature 1: Native Audio Pipeline — GPT-4o Realtime API
 =========================================================
 Raw audio IN → GPT-4o Realtime WebSocket → Raw audio OUT
-Eliminates STT + TTS entirely. Latency drops ~300 ms vs classic pipeline.
+Eliminates STT + TTS entirely for ~300 ms lower latency.
 
 OpenAI Realtime API flow:
   telephony WS → [this handler] → openai WS → [this handler] → telephony WS
@@ -257,6 +257,17 @@ class OpenAIRealtimeHandler:
                 "Never randomly switch languages on your own. Be consistent."
             )
 
+        # Build transcription config: include language hint when agent uses a single non-English language
+        transcription_cfg = {"model": "whisper-1"}
+        try:
+            if len(languages) == 1:
+                lang_hint = languages[0].strip().lower()
+                if lang_hint not in _english_variants:
+                    # Use the language name as a hint (e.g., 'gujarati').
+                    transcription_cfg["language"] = lang_hint
+        except Exception:
+            pass
+
         kb_block = ""
         if (self.agent.config or {}).get("knowledge_base_ids"):
             kb_block = (
@@ -349,13 +360,16 @@ class OpenAIRealtimeHandler:
                         "format": {"type": "audio/pcmu"},
                         "turn_detection": {
                             "type": "server_vad",
-                            "threshold": 0.8,            # higher = less sensitive, ignores background noise
-                            "prefix_padding_ms": 500,    # caller must speak for 500ms before it counts
-                            "silence_duration_ms": 600,  # wait 600ms of silence before ending user turn
+                            # Increase sensitivity thresholds to reduce false positives from background
+                            "threshold": 0.95,           # higher = less sensitive, ignores background noise
+                            "prefix_padding_ms": 800,    # require longer initial speech to count
+                            "silence_duration_ms": 800,  # wait longer before ending user turn
                             "interrupt_response": False, # agent finishes speaking before responding
                             "create_response": False,    # we fire response.create manually to avoid conflicts
                         },
-                        "transcription": {"model": "whisper-1"},
+                        # Prefer a language hint for Whisper when the agent is configured to use
+                        # a single non-English language — helps reduce mis-transcription.
+                        "transcription": transcription_cfg,
                     },
                     "output": {
                         "format": {"type": "audio/pcmu"},

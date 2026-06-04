@@ -16,10 +16,10 @@ _DEFAULTS = {
     # Billing — Razorpay (India/INR)
     "RAZORPAY_KEY_ID": "",
     "RAZORPAY_KEY_SECRET": "",
-    # Billing — Stripe (International/USD)
-    "STRIPE_SECRET_KEY": "",
-    "STRIPE_WEBHOOK_SECRET": "",
-    "STRIPE_PUBLISHABLE_KEY": "",
+    "RAZORPAY_WEBHOOK_SECRET": "",
+    # When true, "Buy Now" simulates a successful payment and credits minutes
+    # WITHOUT calling Razorpay. For local testing only — turn OFF in production.
+    "BILLING_TEST_MODE": False,
     # Free-trial credits given on signup
     "FREE_TRIAL_MINUTES": 20.0,
     "ACCESS_TOKEN_EXPIRE_MINUTES": 60 * 24 * 7,  # 7 days

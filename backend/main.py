@@ -419,7 +419,7 @@ async def call_websocket(
 ):
     """
     Telephony providers (Twilio/Plivo) stream audio here.
-    AssistantManager picks native-audio or classic pipeline based on agent config.
+    AssistantManager handles the call via the native audio pipeline.
     """
     await websocket.accept()
     if not call_id:

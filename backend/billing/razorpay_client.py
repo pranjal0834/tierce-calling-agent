@@ -20,12 +20,17 @@ def _auth() -> tuple[str, str]:
     return (settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
 
 
-async def create_order(amount_paise: int, receipt: str) -> dict:
-    """Create a Razorpay order. amount_paise = INR amount × 100."""
+async def create_order(amount_paise: int, receipt: str, notes: dict | None = None) -> dict:
+    """Create a Razorpay order. amount_paise = INR amount × 100.
+
+    `notes` are echoed back on the payment/webhook payload — we stash
+    workspace_id + pack_id there so the webhook can credit the right account.
+    """
     payload = {
         "amount": amount_paise,
         "currency": "INR",
         "receipt": receipt,
+        "notes": notes or {},
     }
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -46,6 +51,15 @@ def verify_signature(order_id: str, payment_id: str, signature: str) -> bool:
         body.encode(),
         hashlib.sha256,
     ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+def verify_webhook_signature(body: bytes, signature: str) -> bool:
+    """Verify a Razorpay webhook using the X-Razorpay-Signature header."""
+    secret = settings.RAZORPAY_WEBHOOK_SECRET
+    if not secret or not signature:
+        return False
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)
 
 

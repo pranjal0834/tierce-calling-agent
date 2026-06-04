@@ -149,8 +149,8 @@ export const createRazorpayOrder = (pack_id: string) =>
   api.post("/billing/razorpay/order", { pack_id }).then((r: AxiosResponse) => r.data);
 export const verifyRazorpayPayment = (data: unknown) =>
   api.post("/billing/razorpay/verify", data).then((r: AxiosResponse) => r.data);
-export const createStripeCheckout = (pack_id: string) =>
-  api.post("/billing/stripe/checkout", { pack_id }).then((r: AxiosResponse) => r.data);
+export const testPurchase = (pack_id: string) =>
+  api.post("/billing/test/purchase", { pack_id }).then((r: AxiosResponse) => r.data);
 
 // ── Settings ───────────────────────────────────────────────────────────────────
 

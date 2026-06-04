@@ -77,11 +77,7 @@ class AgentConfig(BaseModel):
     emotional_intelligence: bool = True
     predictive_engine: bool = True
     memory_graph: bool = True
-    pipeline_mode: str = "native"           # native | classic
-    classic_stt_provider: str = "deepgram"
-    classic_tts_provider: str = "elevenlabs"
-    classic_stt_model: str = "nova-2"
-    classic_tts_voice: str = ""
+    pipeline_mode: str = "native"
     incremental_delay_ms: int = 400
     hangup_after_silence_s: int = 20
     max_call_duration_s: int = 3600

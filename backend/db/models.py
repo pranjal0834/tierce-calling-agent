@@ -25,8 +25,6 @@ class Workspace(Base):
     credits_balance: Mapped[float] = mapped_column(Float, default=0.0)   # call minutes remaining
     number_balance_inr: Mapped[float] = mapped_column(Float, default=0.0)  # number rental wallet (INR)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    stripe_customer_id: Mapped[str | None] = mapped_column(String(100))
-    stripe_subscription_id: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="workspace")
@@ -193,7 +191,7 @@ class Agent(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    pipeline_mode: Mapped[str] = mapped_column(String(20), default="native")  # native | classic
+    pipeline_mode: Mapped[str] = mapped_column(String(20), default="native")
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini-realtime-preview-2024-12-17")
     voice_id: Mapped[str | None] = mapped_column(String(100))
     config: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -500,7 +498,7 @@ class CreditTransaction(Base):
     minutes: Mapped[float] = mapped_column(Float, nullable=False)       # positive=add, negative=deduct
     balance_after: Mapped[float] = mapped_column(Float, nullable=False)
     description: Mapped[str | None] = mapped_column(String(255))
-    payment_provider: Mapped[str | None] = mapped_column(String(20))    # razorpay | stripe
+    payment_provider: Mapped[str | None] = mapped_column(String(20))    # razorpay | test
     payment_id: Mapped[str | None] = mapped_column(String(100))
     call_id: Mapped[str | None] = mapped_column(String(36))
     pack_id: Mapped[str | None] = mapped_column(String(50))             # starter|growth|pro|scale

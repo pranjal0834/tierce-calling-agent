@@ -129,12 +129,8 @@ export default function AgentViewPage() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                agent.pipeline_mode === "native" ? "bg-purple-500/20" : "bg-blue-500/20"
-              }`}>
-                {agent.pipeline_mode === "native"
-                  ? <Zap className="w-5 h-5 text-purple-400" />
-                  : <Layers className="w-5 h-5 text-blue-400" />}
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-500/20">
+                <Zap className="w-5 h-5 text-purple-400" />
               </div>
               <div>
                 <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">{agent.name}</h1>
@@ -206,10 +202,8 @@ export default function AgentViewPage() {
             <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 space-y-4">
               <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Configuration</h2>
               <Row label="Pipeline">
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                  agent.pipeline_mode === "native" ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"
-                }`}>
-                  {agent.pipeline_mode === "native" ? "Native Audio" : "Classic Pipeline"}
+                <span className="text-xs px-2 py-0.5 rounded font-medium bg-purple-500/10 text-purple-400">
+                  Native Audio
                 </span>
               </Row>
               <Row label="Model">

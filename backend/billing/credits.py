@@ -1,6 +1,6 @@
 """
 Core credit operations — add/deduct credits on a workspace.
-Both Razorpay and Stripe handlers call these after payment confirmation.
+Razorpay handlers call these after payment confirmation.
 """
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,15 +18,8 @@ PACKS_INR = {
     "scale":    {"minutes": 1250,  "price_inr": 9999,  "label": "Scale"},
 }
 
-PACKS_USD = {
-    "starter":  {"minutes": 130,   "price_usd": 15,    "label": "Starter"},
-    "growth":   {"minutes": 320,   "price_usd": 35,    "label": "Growth"},
-    "pro":      {"minutes": 735,   "price_usd": 75,    "label": "Pro"},
-    "scale":    {"minutes": 1600,  "price_usd": 149,   "label": "Scale"},
-}
-
 PAYG_RATE_INR = 10.0   # ₹ per minute
-PAYG_RATE_USD = 0.12   # $ per minute
+PAYG_RATE_USD = 0.12   # $ per minute — used for number-rental cost conversion only
 USD_TO_INR = 83.0      # fixed conversion rate for number rental pricing
 
 

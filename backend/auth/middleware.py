@@ -7,7 +7,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-# Routes that don't require any auth header
+# Routes that don't require any auth header.
+# Payment webhooks authenticate via their own signature (HMAC), not a JWT.
 _PUBLIC_PREFIXES = (
     "/auth/",
     "/health",
@@ -16,6 +17,7 @@ _PUBLIC_PREFIXES = (
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/billing/razorpay/webhook",
 )
 
 

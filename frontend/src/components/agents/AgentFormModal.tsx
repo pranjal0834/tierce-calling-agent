@@ -178,16 +178,6 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
             />
           </Field>
 
-          <Field label="Pipeline Mode">
-            <select
-              className="input-base"
-              value={form.pipeline_mode}
-              onChange={e => setForm(f => ({ ...f, pipeline_mode: e.target.value }))}
-            >
-              <option value="native">Native Audio (GPT-4o Realtime) — Recommended</option>
-              <option value="classic">Classic Pipeline (STT → LLM → TTS)</option>
-            </select>
-          </Field>
 
           <Field label="Voice">
             <VoicePicker value={form.voice_id} onChange={v => setForm(f => ({ ...f, voice_id: v }))} />

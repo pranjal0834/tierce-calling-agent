@@ -2,8 +2,7 @@
 Billing API
 POST /billing/razorpay/order        — create Razorpay order
 POST /billing/razorpay/verify       — verify payment + add credits
-POST /billing/stripe/checkout       — create Stripe checkout session
-POST /billing/stripe/webhook        — Stripe webhook (checkout.session.completed)
+POST /billing/razorpay/webhook      — Razorpay webhook (payment.captured)
 GET  /billing/balance               — workspace credit balance
 GET  /billing/transactions          — credit transaction history
 GET  /billing/packs                 — list available packs + pricing
@@ -16,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.dependencies import require_workspace
 from backend.billing.credits import (
-    PACKS_INR, PACKS_USD, PAYG_RATE_INR, PAYG_RATE_USD, USD_TO_INR,
+    PACKS_INR, PAYG_RATE_INR, USD_TO_INR,
     add_credits,
 )
 from backend.config import settings
@@ -40,10 +39,6 @@ class RazorpayVerifyRequest(BaseModel):
     pack_id: str
 
 
-class StripeCheckoutRequest(BaseModel):
-    pack_id: str
-
-
 # ── Packs (public) ────────────────────────────────────────────────────────────
 
 @router.get("/packs")
@@ -53,11 +48,50 @@ async def get_packs():
             "payg": {"rate_per_min": PAYG_RATE_INR, "currency": "INR"},
             "packs": PACKS_INR,
         },
-        "usd": {
-            "payg": {"rate_per_min": PAYG_RATE_USD, "currency": "USD"},
-            "packs": PACKS_USD,
-        },
+        # Frontend uses this to switch "Buy Now" to a simulated purchase
+        "test_mode": bool(settings.BILLING_TEST_MODE),
     }
+
+
+# ── Test mode (simulated purchase, no real payment) ─────────────────────────────
+
+@router.post("/test/purchase")
+async def test_purchase(
+    payload: RazorpayOrderRequest,
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+):
+    """
+    Simulate a successful purchase and credit minutes — no Razorpay involved.
+    Only available when BILLING_TEST_MODE is enabled.
+    """
+    if not settings.BILLING_TEST_MODE:
+        raise HTTPException(status_code=403, detail="Test billing mode is disabled")
+
+    pack = PACKS_INR.get(payload.pack_id)
+    if not pack:
+        raise HTTPException(status_code=400, detail="Invalid pack_id")
+
+    import uuid as _uuid
+    new_balance = await add_credits(
+        db=db,
+        workspace_id=workspace.id,
+        minutes=pack["minutes"],
+        tx_type="purchase",
+        description=f"[TEST] {pack['label']} pack — {pack['minutes']} min",
+        payment_provider="test",
+        payment_id=f"test_{_uuid.uuid4().hex}",
+        pack_id=payload.pack_id,
+        amount_paid=pack["price_inr"],
+        currency="INR",
+    )
+    if workspace.plan == "free":
+        workspace.plan = "starter"
+    await db.commit()
+
+    log.info("TEST purchase credited", workspace_id=workspace.id,
+             pack=payload.pack_id, minutes=pack["minutes"], new_balance=new_balance)
+    return {"status": "ok", "minutes_added": pack["minutes"], "balance": new_balance, "test": True}
 
 
 # ── Balance + transactions ────────────────────────────────────────────────────
@@ -121,7 +155,11 @@ async def create_razorpay_order(
     from backend.billing.razorpay_client import create_order
     amount_paise = int(pack["price_inr"] * 100)
     receipt = f"{workspace.id[:8]}-{payload.pack_id}"
-    order = await create_order(amount_paise, receipt)
+    # Stash identifiers in notes so the webhook can credit the right workspace
+    order = await create_order(
+        amount_paise, receipt,
+        notes={"workspace_id": workspace.id, "pack_id": payload.pack_id},
+    )
 
     return {
         "order_id": order["id"],
@@ -205,96 +243,76 @@ async def verify_razorpay_payment(
     return {"status": "ok", "minutes_added": pack["minutes"], "balance": new_balance}
 
 
-# ── Stripe ────────────────────────────────────────────────────────────────────
-
-@router.post("/stripe/checkout")
-async def create_stripe_checkout(
-    payload: StripeCheckoutRequest,
-    workspace: Workspace = Depends(require_workspace),
-):
-    if not settings.STRIPE_SECRET_KEY:
-        raise HTTPException(status_code=501, detail="Stripe not configured")
-
-    pack = PACKS_USD.get(payload.pack_id)
-    if not pack:
-        raise HTTPException(status_code=400, detail="Invalid pack_id")
-
-    from backend.billing.stripe_client import create_checkout_session
-    frontend_url = settings.FRONTEND_URL or "http://localhost:3000"
-    session = await create_checkout_session(
-        pack_id=payload.pack_id,
-        price_usd_cents=int(pack["price_usd"] * 100),
-        minutes=pack["minutes"],
-        workspace_id=workspace.id,
-        success_url=f"{frontend_url}/billing?payment=success",
-        cancel_url=f"{frontend_url}/billing?payment=cancelled",
-    )
-
-    return {"checkout_url": session["url"]}
-
-
-@router.post("/stripe/webhook")
-async def stripe_webhook(request: Request):
-    """Stripe sends this when checkout.session.completed fires."""
-    if not settings.STRIPE_WEBHOOK_SECRET:
-        raise HTTPException(status_code=501, detail="Stripe webhook not configured")
+@router.post("/razorpay/webhook")
+async def razorpay_webhook(request: Request):
+    """
+    Server-side safety net. Razorpay calls this on `payment.captured`.
+    Credits the workspace even if the customer's browser closed before the
+    frontend /verify call ran. Idempotent — never double-credits.
+    """
+    if not settings.RAZORPAY_WEBHOOK_SECRET:
+        raise HTTPException(status_code=501, detail="Razorpay webhook not configured")
 
     body = await request.body()
-    sig = request.headers.get("stripe-signature", "")
+    signature = request.headers.get("x-razorpay-signature", "")
 
-    from backend.billing.stripe_client import verify_webhook
+    from backend.billing.razorpay_client import verify_webhook_signature
+    if not verify_webhook_signature(body, signature):
+        log.warning("Razorpay webhook rejected — bad signature")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    import json as _json
     try:
-        event = verify_webhook(body, sig)
-    except ValueError as exc:
-        log.warning("Stripe webhook rejected", reason=str(exc))
-        raise HTTPException(status_code=400, detail=str(exc))
+        event = _json.loads(body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid payload")
 
-    if event.get("type") == "checkout.session.completed":
-        session = event["data"]["object"]
-        metadata = session.get("metadata", {})
-        workspace_id = metadata.get("workspace_id")
-        pack_id = metadata.get("pack_id")
-        minutes = float(metadata.get("minutes", 0))
-        payment_intent = session.get("payment_intent", "")
-        amount_total = session.get("amount_total", 0)  # cents
+    if event.get("event") != "payment.captured":
+        return {"received": True}
 
-        if not workspace_id or not minutes:
+    try:
+        payment = event["payload"]["payment"]["entity"]
+    except (KeyError, TypeError):
+        return {"received": True}
+
+    payment_id = payment.get("id")
+    notes = payment.get("notes") or {}
+    workspace_id = notes.get("workspace_id")
+    pack_id = notes.get("pack_id")
+    amount_paid = round((payment.get("amount", 0)) / 100, 2)
+
+    if not payment_id or not workspace_id or not pack_id:
+        return {"received": True}
+
+    pack = PACKS_INR.get(pack_id)
+    if not pack:
+        return {"received": True}
+
+    async with AsyncSessionLocal() as db:
+        # Idempotency — frontend /verify may have already credited this payment
+        existing = await db.execute(
+            select(CreditTransaction).where(CreditTransaction.payment_id == payment_id)
+        )
+        if existing.scalar_one_or_none():
             return {"received": True}
 
-        async with AsyncSessionLocal() as db:
-            # Idempotency check
-            existing = await db.execute(
-                select(CreditTransaction).where(
-                    CreditTransaction.payment_id == payment_intent
-                )
-            )
-            if existing.scalar_one_or_none():
-                return {"received": True}
+        await add_credits(
+            db=db,
+            workspace_id=workspace_id,
+            minutes=pack["minutes"],
+            tx_type="purchase",
+            description=f"{pack['label']} pack — {pack['minutes']} min",
+            payment_provider="razorpay",
+            payment_id=payment_id,
+            pack_id=pack_id,
+            amount_paid=amount_paid or pack["price_inr"],
+            currency="INR",
+        )
+        ws = await db.get(Workspace, workspace_id)
+        if ws and ws.plan == "free":
+            ws.plan = "starter"
+        await db.commit()
 
-            pack = PACKS_USD.get(pack_id or "")
-            await add_credits(
-                db=db,
-                workspace_id=workspace_id,
-                minutes=minutes,
-                tx_type="purchase",
-                description=f"{pack['label'] if pack else pack_id} pack — {minutes:.0f} min",
-                payment_provider="stripe",
-                payment_id=payment_intent,
-                pack_id=pack_id,
-                amount_paid=round(amount_total / 100, 2),
-                currency="USD",
-            )
-
-            # Upgrade plan from free on first purchase
-            ws = await db.get(Workspace, workspace_id)
-            if ws and ws.plan == "free":
-                ws.plan = "starter"
-
-            await db.commit()
-
-        log.info("Stripe payment credited",
-                 workspace_id=workspace_id,
-                 pack=pack_id,
-                 minutes=minutes)
-
+    log.info("Razorpay webhook credited", workspace_id=workspace_id,
+             pack=pack_id, payment_id=payment_id)
     return {"received": True}

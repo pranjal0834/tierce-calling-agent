@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
 from sqlalchemy import select, desc
@@ -39,15 +40,19 @@ async def initiate_call(
 
     phone = normalize_phone(payload.phone_number)
 
-    # Reject if an active call to this number is already in flight
+    # Reject if a *recent* active call to this number is already in flight.
+    # Only consider calls started in the last 30 min — older "active" rows are
+    # orphaned (call ended but status never finalized) and must not block forever.
+    recent_cutoff = datetime.utcnow() - timedelta(minutes=30)
     active_check = await db.execute(
         select(Call).where(
             Call.workspace_id == workspace.id,
             Call.phone_number == phone,
             Call.status.in_(["initiated", "ringing", "in_progress"]),
+            Call.created_at >= recent_cutoff,
         )
     )
-    if active_check.scalar_one_or_none():
+    if active_check.scalars().first():
         raise HTTPException(
             status_code=409,
             detail="A call to this number is already in progress.",

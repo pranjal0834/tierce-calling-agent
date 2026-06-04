@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { Zap, Layers, Lock, Eye, Pencil, Trash2 } from "lucide-react";
+import { Zap, Lock, Eye, Pencil, Trash2 } from "lucide-react";
 
 interface AgentCardProps {
   agent: any;
@@ -15,18 +15,12 @@ const featurePills: Record<string, { label: string; cls: string }> = {
 };
 
 export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
-  const isNative = agent.pipeline_mode === "native";
-
   return (
     <div className="group bg-white rounded-xl border border-neutral-200 shadow-card p-4 flex items-start justify-between hover:shadow-hover hover:border-neutral-300 transition-all duration-200">
       <div className="flex items-start gap-3.5 min-w-0">
         {/* Icon */}
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-          isNative ? "bg-violet-50" : "bg-blue-50"
-        }`}>
-          {isNative
-            ? <Zap    className="w-4 h-4 text-violet-500" />
-            : <Layers className="w-4 h-4 text-blue-500" />}
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-50">
+          <Zap className="w-4 h-4 text-violet-500" />
         </div>
 
         {/* Info */}
@@ -47,10 +41,8 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
           )}
 
           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border ${
-              isNative ? "bg-violet-50 text-violet-700 border-violet-100" : "bg-blue-50 text-blue-700 border-blue-100"
-            }`}>
-              {isNative ? "Native Audio" : "Classic Pipeline"}
+            <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-100">
+              Native Audio
             </span>
             <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
               {agent.llm_model}

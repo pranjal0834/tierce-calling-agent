@@ -82,8 +82,7 @@ class AssistantManager:
             await task_manager.run()
 
         finally:
-            # For the classic pipeline: finalize the call record.
-            # For the native pipeline: _persist_cost() already set status/duration via a
+            # _persist_cost() already set status/duration via a
             # fresh session; this commit flushes any remaining self.db changes (evaluator
             # scores, extraction merge). The 'call' object here may be the placeholder
             # (detached) for outbound calls — setting attributes on it is harmless.

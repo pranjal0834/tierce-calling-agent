@@ -26,7 +26,7 @@ async def create_agent(
         name=payload.name,
         description=payload.description,
         system_prompt=payload.system_prompt,
-        pipeline_mode=payload.pipeline_mode,
+        pipeline_mode="native",  # native audio is the only supported pipeline
         llm_model=payload.llm_model,
         voice_id=payload.voice_id,
         config=payload.config.model_dump(),
@@ -87,11 +87,14 @@ async def update_agent(
     if agent.is_personal and agent.created_by != user.id:
         raise HTTPException(status_code=403, detail="Cannot edit another member's personal agent")
     for field, value in payload.model_dump(exclude_none=True).items():
+        if field == "pipeline_mode":
+            continue  # native audio is the only supported pipeline
         if field == "config" and isinstance(value, dict):
             agent.config = {**agent.config, **value}
             flag_modified(agent, "config")
         else:
             setattr(agent, field, value)
+    agent.pipeline_mode = "native"
     await db.commit()
     return agent
 

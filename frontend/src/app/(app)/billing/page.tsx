@@ -3,12 +3,12 @@ import { useEffect, useState, useCallback } from "react";
 import {
   CreditCard, Zap, TrendingUp, RefreshCw,
   CheckCircle2, ArrowDownLeft, ArrowUpRight,
-  Globe, IndianRupee, Lock, Phone,
+  Lock, Phone,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   getBillingBalance, getBillingPacks, getBillingTransactions,
-  createRazorpayOrder, verifyRazorpayPayment, createStripeCheckout,
+  createRazorpayOrder, verifyRazorpayPayment, testPurchase,
 } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -17,7 +17,6 @@ interface Pack {
   label: string;
   minutes: number;
   price_inr?: number;
-  price_usd?: number;
 }
 
 interface Transaction {
@@ -80,11 +79,11 @@ const TX_ICONS: Record<string, React.ReactNode> = {
 export default function BillingPage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [plan, setPlan] = useState<string>("free");
-  const [packs, setPacks] = useState<{ inr: Record<string, Pack>; usd: Record<string, Pack> } | null>(null);
+  const [packs, setPacks] = useState<{ inr: Record<string, Pack> } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [currency, setCurrency] = useState<"inr" | "usd">("inr");
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
+  const [testMode, setTestMode] = useState(false);
 
   const isTrial = plan === "free";
 
@@ -97,7 +96,8 @@ export default function BillingPage() {
       ]);
       setBalance(bal.credits_balance);
       setPlan(bal.plan ?? "free");
-      setPacks({ inr: pkData.inr.packs, usd: pkData.usd.packs });
+      setPacks({ inr: pkData.inr.packs });
+      setTestMode(!!pkData.test_mode);
       setTransactions(txs);
     } catch {
       toast.error("Failed to load billing data");
@@ -107,20 +107,6 @@ export default function BillingPage() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
-
-  // Check for Stripe redirect result
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const payment = params.get("payment");
-    if (payment === "success") {
-      toast.success("Payment successful! Credits will appear shortly.");
-      window.history.replaceState({}, "", "/billing");
-      setTimeout(refresh, 3000);
-    } else if (payment === "cancelled") {
-      toast("Payment cancelled.", { icon: "ℹ️" });
-      window.history.replaceState({}, "", "/billing");
-    }
-  }, [refresh]);
 
   async function handleRazorpay(packId: string, pack: Pack) {
     setPurchasing(packId);
@@ -168,15 +154,23 @@ export default function BillingPage() {
     }
   }
 
-  async function handleStripe(packId: string) {
+  async function handleTestPurchase(packId: string, pack: Pack) {
     setPurchasing(packId);
     try {
-      const { checkout_url } = await createStripeCheckout(packId);
-      window.location.href = checkout_url;
-    } catch {
-      toast.error("Could not create checkout session");
+      const result = await testPurchase(packId);
+      setBalance(result.balance);
+      toast.success(`[Test] ${pack.minutes} minutes added!`);
+      await refresh();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Test purchase failed");
+    } finally {
       setPurchasing(null);
     }
+  }
+
+  function handleBuy(packId: string, pack: Pack) {
+    if (testMode) return handleTestPurchase(packId, pack);
+    return handleRazorpay(packId, pack);
   }
 
   if (loading) {
@@ -187,7 +181,7 @@ export default function BillingPage() {
     );
   }
 
-  const currentPacks = packs ? (currency === "inr" ? packs.inr : packs.usd) : {};
+  const currentPacks: Record<string, Pack> = packs ? packs.inr : {};
 
   return (
     <div className="space-y-6">
@@ -205,6 +199,17 @@ export default function BillingPage() {
           <RefreshCw className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Refresh</span>
         </button>
       </div>
+
+      {/* Test mode banner */}
+      {testMode && (
+        <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">
+            <span className="font-semibold">Test mode is on.</span> Clicking “Buy Now” will simulate a successful
+            payment and add credits instantly — no real money is charged. Turn off <code className="font-mono">BILLING_TEST_MODE</code> for live payments.
+          </p>
+        </div>
+      )}
 
       {/* Trial callout */}
       {isTrial && (
@@ -251,40 +256,15 @@ export default function BillingPage() {
           <TrendingUp className="w-10 h-10 text-brand-400/30 shrink-0" />
         </div>
         <div className="mt-4 pt-4 border-t border-brand-500/15 text-xs text-neutral-500">
-          Free trial: 20 minutes on signup &nbsp;·&nbsp; Pay-as-you-go: ₹10/min (INR) or $0.12/min (USD)
+          Free trial: 20 minutes on signup &nbsp;·&nbsp; Pay-as-you-go: ₹10/min
         </div>
-      </div>
-
-      {/* Currency toggle */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-neutral-500 mr-1 w-full sm:w-auto">Buy credits in:</span>
-        <button
-          onClick={() => setCurrency("inr")}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
-            currency === "inr"
-              ? "bg-brand-500 border-brand-500 text-white"
-              : "bg-white border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400"
-          }`}
-        >
-          <IndianRupee className="w-3.5 h-3.5" /> INR (Razorpay)
-        </button>
-        <button
-          onClick={() => setCurrency("usd")}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
-            currency === "usd"
-              ? "bg-brand-500 border-brand-500 text-white"
-              : "bg-white border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400"
-          }`}
-        >
-          <Globe className="w-3.5 h-3.5" /> USD (Stripe)
-        </button>
       </div>
 
       {/* Packs grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {Object.entries(currentPacks).map(([packId, pack]) => {
-          const price = currency === "inr" ? pack.price_inr : pack.price_usd;
-          const symbol = currency === "inr" ? "₹" : "$";
+          const price = pack.price_inr;
+          const symbol = "₹";
           const perMin = price != null ? (price / pack.minutes).toFixed(2) : null;
           const isPopular = packId === "growth";
           const isBuying = purchasing === packId;
@@ -318,7 +298,7 @@ export default function BillingPage() {
                 Unlocks dedicated phone numbers
               </div>
               <button
-                onClick={() => currency === "inr" ? handleRazorpay(packId, pack) : handleStripe(packId)}
+                onClick={() => handleBuy(packId, pack)}
                 disabled={isBuying}
                 className={`mt-auto w-full py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                   isPopular

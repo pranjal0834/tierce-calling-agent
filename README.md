@@ -17,7 +17,7 @@ This loses emotions, prosody, and context — and adds ~300–500ms of latency.
 ### 1. Native Audio Models
 Skip STT + TTS entirely. Raw audio in → GPT-4o Realtime → raw audio out.
 - Pipeline: `telephony → GPT-4o Realtime WebSocket → telephony`
-- Latency drops ~300ms vs. classic pipeline
+- Latency drops ~300ms vs STT→LLM→TTS pipeline
 - Voice emotions and prosody preserved natively
 
 ### 2. Emotional Intelligence Layer
@@ -69,8 +69,8 @@ Pre-recorded short fillers played while user speaks:
 | Cache       | Redis 7                             |
 | Native LLM  | OpenAI GPT-4o Realtime API          |
 | Classic LLM | OpenAI GPT-4o / fine-tuned models   |
-| STT         | Deepgram nova-2 (classic mode only) |
-| TTS         | ElevenLabs turbo (classic mode only)|
+| STT         | N/A (native audio bypasses STT)     |
+| TTS         | N/A (native audio bypasses TTS)     |
 | Emotion     | librosa (local) or Hume AI API      |
 | Telephony   | Twilio / Plivo                      |
 | Frontend    | Next.js 15 + Tailwind CSS           |
@@ -120,7 +120,7 @@ tierce-voice/
 │   │   ├── interruption_manager.py
 │   │   └── assistant_manager.py
 │   ├── features/
-│   │   ├── native_audio/         # Feature 1: GPT-4o Realtime + classic pipeline
+│   │   ├── native_audio/         # Feature 1: GPT-4o Realtime audio streaming
 │   │   ├── emotional_intelligence/  # Feature 2: paralinguistic + sentiment + fusion
 │   │   ├── feedback_loop/        # Feature 3: logger + evaluator + fine-tuner
 │   │   ├── predictive_engine/    # Feature 4: speculation + cache
@@ -148,8 +148,8 @@ See [.env.sample](.env.sample) for all required variables.
 - `TWILIO_*` or `PLIVO_*` — for making/receiving calls
 
 **Optional:**
-- `DEEPGRAM_API_KEY` — only needed if using classic pipeline mode
-- `ELEVENLABS_API_KEY` — only needed if using classic pipeline mode
+- `DEEPGRAM_API_KEY` — (not needed for native audio pipeline)
+- `ELEVENLABS_API_KEY` — (not needed for native audio pipeline)
 - `HUME_API_KEY` — for higher-quality emotion analysis (default: local librosa)
 
 ---
