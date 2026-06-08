@@ -108,7 +108,7 @@ class BackchannelEngine:
             self._initialized = True
             log.info("Backchannel: loaded pre-recorded assets", count=len(self._cached_audio))
 
-    async def initialize(self, voice: str = "alloy"):
+    async def initialize(self, voice: str = "alloy", call_id: str = ""):
         """Generate backchannel audio via OpenAI TTS using the agent's voice."""
         if self._initialized or not self.enabled:
             return
@@ -126,6 +126,11 @@ class BackchannelEngine:
                         input=text,
                         response_format="pcm",  # 24kHz 16-bit signed LE mono
                     )
+                    try:
+                        from backend.core import cost_meter
+                        cost_meter.record_tts(call_id, "backchannel_tts", len(text))
+                    except Exception:
+                        pass
                     mulaw = _pcm24k_to_mulaw8k(response.content)
                     self._cached_audio[name] = base64.b64encode(mulaw).decode()
                     generated += 1

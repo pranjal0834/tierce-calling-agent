@@ -127,6 +127,52 @@ class CallLogger:
         except Exception as exc:
             log.warning("Webhook dispatch failed", call_id=self.call_id, error=str(exc))
 
+        # Fold accumulated auxiliary AI costs into the call's total. Runs last so
+        # all during-call (speculation/sentiment/backchannel/KB) and post-call
+        # (evaluation/extraction/summary) costs are already recorded.
+        await self._persist_auxiliary_cost()
+
+    async def _persist_auxiliary_cost(self):
+        """Add auxiliary model costs to the call's cost_usd + record the breakdown.
+
+        Written through self.db — the SAME session that AssistantManager.finally
+        commits last. A previous version used a separate session, but that session's
+        write to extra_data got clobbered when self.db committed afterward with a
+        stale snapshot of the row. Using self.db makes it the single authoritative
+        writer, so the auxiliary breakdown can't be overwritten.
+        """
+        from backend.core import cost_meter
+        from backend.db.models import Call
+        from sqlalchemy.orm.attributes import flag_modified
+
+        aux = cost_meter.pop(self.call_id)
+        aux_total = round(float(aux.get("total_usd", 0.0)), 6)
+        if aux_total <= 0:
+            return
+        try:
+            call = await self.db.get(Call, self.call_id)
+            if not call:
+                return
+            # Pull the latest committed values (realtime breakdown + appointment data
+            # written by earlier fresh sessions) before merging the auxiliary in.
+            await self.db.refresh(call)
+            realtime_usd = round(call.cost_usd or 0.0, 6)
+            extra = dict(call.extra_data or {})
+            cb = dict(extra.get("cost_breakdown") or {})
+            cb["realtime_usd"] = realtime_usd
+            cb["auxiliary_usd"] = aux_total
+            cb["auxiliary"] = aux.get("components", {})
+            cb["grand_total_usd"] = round(realtime_usd + aux_total, 6)
+            extra["cost_breakdown"] = cb
+            call.extra_data = extra
+            call.cost_usd = round(realtime_usd + aux_total, 6)
+            flag_modified(call, "extra_data")
+            await self.db.commit()
+            log.info("Auxiliary cost recorded", call_id=self.call_id,
+                     auxiliary_usd=aux_total, grand_total_usd=realtime_usd + aux_total)
+        except Exception as exc:
+            log.warning("Could not persist auxiliary cost", call_id=self.call_id, error=str(exc))
+
     async def _extract_call_data(self):
         """Use GPT to extract summary, appointment details, and key info from the transcript."""
         from backend.db.database import AsyncSessionLocal
@@ -208,6 +254,12 @@ class CallLogger:
                 {"role": "user", "content": f"Transcript:\n{transcript_text}"},
             ],
         )
+
+        try:
+            from backend.core import cost_meter
+            cost_meter.record_mini(self.call_id, "summary_extraction", resp.usage)
+        except Exception:
+            pass
 
         raw = resp.choices[0].message.content or "{}"
         log.info("GPT extraction response received", call_id=self.call_id, raw_length=len(raw))

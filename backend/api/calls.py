@@ -75,6 +75,12 @@ async def initiate_call(
         )
         db.add(contact)
         await db.flush()
+    elif payload.contact_data:
+        # Enrich existing contact with any newly-provided details.
+        for field in ("name", "email", "company"):
+            val = (payload.contact_data or {}).get(field)
+            if val and str(val).strip():
+                setattr(contact, field, str(val).strip())
 
     call = Call(
         id=str(uuid.uuid4()),
@@ -226,6 +232,13 @@ async def _initiate_single_bulk_call(contact: dict, agent_id: str, workspace_id:
                 )
                 db.add(existing)
                 await db.flush()
+            else:
+                # Contact already exists — enrich it with any details from the
+                # uploaded sheet (e.g. a name we didn't have before).
+                for field in ("name", "email", "company"):
+                    val = contact.get(field)
+                    if val and str(val).strip():
+                        setattr(existing, field, str(val).strip())
 
             call = Call(
                 id=str(uuid.uuid4()),

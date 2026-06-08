@@ -16,7 +16,7 @@ TOP_K = 5
 MIN_SCORE = 0.25  # ignore weakly-related chunks
 
 
-async def search_knowledge(kb_ids: list[str], query: str, top_k: int = TOP_K) -> str:
+async def search_knowledge(kb_ids: list[str], query: str, top_k: int = TOP_K, call_id: str = "") -> str:
     """
     Embed `query`, cosine-search across all chunks in the given knowledge bases,
     and return the most relevant passages joined as plain text for the agent.
@@ -35,7 +35,7 @@ async def search_knowledge(kb_ids: list[str], query: str, top_k: int = TOP_K) ->
         if not chunks:
             return ""
 
-        qvec = np.array(await embed_query(query), dtype=np.float32)
+        qvec = np.array(await embed_query(query, call_id=call_id), dtype=np.float32)
         if qvec.size == 0:
             return ""
         qnorm = np.linalg.norm(qvec) or 1.0

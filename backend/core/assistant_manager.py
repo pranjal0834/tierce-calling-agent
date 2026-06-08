@@ -99,19 +99,49 @@ class AssistantManager:
             except Exception as exc:
                 log.warning("Final call commit failed", call_id=self.call_id, error=str(exc))
 
-            # Deduct credits for this call — retry once on transient failure
-            if call.duration_seconds and call.duration_seconds > 0:
+            # ── Billing ───────────────────────────────────────────────────────
+            # Twilio strips WS query params, so `call` above is a placeholder whose
+            # duration spans WS-connect → finalize-complete (it includes post-call
+            # AI processing time and would OVER-bill the customer). The handler
+            # switches to the real pre-created call; its id lives in the call_logger,
+            # and its duration_seconds comes straight from Twilio's CallDuration.
+            # Bill on that real, accurate duration.
+            from backend.db.database import AsyncSessionLocal
+            from backend.db.models import Call as _Call
+
+            real_call_id = self.call_id
+            try:
+                real_call_id = task_manager.call_logger.call_id or self.call_id
+            except Exception:
+                pass
+
+            bill_seconds = call.duration_seconds or 0
+            bill_workspace_id = call.workspace_id
+            try:
+                async with AsyncSessionLocal() as _rdb:
+                    rc = await _rdb.get(_Call, real_call_id)
+                    if rc:
+                        bill_workspace_id = rc.workspace_id
+                        if rc.duration_seconds and rc.duration_seconds > 0:
+                            bill_seconds = rc.duration_seconds
+                        elif rc.started_at and rc.ended_at:
+                            bill_seconds = int((rc.ended_at - rc.started_at).total_seconds())
+            except Exception as exc:
+                log.warning("Could not resolve real call for billing",
+                            call_id=real_call_id, error=str(exc))
+
+            # Deduct credits — retry once on transient failure
+            if bill_seconds and bill_seconds > 0:
                 import asyncio as _asyncio
-                from backend.db.database import AsyncSessionLocal
                 from backend.billing.credits import deduct_credits
                 for _attempt in range(2):
                     try:
                         async with AsyncSessionLocal() as billing_db:
                             await deduct_credits(
                                 db=billing_db,
-                                workspace_id=call.workspace_id,
-                                duration_seconds=call.duration_seconds,
-                                call_id=call.id,
+                                workspace_id=bill_workspace_id,
+                                duration_seconds=bill_seconds,
+                                call_id=real_call_id,
                             )
                             await billing_db.commit()
                         break  # success
@@ -121,9 +151,9 @@ class AssistantManager:
                         else:
                             log.error(
                                 "Credit deduction failed after retry — balance not updated",
-                                call_id=self.call_id,
-                                workspace_id=call.workspace_id,
-                                duration_seconds=call.duration_seconds,
+                                call_id=real_call_id,
+                                workspace_id=bill_workspace_id,
+                                duration_seconds=bill_seconds,
                                 error=str(exc),
                             )
 

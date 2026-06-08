@@ -154,6 +154,62 @@ See [.env.sample](.env.sample) for all required variables.
 
 ---
 
+## Cost Model & Tracking (COGS)
+
+Every call records its true OpenAI cost in `calls.cost_usd`, with a full per-component
+split in `calls.extra_data.cost_breakdown`. Cost is **owner-only** — surfaced in the
+super-admin panel (`/admin → Costs` rollup, and a per-call breakdown in the Calls tab);
+it is never shown to tenants.
+
+### Per-1M-token rates — `gpt-realtime-mini` (call audio)
+Configured in `backend/config.py` (`REALTIME_*`):
+
+| Bucket | Rate |
+|--------|-----:|
+| Audio input (uncached) | $10.00 |
+| Audio input (cached context) | $0.30 |
+| Audio output | $20.00 |
+| Text input (uncached) | $0.60 |
+| Text input (cached) | $0.06 |
+| Text output | $2.40 |
+
+> Full `gpt-realtime` (not used) is ~3.3× pricier: audio $32 in / $64 out.
+
+### Auxiliary models (per call, tracked via `backend/core/cost_meter.py`)
+| Component | Model | Rate (per 1M) | When |
+|-----------|-------|---------------|------|
+| Speculation predict | gpt-4.1-mini | $0.40 in / $1.60 out | per user turn |
+| Speculation pre-generate | gpt-4o-mini | $0.15 in / $0.60 out | per user turn |
+| Sentiment | gpt-4.1-mini | $0.40 / $1.60 | per turn (only if transcript passed) |
+| Evaluation | gpt-4.1-mini | $0.40 / $1.60 | post-call, per agent turn |
+| Memory extraction | gpt-4.1-mini | $0.40 / $1.60 | post-call |
+| Summary extraction | gpt-4.1-mini | $0.40 / $1.60 | post-call |
+| Backchannel TTS | tts-1 | $15 / 1M chars | call start (if not pre-cached) |
+| KB query | text-embedding-3-small | $0.02 / 1M | per KB lookup |
+| Transcription | whisper-1 | $0.006 / min of caller speech | during call |
+
+`cost_usd` (grand total) = realtime audio/text + Whisper + all auxiliary. The breakdown
+stores `realtime_usd`, `auxiliary_usd`, `grand_total_usd`, plus a per-component `auxiliary` map.
+
+### ⚠️ The cached-audio gotcha (important)
+In a multi-turn realtime call, each assistant turn re-processes the **entire prior
+conversation** as input. OpenAI bills that repeated context as **cached tokens** at the
+cached rate ($0.30/1M vs $10/1M for audio — 33× cheaper). The usage event reports the
+split in `input_token_details.cached_tokens_details` (`audio_tokens` / `text_tokens`).
+
+**Cached audio MUST be billed at the cached rate**, not the full rate. Counting all audio
+input at $10/1M overstated cost by ~73% (e.g. a call billed ~$0.29 vs OpenAI's actual ~$0.13).
+See `_persist_cost` in `backend/features/native_audio/openai_realtime.py`.
+
+### Pricing & USD→INR
+- Pack prices are set in ₹ directly (`backend/billing/credits.py` `PACKS_INR`); selling
+  price works out to **₹8–10 / ~$0.10–0.12 per minute**.
+- Typical COGS ≈ **$0.02–0.03 / min** → **~75% gross margin**.
+- `USD_TO_INR` is env-configurable (`.env`, default 95.61) — used for number-rental
+  pricing and the admin revenue/margin calc. Update it when the rate moves materially.
+
+---
+
 ## API Reference
 
 | Method | Endpoint                          | Description              |

@@ -33,6 +33,30 @@ log = structlog.get_logger()
 redis_client: aioredis.Redis | None = None
 
 
+async def _reap_orphaned_calls():
+    """
+    Mark calls stuck in an active status as ended.
+
+    A backend restart or crash kills every live WebSocket session, so any call
+    still in 'initiated'/'ringing'/'in_progress' at startup is orphaned and can
+    never finalize itself. Without this, such calls show as "live" forever in the
+    dashboard. Answered calls (started_at set) are marked completed; calls that
+    never connected are marked failed.
+    """
+    from backend.db.database import AsyncSessionLocal
+    from sqlalchemy import text
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(text("""
+            UPDATE calls
+            SET status = CASE WHEN started_at IS NOT NULL THEN 'completed' ELSE 'failed' END,
+                ended_at = COALESCE(ended_at, now())
+            WHERE status IN ('initiated', 'ringing', 'in_progress')
+        """))
+        await db.commit()
+        if result.rowcount:
+            log.info("Reaped orphaned calls on startup", count=result.rowcount)
+
+
 async def _repair_null_jsonb():
     """Fix any calls that have NULL JSONB fields and add new columns that may be missing."""
     from backend.db.database import AsyncSessionLocal
@@ -358,6 +382,7 @@ async def lifespan(app: FastAPI):
     await create_tables()
     await _repair_workspace_ids()
     await _repair_null_jsonb()
+    await _reap_orphaned_calls()
     redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
     app.state.redis = redis_client
     asyncio.create_task(_schedule_poller())

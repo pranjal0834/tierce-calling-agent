@@ -138,29 +138,136 @@ function CallAudioPlayer({ src }: { src: string }) {
 }
 
 // ── CSV / Excel parser ────────────────────────────────────────────────────────
+//
+// Designed to "just work" on whatever the user uploads — no required format.
+// Phone numbers are detected anywhere in the file (any sheet, any row, any
+// column, with or without a header row) and in any format:
+//   7572900482 · +917572900482 · +91 7572900482 · (757) 290-0482 · 757-290-0482
+// Optional name / company / email columns are picked up when a header names them.
+
+// Normalise one cell into a phone number, or return null if it doesn't look like one.
+function normalizePhone(raw: any): string | null {
+  if (raw == null) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+  // Excel may hand us scientific notation for long numbers (e.g. 9.18765E+11)
+  if (/^\d+(\.\d+)?e\+?\d+$/i.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n)) s = n.toLocaleString("fullwide", { useGrouping: false });
+  }
+  const hasPlus = s.trimStart().startsWith("+");
+  const digits = s.replace(/\D/g, "");
+  // 7–15 digits covers local (10) through full E.164 international numbers
+  if (digits.length < 7 || digits.length > 15) return null;
+  return (hasPlus ? "+" : "") + digits;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Header-keyword detection — case/spacing/punctuation insensitive.
+function classifyHeader(h: string): "phone" | "name" | "company" | "email" | null {
+  const k = h.toLowerCase().replace(/[^a-z]/g, "");
+  if (!k) return null;
+  if (k.includes("email") || k.includes("mail")) return "email";
+  if (k.includes("phone") || k.includes("mobile") || k.includes("cell") ||
+      k.includes("whatsapp") || k.includes("contactno") || k.includes("contactnumber") ||
+      k.includes("number") || k === "no" || k === "ph" || k === "tel" ||
+      k.includes("msisdn") || k.includes("contactnum")) return "phone";
+  if (k.includes("company") || k.includes("organi") || k.includes("business") ||
+      k.includes("firm")) return "company";
+  if (k.includes("name") || k.includes("customer") || k.includes("lead") ||
+      k.includes("person") || k.includes("client")) return "name";
+  return null;
+}
 
 async function parseFile(file: File): Promise<Contact[]> {
   const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer, { type: "array" });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-  return rows
-    .map((row: any) => ({
-      phone_number: String(
-        row["phone_number"] || row["phone"] || row["Phone"] ||
-        row["Phone Number"] || row["PhoneNumber"] || row["mobile"] || row["Mobile"] || ""
-      ).trim().replace(/\s/g, ""),
-      name: row["name"] || row["Name"] || row["full_name"] || row["Full Name"] || undefined,
-      company: row["company"] || row["Company"] || undefined,
-      email: row["email"] || row["Email"] || undefined,
-    }))
-    .filter(c => c.phone_number.length >= 7);
+
+  const contacts: Contact[] = [];
+  const seen = new Set<string>();
+
+  for (const sheetName of wb.SheetNames) {
+    const sheet = wb.Sheets[sheetName];
+    if (!sheet) continue;
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, {
+      header: 1, defval: "", blankrows: false,
+    });
+    if (!rows.length) continue;
+
+    // Try to identify a header row (one of the first rows that names columns
+    // but contains no phone number itself).
+    let headerIdx = -1;
+    const colKind: Record<number, ReturnType<typeof classifyHeader>> = {};
+    for (let r = 0; r < Math.min(rows.length, 5); r++) {
+      const row = rows[r] || [];
+      const hasPhone = row.some((c) => normalizePhone(c));
+      const labels = row.map((c) => classifyHeader(String(c ?? "")));
+      if (!hasPhone && labels.some((l) => l !== null)) {
+        headerIdx = r;
+        labels.forEach((l, i) => { if (l) colKind[i] = l; });
+        break;
+      }
+    }
+    const colOf = (kind: string) =>
+      Number(Object.keys(colKind).find((i) => colKind[+i] === kind) ?? -1);
+    const phoneCol = colOf("phone");
+    const nameCol = colOf("name");
+    const companyCol = colOf("company");
+    const emailCol = colOf("email");
+
+    for (let r = 0; r < rows.length; r++) {
+      if (r === headerIdx) continue;
+      const row = rows[r];
+      if (!row || !row.length) continue;
+
+      // Find the phone: prefer the detected phone column, else scan every cell.
+      let phone = phoneCol >= 0 ? normalizePhone(row[phoneCol]) : null;
+      if (!phone) {
+        for (const cell of row) { phone = normalizePhone(cell); if (phone) break; }
+      }
+      if (!phone || seen.has(phone)) continue;
+      seen.add(phone);
+
+      const pick = (col: number) =>
+        col >= 0 && row[col] != null && String(row[col]).trim()
+          ? String(row[col]).trim() : undefined;
+
+      // Email: detected column, else any cell that looks like an email.
+      let email = pick(emailCol);
+      if (!email) {
+        for (const cell of row) {
+          const v = String(cell ?? "").trim();
+          if (EMAIL_RE.test(v)) { email = v; break; }
+        }
+      }
+      // Name: detected column, else first non-phone / non-email text cell.
+      let name = pick(nameCol);
+      if (!name) {
+        for (const cell of row) {
+          const v = String(cell ?? "").trim();
+          if (v && !normalizePhone(cell) && !EMAIL_RE.test(v) && /[a-z]/i.test(v)) {
+            name = v; break;
+          }
+        }
+      }
+
+      contacts.push({ phone_number: phone, name, company: pick(companyCol), email });
+    }
+  }
+
+  return contacts;
 }
 
 function parseTextNumbers(text: string): Contact[] {
-  return text.split(/[\n,;]+/).map(s => s.trim().replace(/\s/g, ""))
-    .filter(s => s.length >= 7).map(phone => ({ phone_number: phone }));
+  const out: Contact[] = [];
+  const seen = new Set<string>();
+  for (const token of text.split(/[\n,;]+/)) {
+    const phone = normalizePhone(token);
+    if (phone && !seen.has(phone)) { seen.add(phone); out.push({ phone_number: phone }); }
+  }
+  return out;
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -992,7 +1099,7 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
                 className="w-full border-2 border-dashed border-neutral-300 hover:border-brand-500 rounded-xl p-8 text-center transition-colors group">
                 <FileSpreadsheet className="w-10 h-10 text-neutral-400 group-hover:text-brand-400 mx-auto mb-2 transition-colors" />
                 <p className="text-sm text-neutral-700">{fileName ? fileName : "Click to upload CSV or Excel file"}</p>
-                <p className="text-xs text-neutral-500 mt-1">Columns: phone_number, name, company (optional)</p>
+                <p className="text-xs text-neutral-500 mt-1">Any layout works — we auto-detect phone numbers (name, company, email picked up if present)</p>
               </button>
               {parsing && <p className="text-sm text-neutral-500 text-center mt-2">Parsing file...</p>}
             </div>

@@ -78,7 +78,7 @@ class MemoryExtractor:
         if not transcript:
             return
 
-        extraction = await self._extract(transcript)
+        extraction = await self._extract(transcript, call_id=call_id)
         if not extraction:
             return
 
@@ -109,7 +109,7 @@ class MemoryExtractor:
                 lines.append(f"{role}: {turn.transcript}")
         return "\n".join(lines)
 
-    async def _extract(self, transcript: str) -> Optional[dict]:
+    async def _extract(self, transcript: str, call_id: str = "") -> Optional[dict]:
         try:
             response = await self.client.chat.completions.create(
                 model="gpt-4.1-mini",
@@ -121,6 +121,11 @@ class MemoryExtractor:
                 temperature=0,
                 response_format={"type": "json_object"},
             )
+            try:
+                from backend.core import cost_meter
+                cost_meter.record_mini(call_id, "memory_extraction", response.usage)
+            except Exception:
+                pass
             return json.loads(response.choices[0].message.content)
         except Exception as exc:
             log.warning("Memory extraction failed", error=str(exc))

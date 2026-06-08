@@ -74,7 +74,10 @@ _WHISPER_HALLUCINATIONS = {
 }
 
 # Voicemail / answering machine indicator phrases (Whisper transcription of machine greeting)
+# Matched as case-insensitive substrings against the transcript, so keep them
+# specific enough that a real human would not say them mid-conversation.
 _VOICEMAIL_PHRASES = (
+    # ── Generic voicemail ──
     "please leave a message",
     "leave a message after the",
     "leave your message after the",
@@ -92,7 +95,71 @@ _VOICEMAIL_PHRASES = (
     "press any key to accept",     # call-screening / carrier voicemail
     "to accept this call, press",
     "this call may be recorded",
+    # ── Indian carrier / IVR greetings (Airtel, Jio, Vi, BSNL) ──
+    "the person you are trying to call",
+    "the number you are trying to call",
+    "the subscriber you are trying to call",
+    "the customer you are trying to reach",
+    "the person you have called",
+    "is not answering",
+    "is not reachable",
+    "is currently not reachable",
+    "is currently switched off",
+    "is switched off",
+    "is currently out of coverage",
+    "out of coverage area",
+    "cannot be reached at the moment",
+    "unable to take your call",
+    "unable to receive your call",
+    "please try again later",
+    "please try after some time",
+    "please call after some time",
+    "do not disturb service",        # carrier DND auto-reject message
+    "is busy on another call",
+    "all lines to this route are busy",
+    "you can record your message",
+    "record your message and",
+    "to record a message",
+    "leave a voice message",
+    "is currently engaged",
 )
+
+# OpenAI Realtime transcription accepts ISO-639-1 codes from this set only.
+# (session.audio.input.transcription.language) — anything else is rejected and
+# breaks the whole session, so we must never send an unsupported value.
+_OPENAI_TRANSCRIBE_LANGS = {
+    "af", "ar", "az", "be", "bg", "bs", "ca", "cs", "cy", "da", "de", "el", "en",
+    "es", "et", "fa", "fi", "fr", "gl", "he", "hi", "hr", "hu", "hy", "id", "is",
+    "it", "iw", "ja", "kk", "kn", "ko", "lt", "lv", "mi", "mk", "mr", "ms", "ne",
+    "nl", "no", "pl", "pt", "ro", "ru", "sk", "sl", "sr", "sv", "sw", "ta", "th",
+    "tl", "tr", "uk", "ur", "vi", "zh",
+}
+
+# Map full language names (as stored on the agent) to ISO-639-1 codes.
+_LANG_NAME_TO_CODE = {
+    "english": "en", "british english": "en", "australian english": "en",
+    "hindi": "hi", "marathi": "mr", "tamil": "ta", "kannada": "kn",
+    "urdu": "ur", "nepali": "ne", "bengali": "bn", "gujarati": "gu",
+    "punjabi": "pa", "telugu": "te", "malayalam": "ml", "odia": "or",
+    "assamese": "as", "spanish": "es", "french": "fr", "german": "de",
+    "italian": "it", "portuguese": "pt", "russian": "ru", "japanese": "ja",
+    "korean": "ko", "chinese": "zh", "mandarin": "zh", "arabic": "ar",
+    "dutch": "nl", "polish": "pl", "turkish": "tr", "indonesian": "id",
+    "vietnamese": "vi", "thai": "th", "hebrew": "he", "ukrainian": "uk",
+}
+
+
+def _transcription_language_code(name: str) -> str | None:
+    """Resolve an agent language name to a code OpenAI's transcriber supports.
+
+    Returns the ISO-639-1 code if (and only if) it's in the supported set,
+    otherwise None — in which case the caller should omit the language param
+    and let Whisper auto-detect (sending an unsupported value breaks the session).
+    """
+    key = (name or "").strip().lower()
+    code = _LANG_NAME_TO_CODE.get(key, key)  # accept either a name or a raw code
+    return code if code in _OPENAI_TRANSCRIBE_LANGS else None
+
 
 # Phrases / words that signal the caller wants to end the call
 _END_OF_CALL_PHRASES = {
@@ -150,11 +217,16 @@ class OpenAIRealtimeHandler:
         self._pending_tool_calls: dict[str, dict] = {}  # call_id → {name, args_buf}
 
         # Token usage accumulators — populated from response.done usage events
-        self._audio_in_tokens: int = 0
+        self._audio_in_tokens: int = 0        # total audio input tokens (cached + uncached)
+        self._audio_in_cached_tokens: int = 0  # subset served from cache (charged at the cached rate)
         self._audio_out_tokens: int = 0
         self._text_in_tokens: int = 0        # total text input tokens (cached + uncached)
-        self._text_in_cached_tokens: int = 0  # subset served from cache (charged at half price)
+        self._text_in_cached_tokens: int = 0  # subset served from cache (charged at the cached rate)
         self._text_out_tokens: int = 0
+        # Whisper transcription metering: sum the duration of caller speech segments
+        # (whisper-1 is billed per minute of transcribed audio).
+        self._transcription_seconds: float = 0.0
+        self._speech_seg_start: float = 0.0
 
         # Response gating — prevents "conversation_already_has_active_response" errors
         self._response_active: bool = False
@@ -170,7 +242,7 @@ class OpenAIRealtimeHandler:
         # Generate backchannel audio in the background — don't block the call start.
         # maybe_play() returns None until _initialized=True so this is safe.
         voice = self.agent.voice_id or "alloy"
-        asyncio.create_task(self.backchannel_engine.initialize(voice=voice))
+        asyncio.create_task(self.backchannel_engine.initialize(voice=voice, call_id=self.call.id))
 
         try:
             async with websockets.connect(OPENAI_WS_URL, extra_headers=headers) as openai_ws:
@@ -257,14 +329,17 @@ class OpenAIRealtimeHandler:
                 "Never randomly switch languages on your own. Be consistent."
             )
 
-        # Build transcription config: include language hint when agent uses a single non-English language
+        # Build transcription config. Only send a language hint when the agent
+        # uses a single language AND OpenAI's transcriber supports its code.
+        # An unsupported value (e.g. 'gujarati'/'gu') is rejected by the API and
+        # breaks the whole session, so in that case we omit it and let Whisper
+        # auto-detect — the Realtime model itself can still speak the language.
         transcription_cfg = {"model": "whisper-1"}
         try:
             if len(languages) == 1:
-                lang_hint = languages[0].strip().lower()
-                if lang_hint not in _english_variants:
-                    # Use the language name as a hint (e.g., 'gujarati').
-                    transcription_cfg["language"] = lang_hint
+                code = _transcription_language_code(languages[0])
+                if code and code != "en":
+                    transcription_cfg["language"] = code
         except Exception:
             pass
 
@@ -465,6 +540,7 @@ class OpenAIRealtimeHandler:
 
         elif etype == "input_audio_buffer.speech_started":
             self.im.on_user_speech_started()
+            self._speech_seg_start = time.monotonic()
             self._current_user_audio = []
             # Clear Twilio's playback buffer so agent stops speaking immediately
             await self._clear_telephony_audio()
@@ -475,6 +551,9 @@ class OpenAIRealtimeHandler:
 
         elif etype == "input_audio_buffer.speech_stopped":
             self.im.on_user_speech_ended()
+            if self._speech_seg_start > 0:
+                self._transcription_seconds += max(time.monotonic() - self._speech_seg_start, 0.0)
+                self._speech_seg_start = 0.0
             self.backchannel_engine.on_speech_end()
             if self._backchannel_task and not self._backchannel_task.done():
                 self._backchannel_task.cancel()
@@ -510,8 +589,9 @@ class OpenAIRealtimeHandler:
                 transcript=transcript,
                 latency_ms=None,
             )
-            # Check if this is a voicemail/answering machine (transcript fallback for AMD)
-            t_lower = transcript.lower()
+            # Check if this is a voicemail/answering machine (transcript fallback for AMD).
+            # Collapse repeated whitespace so "after  the   tone" still matches.
+            t_lower = " ".join(transcript.lower().split())
             if any(phrase in t_lower for phrase in _VOICEMAIL_PHRASES):
                 log.info("Voicemail detected via transcript — hanging up", transcript=transcript)
                 asyncio.create_task(self._hangup_voicemail())
@@ -527,6 +607,7 @@ class OpenAIRealtimeHandler:
                     conversation_history=self._get_conversation_snapshot(),
                     latest_user_text=transcript,
                     system_prompt=self.system_prompt,
+                    call_id=self.call.id,
                 )
             )
 
@@ -569,17 +650,31 @@ class OpenAIRealtimeHandler:
             if usage:
                 din = usage.get("input_token_details", {})
                 dout = usage.get("output_token_details", {})
-                self._audio_in_tokens  += din.get("audio_tokens", 0)
+                audio_in = din.get("audio_tokens", 0)
+                text_in = din.get("text_tokens", 0)
+                self._audio_in_tokens  += audio_in
                 self._audio_out_tokens += dout.get("audio_tokens", 0)
                 # Use text_tokens from details; fall back to (total - audio) only when details
                 # are absent. Never use raw input_tokens/output_tokens as text — they include
                 # audio tokens and would cause double-counting.
                 if din:
-                    self._text_in_tokens += din.get("text_tokens", 0)
-                    # cached_tokens = portion of input served from cache (charged at half price)
-                    self._text_in_cached_tokens += din.get("cached_tokens", 0)
+                    self._text_in_tokens += text_in
+                    # Split the cached input into its audio + text parts so each is billed at
+                    # the cached rate. cached_tokens is the TOTAL (audio+text) cached; the
+                    # per-modality split is in cached_tokens_details. Critically, cached audio
+                    # must NOT be counted as full-price audio — that was the main overcharge.
+                    ctd = din.get("cached_tokens_details") or {}
+                    if ctd:
+                        self._audio_in_cached_tokens += ctd.get("audio_tokens", 0)
+                        self._text_in_cached_tokens  += ctd.get("text_tokens", 0)
+                    else:
+                        # No per-modality split: attribute cached to text first, remainder to audio.
+                        cached = din.get("cached_tokens", 0)
+                        c_text = min(cached, text_in)
+                        self._text_in_cached_tokens  += c_text
+                        self._audio_in_cached_tokens += min(max(cached - c_text, 0), audio_in)
                 else:
-                    self._text_in_tokens += max(0, usage.get("input_tokens", 0) - din.get("audio_tokens", 0))
+                    self._text_in_tokens += max(0, usage.get("input_tokens", 0) - audio_in)
                 if dout:
                     self._text_out_tokens += dout.get("text_tokens", 0)
                 else:
@@ -700,7 +795,7 @@ class OpenAIRealtimeHandler:
 
     async def _analyze_emotion(self, audio_chunks: list[bytes]):
         combined = b"".join(audio_chunks)
-        emotion_state = await self.emotion_engine.analyze(audio_bytes=combined)
+        emotion_state = await self.emotion_engine.analyze(audio_bytes=combined, call_id=self.call.id)
         # Update latest call emotion profile (best-effort, not blocking call)
         if emotion_state:
             self.call.emotion_profile = {
@@ -798,28 +893,43 @@ class OpenAIRealtimeHandler:
         from backend.db.database import AsyncSessionLocal
 
         try:
-            audio_in_cost  = self._audio_in_tokens  * settings.REALTIME_AUDIO_IN_COST_PER_M  / 1_000_000
+            # Audio input: cached context tokens are billed at the much cheaper cached rate
+            # ($0.30/1M vs $10/1M). In a multi-turn call most audio input is cached, so NOT
+            # discounting it overstates cost massively.
+            audio_in_uncached = max(self._audio_in_tokens - self._audio_in_cached_tokens, 0)
+            audio_in_cost = (
+                audio_in_uncached              * settings.REALTIME_AUDIO_IN_COST_PER_M        / 1_000_000
+                + self._audio_in_cached_tokens * settings.REALTIME_AUDIO_IN_CACHED_COST_PER_M / 1_000_000
+            )
             audio_out_cost = self._audio_out_tokens * settings.REALTIME_AUDIO_OUT_COST_PER_M / 1_000_000
-            # Cached text tokens are charged at half price ($0.30/1M vs $0.60/1M).
-            # The API reports cached_tokens inside input_token_details; we track them separately.
-            text_in_uncached = self._text_in_tokens - self._text_in_cached_tokens
+            # Cached text tokens are charged at the cached rate ($0.30/1M vs $0.60/1M).
+            text_in_uncached = max(self._text_in_tokens - self._text_in_cached_tokens, 0)
             text_in_cost = (
                 text_in_uncached           * settings.REALTIME_TEXT_IN_COST_PER_M        / 1_000_000
                 + self._text_in_cached_tokens * settings.REALTIME_TEXT_IN_CACHED_COST_PER_M / 1_000_000
             )
             text_out_cost  = self._text_out_tokens  * settings.REALTIME_TEXT_OUT_COST_PER_M  / 1_000_000
-            total = audio_in_cost + audio_out_cost + text_in_cost + text_out_cost
+            # Whisper transcription of caller speech (whisper-1, billed per minute).
+            # Flush any speech segment still open when the call ended.
+            if self._speech_seg_start > 0:
+                self._transcription_seconds += max(time.monotonic() - self._speech_seg_start, 0.0)
+                self._speech_seg_start = 0.0
+            transcription_cost = self._transcription_seconds / 60.0 * settings.WHISPER_COST_PER_MIN
+            total = audio_in_cost + audio_out_cost + text_in_cost + text_out_cost + transcription_cost
 
             cost_breakdown = {
-                "audio_in_tokens":       self._audio_in_tokens,
-                "audio_out_tokens":      self._audio_out_tokens,
+                "audio_in_tokens":        self._audio_in_tokens,
+                "audio_in_cached_tokens": self._audio_in_cached_tokens,
+                "audio_out_tokens":       self._audio_out_tokens,
                 "text_in_tokens":        self._text_in_tokens,
                 "text_in_cached_tokens": self._text_in_cached_tokens,
                 "text_out_tokens":       self._text_out_tokens,
+                "transcription_seconds": round(self._transcription_seconds, 1),
                 "audio_in_usd":          round(audio_in_cost, 6),
                 "audio_out_usd":         round(audio_out_cost, 6),
                 "text_in_usd":           round(text_in_cost, 6),
                 "text_out_usd":          round(text_out_cost, 6),
+                "transcription_usd":     round(transcription_cost, 6),
                 "total_usd":             round(total, 6),
             }
 
@@ -912,7 +1022,7 @@ class OpenAIRealtimeHandler:
             from backend.knowledge.retrieval import search_knowledge
             kb_ids = (self.agent.config or {}).get("knowledge_base_ids") or []
             query = arguments.get("query", "")
-            passages = await search_knowledge(kb_ids, query)
+            passages = await search_knowledge(kb_ids, query, call_id=self.call.id)
             result = passages or "No relevant information was found in the knowledge base for that question."
             log.info("KB query", query=query[:80], found=bool(passages))
         else:

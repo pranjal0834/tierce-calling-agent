@@ -20,6 +20,9 @@ _DEFAULTS = {
     # When true, "Buy Now" simulates a successful payment and credits minutes
     # WITHOUT calling Razorpay. For local testing only — turn OFF in production.
     "BILLING_TEST_MODE": False,
+    # USD→INR conversion rate (used for number-rental pricing + admin revenue calc).
+    # Update this when the exchange rate moves materially.
+    "USD_TO_INR": 95.61,
     # Free-trial credits given on signup
     "FREE_TRIAL_MINUTES": 20.0,
     "ACCESS_TOKEN_EXPIRE_MINUTES": 60 * 24 * 7,  # 7 days
@@ -36,14 +39,26 @@ _DEFAULTS = {
     "OPENAI_REALTIME_MODEL": "gpt-realtime-mini",
     "GEMINI_LIVE_MODEL": "gemini-2.0-flash-live-001",
     # OpenAI Realtime API pricing (USD per 1M tokens) — gpt-realtime-mini rates
-    "REALTIME_AUDIO_IN_COST_PER_M":          10.0,   # $10   per 1M audio input tokens
+    "REALTIME_AUDIO_IN_COST_PER_M":          10.0,   # $10   per 1M audio input tokens (uncached)
+    "REALTIME_AUDIO_IN_CACHED_COST_PER_M":    0.30,  # $0.30 per 1M audio input tokens (cached context)
     "REALTIME_AUDIO_OUT_COST_PER_M":         20.0,   # $20   per 1M audio output tokens
     "REALTIME_TEXT_IN_COST_PER_M":            0.60,  # $0.60 per 1M text input tokens (uncached)
-    "REALTIME_TEXT_IN_CACHED_COST_PER_M":     0.30,  # $0.30 per 1M text input tokens (cached — half price)
+    "REALTIME_TEXT_IN_CACHED_COST_PER_M":     0.06,  # $0.06 per 1M text input tokens (cached)
     "REALTIME_TEXT_OUT_COST_PER_M":           2.40,  # $2.40 per 1M text output tokens
     # gpt-4.1-mini pricing (used by evaluator, sentiment, extractor, speculator, call_logger)
-    "LLM_MINI_IN_COST_PER_M":   0.40,
-    "LLM_MINI_OUT_COST_PER_M":  1.60,
+    "LLM_MINI_IN_COST_PER_M":        0.40,
+    "LLM_MINI_IN_CACHED_COST_PER_M": 0.10,   # cached input is 1/4 price
+    "LLM_MINI_OUT_COST_PER_M":       1.60,
+    # gpt-4o-mini pricing (speculation pre-generation uses FINE_TUNE_BASE_MODEL = gpt-4o-mini)
+    "LLM_4O_MINI_IN_COST_PER_M":        0.15,
+    "LLM_4O_MINI_IN_CACHED_COST_PER_M": 0.075,
+    "LLM_4O_MINI_OUT_COST_PER_M":       0.60,
+    # whisper-1 transcription — billed per minute of audio
+    "WHISPER_COST_PER_MIN":     0.006,
+    # tts-1 (backchannel fillers) — billed per 1M characters
+    "TTS_COST_PER_M_CHARS":     15.0,
+    # text-embedding-3-small (knowledge base) — billed per 1M tokens
+    "EMBED_COST_PER_M":         0.02,
 }
 
 

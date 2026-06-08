@@ -57,6 +57,7 @@ class SpeculationEngine:
         latest_user_text: str,
         system_prompt: str,
         top_k: int = 3,
+        call_id: str = "",
     ):
         """Called after agent responds. Pre-generates responses for likely next turns."""
         if not self.enabled or not conversation_history:
@@ -68,6 +69,7 @@ class SpeculationEngine:
             predicted_texts = await self._predict_user_responses(
                 conversation_history=conversation_history,
                 k=top_k,
+                call_id=call_id,
             )
             if not predicted_texts:
                 return
@@ -79,6 +81,7 @@ class SpeculationEngine:
                     predicted_user_text=text,
                     context_hash=context_hash,
                     system_prompt=system_prompt,
+                    call_id=call_id,
                 )
                 for text in predicted_texts
             ]
@@ -145,7 +148,7 @@ class SpeculationEngine:
     # ── Internal ─────────────────────────────────────────────────────────────
 
     async def _predict_user_responses(
-        self, conversation_history: list[dict], k: int
+        self, conversation_history: list[dict], k: int, call_id: str = ""
     ) -> list[str]:
         messages = [
             {"role": "system", "content": _PREDICT_PROMPT.format(k=k)},
@@ -157,6 +160,11 @@ class SpeculationEngine:
             max_tokens=150,
             temperature=0.7,
         )
+        try:
+            from backend.core import cost_meter
+            cost_meter.record_mini(call_id, "speculation_predict", response.usage)
+        except Exception:
+            pass
         content = response.choices[0].message.content.strip()
         try:
             predictions = json.loads(content)
@@ -170,6 +178,7 @@ class SpeculationEngine:
         predicted_user_text: str,
         context_hash: str,
         system_prompt: str,
+        call_id: str = "",
     ):
         """Generate and cache the agent's response for a predicted user turn."""
         simulated_history = [
@@ -183,6 +192,11 @@ class SpeculationEngine:
                 max_tokens=200,
                 temperature=0.7,
             )
+            try:
+                from backend.core import cost_meter
+                cost_meter.record_4o_mini(call_id, "speculation_pregenerate", response.usage)
+            except Exception:
+                pass
             agent_response = response.choices[0].message.content.strip()
             cache_key = self._make_key(context_hash, predicted_user_text)
             await self.redis.setex(cache_key, CACHE_TTL_SECONDS, agent_response)

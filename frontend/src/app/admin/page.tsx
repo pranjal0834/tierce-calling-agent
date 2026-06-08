@@ -43,6 +43,24 @@ interface CallRow {
   id: string; workspace_name: string; phone_number: string;
   direction: string; status: string; duration_seconds?: number;
   pipeline_mode: string; created_at: string;
+  cost_usd?: number | null;
+  cost_breakdown?: {
+    realtime_usd?: number | null; auxiliary_usd?: number | null;
+    audio_in_usd?: number | null; audio_out_usd?: number | null;
+    text_in_usd?: number | null; text_out_usd?: number | null;
+    transcription_usd?: number | null;
+    auxiliary?: Record<string, { usd?: number; calls?: number }>;
+  };
+}
+interface CostData {
+  range_days: number;
+  usd_to_inr: number;
+  total_calls: number; total_minutes: number;
+  total_cost_usd: number; realtime_cost_usd: number; auxiliary_cost_usd: number;
+  avg_cost_per_call_usd: number; avg_cost_per_min_usd: number;
+  revenue_usd: number; gross_margin_usd: number;
+  auxiliary_components: { name: string; usd: number; calls: number }[];
+  top_workspaces: { workspace: string; cost_usd: number; calls: number }[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -260,6 +278,79 @@ function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
   );
 }
 
+// ── Admin call row with expandable cost breakdown ─────────────────────────────
+
+function CostLine({ label, v, bold, accent, sub }: { label: string; v?: number | null; bold?: boolean; accent?: boolean; sub?: string }) {
+  return (
+    <div className="flex items-center justify-between text-xs py-0.5">
+      <span className={bold ? "text-neutral-700 font-medium" : "text-neutral-500"}>
+        {label}{sub && <span className="text-neutral-400 ml-1">{sub}</span>}
+      </span>
+      <span className={accent ? "text-yellow-600 font-semibold" : bold ? "text-neutral-900 font-medium" : "text-neutral-600"}>
+        {v != null ? `$${Number(v).toFixed(4)}` : "—"}
+      </span>
+    </div>
+  );
+}
+
+function AdminCallRow({ c }: { c: CallRow }) {
+  const [open, setOpen] = useState(false);
+  const cb = c.cost_breakdown;
+  const hasCost = c.cost_usd != null && c.cost_usd > 0;
+  const auxEntries = cb?.auxiliary ? Object.entries(cb.auxiliary) : [];
+
+  return (
+    <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-4 px-5 py-3">
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "in_progress" ? "bg-green-400 animate-pulse" : c.status === "completed" ? "bg-neutral-500" : "bg-yellow-400"}`} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-neutral-900">{c.phone_number}</p>
+          <p className="text-xs text-neutral-500">{c.workspace_name} · {c.pipeline_mode}</p>
+        </div>
+        <span className="text-xs text-neutral-400 hidden sm:inline">{c.direction}</span>
+        {c.duration_seconds ? <span className="text-xs text-neutral-500">{c.duration_seconds}s</span> : null}
+        {hasCost
+          ? <span className="text-xs font-medium text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-1.5 py-0.5">${c.cost_usd!.toFixed(4)}</span>
+          : <span className="text-xs text-neutral-300">—</span>}
+        <span className={`text-xs px-2 py-0.5 rounded-full border ${c.status === "completed" ? "text-green-600 border-green-500/20 bg-green-100" : "text-neutral-600 border-neutral-200 bg-neutral-100"}`}>{c.status}</span>
+        <span className="text-xs text-neutral-600 hidden md:inline">{fmt(c.created_at)}</span>
+        <button
+          onClick={() => setOpen(o => !o)}
+          disabled={!hasCost}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 disabled:opacity-30 disabled:cursor-default flex-shrink-0"
+          title={hasCost ? "Cost breakdown" : "No cost recorded"}
+        >
+          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {open && hasCost && cb && (
+        <div className="border-t border-neutral-100 bg-neutral-50 px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+          <div>
+            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">Realtime audio</p>
+            <CostLine label="Audio in" v={cb.audio_in_usd} />
+            <CostLine label="Audio out" v={cb.audio_out_usd} />
+            <CostLine label="Text in" v={cb.text_in_usd} />
+            <CostLine label="Text out" v={cb.text_out_usd} />
+            <CostLine label="Transcription (Whisper)" v={cb.transcription_usd} />
+            <CostLine label="Realtime subtotal" v={cb.realtime_usd} bold />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-2">Auxiliary models</p>
+            {auxEntries.length === 0
+              ? <p className="text-xs text-neutral-400">No auxiliary cost recorded (call predates cost tracking).</p>
+              : auxEntries.map(([name, comp]) => (
+                  <CostLine key={name} label={name.replace(/_/g, " ")} v={comp?.usd} sub={comp?.calls ? `${comp.calls}×` : undefined} />
+                ))}
+            <CostLine label="Auxiliary subtotal" v={cb.auxiliary_usd} bold />
+            <CostLine label="Grand total" v={c.cost_usd} bold accent />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Delete confirmation modal ─────────────────────────────────────────────────
 
 function DeleteConfirmModal({ email, onConfirm, onCancel, loading }: {
@@ -447,7 +538,10 @@ export default function AdminPage() {
   const [workspaces, setWorkspaces] = useState<WsRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [calls, setCalls] = useState<CallRow[]>([]);
-  const [tab, setTab] = useState<"workspaces" | "users" | "calls">("workspaces");
+  const [costs, setCosts] = useState<CostData | null>(null);
+  const [costDays, setCostDays] = useState(30);
+  const [costLoading, setCostLoading] = useState(false);
+  const [tab, setTab] = useState<"workspaces" | "users" | "calls" | "costs">("workspaces");
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
@@ -487,11 +581,19 @@ export default function AdminPage() {
     }
   };
 
+  const loadCosts = useCallback(async (days: number) => {
+    setCostLoading(true);
+    try { setCosts(await adminGet(`/costs?days=${days}`)); }
+    catch { toast.error("Failed to load cost analytics"); }
+    finally { setCostLoading(false); }
+  }, []);
+
   async function loadTab(t: typeof tab) {
     setTab(t);
     try {
       if (t === "users" && users.length === 0) setUsers(await adminGet("/users"));
       if (t === "calls" && calls.length === 0) setCalls(await adminGet("/calls"));
+      if (t === "costs" && !costs) loadCosts(costDays);
     } catch { toast.error("Failed to load data"); }
   }
 
@@ -546,7 +648,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="flex gap-2 border-b border-neutral-200 pb-4">
-          {(["workspaces", "users", "calls"] as const).map(t => (
+          {(["workspaces", "users", "calls", "costs"] as const).map(t => (
             <button key={t} onClick={() => loadTab(t)}
               className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${tab === t ? "bg-brand-100 text-brand-600 border border-brand-200" : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50"}`}
             >
@@ -599,20 +701,95 @@ export default function AdminPage() {
         {/* Calls tab */}
         {tab === "calls" && (
           <div className="space-y-2">
-            <p className="text-sm text-neutral-500 mb-3">Last {calls.length} calls across all workspaces</p>
+            <p className="text-sm text-neutral-500 mb-3">Last {calls.length} calls across all workspaces · tap a row to see its cost breakdown</p>
             {calls.map(c => (
-              <div key={c.id} className="flex items-center gap-4 bg-white border border-neutral-200 rounded-xl px-5 py-3">
-                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "in_progress" ? "bg-green-400 animate-pulse" : c.status === "completed" ? "bg-neutral-500" : "bg-yellow-400"}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-neutral-900">{c.phone_number}</p>
-                  <p className="text-xs text-neutral-500">{c.workspace_name} · {c.pipeline_mode}</p>
-                </div>
-                <span className="text-xs text-neutral-400 hidden sm:inline">{c.direction}</span>
-                {c.duration_seconds && <span className="text-xs text-neutral-500">{c.duration_seconds}s</span>}
-                <span className={`text-xs px-2 py-0.5 rounded-full border ${c.status === "completed" ? "text-green-600 border-green-500/20 bg-green-100" : "text-neutral-600 border-neutral-700 bg-neutral-100"}`}>{c.status}</span>
-                <span className="text-xs text-neutral-600 hidden md:inline">{fmt(c.created_at)}</span>
-              </div>
+              <AdminCallRow key={c.id} c={c} />
             ))}
+          </div>
+        )}
+
+        {/* Costs tab — owner only (COGS) */}
+        {tab === "costs" && (
+          <div className="space-y-5">
+            {/* Range selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-neutral-500">Period:</span>
+              {[7, 30, 90].map(d => (
+                <button key={d}
+                  onClick={() => { setCostDays(d); loadCosts(d); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${costDays === d ? "bg-brand-100 text-brand-600 border-brand-200" : "text-neutral-600 border-neutral-200 hover:bg-neutral-50"}`}
+                >
+                  Last {d} days
+                </button>
+              ))}
+              {costs && (
+                <span className="ml-auto text-xs text-neutral-500 bg-neutral-100 border border-neutral-200 rounded-lg px-2.5 py-1">
+                  Rate: <span className="font-medium text-neutral-700">$1 = ₹{costs.usd_to_inr.toFixed(2)}</span>
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-neutral-400">AI cost of goods sold — not shown to tenants</p>
+
+            {costLoading || !costs ? (
+              <div className="flex justify-center py-10"><RefreshCw className="w-5 h-5 text-neutral-400 animate-spin" /></div>
+            ) : (
+              <>
+                {/* Headline KPIs */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                  <KPI label="Total AI Cost" value={`$${costs.total_cost_usd.toFixed(2)}`} icon={DollarSign} color="text-yellow-500" sub={`${costs.total_calls} calls · ${costs.total_minutes} min`} />
+                  <KPI label="Realtime Audio" value={`$${costs.realtime_cost_usd.toFixed(2)}`} icon={Phone} color="text-brand-500" sub={costs.total_cost_usd > 0 ? `${Math.round(costs.realtime_cost_usd / costs.total_cost_usd * 100)}% of cost` : "—"} />
+                  <KPI label="Auxiliary AI" value={`$${costs.auxiliary_cost_usd.toFixed(2)}`} icon={Zap} color="text-purple-500" sub={costs.total_cost_usd > 0 ? `${Math.round(costs.auxiliary_cost_usd / costs.total_cost_usd * 100)}% of cost` : "—"} />
+                  <KPI label="Cost / Min" value={`$${costs.avg_cost_per_min_usd.toFixed(4)}`} icon={Activity} color="text-cyan-500" />
+                  <KPI label="Cost / Call" value={`$${costs.avg_cost_per_call_usd.toFixed(4)}`} icon={TrendingUp} color="text-pink-500" />
+                  <KPI label="Gross Margin" value={`$${costs.gross_margin_usd.toFixed(2)}`} icon={DollarSign} color={costs.gross_margin_usd >= 0 ? "text-green-500" : "text-red-500"} sub={`rev ≈ $${costs.revenue_usd.toFixed(2)}`} />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Auxiliary breakdown */}
+                  <div className="bg-white border border-neutral-200 rounded-xl p-5">
+                    <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-4">Auxiliary cost by component</p>
+                    {costs.auxiliary_components.length === 0 ? (
+                      <p className="text-sm text-neutral-500">No auxiliary costs recorded in this period.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {costs.auxiliary_components.map(c => {
+                          const pct = costs.auxiliary_cost_usd > 0 ? (c.usd / costs.auxiliary_cost_usd * 100) : 0;
+                          return (
+                            <div key={c.name}>
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <span className="text-neutral-700">{c.name.replace(/_/g, " ")}</span>
+                                <span className="text-neutral-500">${c.usd.toFixed(4)} <span className="text-neutral-400">({c.calls} calls)</span></span>
+                              </div>
+                              <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-purple-400 rounded-full" style={{ width: `${Math.max(pct, 1)}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Top workspaces by cost */}
+                  <div className="bg-white border border-neutral-200 rounded-xl p-5">
+                    <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wide mb-4">Top workspaces by AI cost</p>
+                    {costs.top_workspaces.length === 0 ? (
+                      <p className="text-sm text-neutral-500">No costed calls in this period.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {costs.top_workspaces.map((w, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className="text-neutral-700 truncate flex-1">{w.workspace}</span>
+                            <span className="text-neutral-400 mx-3">{w.calls} calls</span>
+                            <span className="text-neutral-900 font-medium">${w.cost_usd.toFixed(4)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

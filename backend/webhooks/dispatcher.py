@@ -73,7 +73,7 @@ async def dispatch(workspace_id: str, event_type: str, payload: dict) -> None:
     if delivery_ids:
         log.info("Webhook dispatch scheduled",
                  workspace_id=workspace_id,
-                 event=event_type,
+                 event_type=event_type,
                  count=len(delivery_ids))
 
 

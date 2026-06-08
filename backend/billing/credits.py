@@ -5,6 +5,7 @@ Razorpay handlers call these after payment confirmation.
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import settings
 from backend.db.models import CreditTransaction, Workspace
 
 log = structlog.get_logger()
@@ -20,7 +21,9 @@ PACKS_INR = {
 
 PAYG_RATE_INR = 10.0   # ₹ per minute
 PAYG_RATE_USD = 0.12   # $ per minute — used for number-rental cost conversion only
-USD_TO_INR = 83.0      # fixed conversion rate for number rental pricing
+# USD→INR rate — configurable via the USD_TO_INR env var (default 95.61).
+# Used for number-rental pricing and the admin revenue calculation.
+USD_TO_INR = float(settings.USD_TO_INR)
 
 
 async def add_credits(

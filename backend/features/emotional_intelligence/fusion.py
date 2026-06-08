@@ -110,6 +110,7 @@ class EmotionFusionEngine:
         audio_bytes: bytes,
         transcript: Optional[str] = None,
         sample_rate: int = 8000,
+        call_id: str = "",
     ) -> dict:
         """
         Full fusion pipeline. Returns EmotionState.to_dict() for storage.
@@ -125,7 +126,7 @@ class EmotionFusionEngine:
         sentiment_task = None
         if transcript:
             sentiment_task = asyncio.create_task(
-                self.sentiment.classify(transcript)
+                self.sentiment.classify(transcript, call_id=call_id)
             )
 
         acoustic = await acoustic_task

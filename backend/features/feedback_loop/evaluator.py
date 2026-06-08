@@ -131,6 +131,11 @@ class CallEvaluator:
                 temperature=0,
                 response_format={"type": "json_object"},
             )
+            try:
+                from backend.core import cost_meter
+                cost_meter.record_mini(self.call_id, "evaluation", response.usage)
+            except Exception:
+                pass
             return json.loads(response.choices[0].message.content)
         except Exception as exc:
             log.warning("Turn evaluation failed", error=str(exc))

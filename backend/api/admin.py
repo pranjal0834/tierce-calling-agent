@@ -9,6 +9,7 @@ POST /api/admin/workspaces/{id}/credits      — manually add/deduct credits
 PUT  /api/admin/workspaces/{id}/status       — enable / disable workspace
 GET  /api/admin/users                        — all users across platform
 GET  /api/admin/calls                        — recent calls across platform
+GET  /api/admin/costs                         — AI cost (COGS) rollup — owner only
 """
 from datetime import datetime, timedelta
 
@@ -312,6 +313,104 @@ async def delete_user(
              workspace_deleted=is_sole_member, admin=admin.email)
 
 
+# ── Cost analytics (COGS) — owner only ────────────────────────────────────────
+
+@router.get("/costs")
+async def cost_analytics(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """
+    Platform AI cost rollup over the last `days`. Splits the realtime audio cost
+    from the auxiliary models (speculation, sentiment, evaluation, extraction,
+    summary, TTS, embeddings) and compares against approximate revenue.
+    Visible to super admins only — never exposed to tenants.
+    """
+    days = max(int(days or 30), 1)
+    since = datetime.utcnow() - timedelta(days=days)
+
+    rows = (await db.execute(
+        select(Call.workspace_id, Call.cost_usd, Call.duration_seconds, Call.extra_data)
+        .where(Call.created_at >= since, Call.cost_usd.isnot(None))
+    )).all()
+
+    total_calls = 0
+    total_seconds = 0
+    total_cost = 0.0
+    total_aux = 0.0
+    components: dict[str, dict] = {}
+    ws_cost: dict[str, float] = {}
+    ws_calls: dict[str, int] = {}
+
+    for ws_id, cost_usd, duration, extra in rows:
+        cost_usd = float(cost_usd or 0.0)
+        if cost_usd <= 0:
+            continue
+        total_calls += 1
+        total_seconds += int(duration or 0)
+        total_cost += cost_usd
+        cb = (extra or {}).get("cost_breakdown") or {}
+        aux = float(cb.get("auxiliary_usd") or 0.0)
+        total_aux += aux
+        for name, comp in (cb.get("auxiliary") or {}).items():
+            c = components.setdefault(name, {"usd": 0.0, "calls": 0})
+            c["usd"] += float((comp or {}).get("usd") or 0.0)
+            c["calls"] += int((comp or {}).get("calls") or 0)
+        ws_cost[ws_id] = ws_cost.get(ws_id, 0.0) + cost_usd
+        ws_calls[ws_id] = ws_calls.get(ws_id, 0) + 1
+
+    realtime = total_cost - total_aux
+    total_minutes = round(total_seconds / 60.0, 1)
+
+    # Approximate revenue (USD) from purchases in the same window.
+    from backend.billing.credits import USD_TO_INR
+    rev_rows = (await db.execute(
+        select(CreditTransaction.amount_paid, CreditTransaction.currency).where(
+            CreditTransaction.type == "purchase",
+            CreditTransaction.amount_paid.isnot(None),
+            CreditTransaction.created_at >= since,
+        )
+    )).all()
+    revenue_usd = 0.0
+    for amt, cur in rev_rows:
+        amt = float(amt or 0.0)
+        revenue_usd += amt / USD_TO_INR if (cur or "INR") == "INR" else amt
+
+    # Resolve workspace names for the top spenders.
+    ws_names: dict[str, str] = {}
+    for ws_id in ws_cost:
+        ws = await db.get(Workspace, ws_id)
+        ws_names[ws_id] = ws.name if ws else "—"
+    top_workspaces = sorted(
+        ({"workspace": ws_names[w], "cost_usd": round(c, 4), "calls": ws_calls[w]}
+         for w, c in ws_cost.items()),
+        key=lambda x: x["cost_usd"], reverse=True,
+    )[:10]
+
+    comp_list = sorted(
+        ({"name": k, "usd": round(v["usd"], 4), "calls": v["calls"]}
+         for k, v in components.items()),
+        key=lambda x: x["usd"], reverse=True,
+    )
+
+    return {
+        "range_days": days,
+        "usd_to_inr": USD_TO_INR,
+        "total_calls": total_calls,
+        "total_minutes": total_minutes,
+        "total_cost_usd": round(total_cost, 4),
+        "realtime_cost_usd": round(realtime, 4),
+        "auxiliary_cost_usd": round(total_aux, 4),
+        "avg_cost_per_call_usd": round(total_cost / total_calls, 4) if total_calls else 0.0,
+        "avg_cost_per_min_usd": round(total_cost / total_minutes, 4) if total_minutes else 0.0,
+        "revenue_usd": round(revenue_usd, 2),
+        "gross_margin_usd": round(revenue_usd - total_cost, 2),
+        "auxiliary_components": comp_list,
+        "top_workspaces": top_workspaces,
+    }
+
+
 # ── Calls ─────────────────────────────────────────────────────────────────────
 
 @router.get("/calls")
@@ -328,6 +427,7 @@ async def list_all_calls(
     rows = []
     for c in calls:
         ws = await db.get(Workspace, c.workspace_id)
+        cb = (c.extra_data or {}).get("cost_breakdown") or {}
         rows.append({
             "id": c.id,
             "workspace_name": ws.name if ws else "—",
@@ -337,5 +437,16 @@ async def list_all_calls(
             "duration_seconds": c.duration_seconds,
             "pipeline_mode": c.pipeline_mode,
             "created_at": c.created_at.isoformat() if c.created_at else None,
+            "cost_usd": round(float(c.cost_usd), 6) if c.cost_usd is not None else None,
+            "cost_breakdown": {
+                "realtime_usd": cb.get("realtime_usd"),
+                "auxiliary_usd": cb.get("auxiliary_usd"),
+                "audio_in_usd": cb.get("audio_in_usd"),
+                "audio_out_usd": cb.get("audio_out_usd"),
+                "text_in_usd": cb.get("text_in_usd"),
+                "text_out_usd": cb.get("text_out_usd"),
+                "transcription_usd": cb.get("transcription_usd"),
+                "auxiliary": cb.get("auxiliary") or {},
+            },
         })
     return rows

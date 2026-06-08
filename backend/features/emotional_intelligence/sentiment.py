@@ -35,6 +35,7 @@ class SentimentClassifier:
         self,
         transcript: str,
         paralinguistic: Optional[dict] = None,
+        call_id: str = "",
     ) -> dict:
         if not transcript.strip():
             return {"emotion": "neutral", "intent": "unclear", "urgency": 0.0, "engagement": 0.5}
@@ -62,6 +63,11 @@ class SentimentClassifier:
                 temperature=0,
                 response_format={"type": "json_object"},
             )
+            try:
+                from backend.core import cost_meter
+                cost_meter.record_mini(call_id, "sentiment", response.usage)
+            except Exception:
+                pass
             result = json.loads(response.choices[0].message.content)
             return result
         except Exception as exc:
