@@ -180,12 +180,14 @@ class CallEvaluator:
 
         if total_since >= settings.FINE_TUNING_THRESHOLD:
             log.info(
-                "Fine-tuning threshold reached",
+                "Self-improvement threshold reached",
                 agent_id=agent_id,
                 calls_since_last=total_since,
             )
-            # Commit so the fine-tuner's fresh session can see the eval scores
+            # Commit so the learner's fresh session can see the eval scores.
             await self.db.commit()
-            from backend.features.feedback_loop.fine_tuner import FineTuner
+            # Prompt-based learning (works on native audio) instead of fine-tuning
+            # (a fine-tuned text model can't run in the Realtime API).
+            from backend.features.feedback_loop.prompt_learner import PromptLearner
             import asyncio
-            asyncio.create_task(FineTuner(agent_id=agent_id).run())
+            asyncio.create_task(PromptLearner(agent_id=agent_id).run())

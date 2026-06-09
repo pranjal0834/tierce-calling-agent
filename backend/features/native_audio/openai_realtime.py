@@ -353,11 +353,20 @@ class OpenAIRealtimeHandler:
                 "returns. Only say you don't have the information if the tool returns nothing relevant."
             )
 
+        # Self-improving feedback loop: guidance distilled from automated reviews of
+        # past calls (failures + their corrections + good examples). Injected into the
+        # prompt so improvements actually feed back into native-audio calls.
+        learned = (cfg.get("learned_guidance") or "").strip()
+        learned_block = (
+            "\n\nLEARNED GUIDANCE (from automated review of your past calls — follow these):\n" + learned
+        ) if learned else ""
+
         instructions = (
             self.system_prompt
             + speech_style_block
             + language_block
             + kb_block
+            + learned_block
             + "\n\nFOCUS RULE: You are on a phone call. Only respond to the primary caller speaking directly to you. "
             "Completely ignore any background noise, TV audio, music, other people talking nearby, or any voice that is not directly addressing you. "
             "If the audio is unclear or sounds like background noise rather than a direct question or statement, do not respond — wait for the caller to speak clearly."
@@ -370,6 +379,10 @@ class OpenAIRealtimeHandler:
             "After the tool responds, give ONE short confirmation sentence in the caller's language "
             "(e.g. 'Okay, I will call you back in 2 minutes!') then say goodbye and stop."
         )
+        # Remember the base prompt so we can re-send it with the contact's memory graph
+        # appended once the contact is resolved (Twilio strips the call_id from the WS
+        # URL, so the contact isn't known yet at session-config time).
+        self._base_instructions = instructions
         from backend.features.tools.executor import CALENDAR_BOOKING_PARAMS, SCHEDULE_CALLBACK_PARAMS
         raw_tools = cfg.get("tools") or []
         openai_tools = [
@@ -433,14 +446,19 @@ class OpenAIRealtimeHandler:
                 "audio": {
                     "input": {
                         "format": {"type": "audio/pcmu"},
+                        # Noise suppression — filters background noise + the agent's own echo
+                        # BEFORE it reaches turn detection. Essential on a telephony line with
+                        # no echo cancellation; without it, background voices/echo start false
+                        # turns and derail the conversation. near_field = caller-on-handset.
+                        "noise_reduction": {"type": "near_field"},
+                        # Predictive turn-taking: a semantic classifier predicts when the caller
+                        # has actually finished their thought (vs a fixed silence gap), so the
+                        # agent replies at natural moments — like a human.
                         "turn_detection": {
-                            "type": "server_vad",
-                            # Increase sensitivity thresholds to reduce false positives from background
-                            "threshold": 0.95,           # higher = less sensitive, ignores background noise
-                            "prefix_padding_ms": 800,    # require longer initial speech to count
-                            "silence_duration_ms": 800,  # wait longer before ending user turn
-                            "interrupt_response": False, # agent finishes speaking before responding
-                            "create_response": False,    # we fire response.create manually to avoid conflicts
+                            "type": "semantic_vad",
+                            "eagerness": "auto",          # balanced: responsive but won't cut callers off
+                            "interrupt_response": False,  # agent finishes its sentence — echo can't self-interrupt it
+                            "create_response": False,     # we fire response.create manually to avoid conflicts
                         },
                         # Prefer a language hint for Whisper when the agent is configured to use
                         # a single non-English language — helps reduce mis-transcription.
@@ -542,8 +560,11 @@ class OpenAIRealtimeHandler:
             self.im.on_user_speech_started()
             self._speech_seg_start = time.monotonic()
             self._current_user_audio = []
-            # Clear Twilio's playback buffer so agent stops speaking immediately
-            await self._clear_telephony_audio()
+            # Only clear Twilio's playback buffer if the agent is NOT mid-utterance.
+            # Clearing while it speaks would cut its sentence off — and with barge-in
+            # disabled (echo can falsely trigger this), the agent should finish first.
+            if not self._agent_speaking:
+                await self._clear_telephony_audio()
             # Start backchannel loop — plays short fillers while user speaks
             self.backchannel_engine.on_speech_start()
             if self._backchannel_task is None or self._backchannel_task.done():
@@ -589,6 +610,13 @@ class OpenAIRealtimeHandler:
                 transcript=transcript,
                 latency_ms=None,
             )
+            # Emotional Intelligence: classify the caller's emotion/intent from the
+            # actual transcript (the acoustic pass at speech_stopped has no text, so
+            # this is where real emotion/intent gets determined). Runs in the
+            # background so it never delays the agent's reply. (Native audio already
+            # adapts the agent's behavior to tone; this powers emotion analytics.)
+            if (self.agent.config or {}).get("emotion_detection", True):
+                asyncio.create_task(self._classify_sentiment(transcript, f"turn_{self._turn_index}"))
             # Check if this is a voicemail/answering machine (transcript fallback for AMD).
             # Collapse repeated whitespace so "after  the   tone" still matches.
             t_lower = " ".join(transcript.lower().split())
@@ -804,6 +832,24 @@ class OpenAIRealtimeHandler:
             }
             log.debug("Emotion analyzed", turn=self._turn_index, emotion=emotion_state)
 
+    async def _classify_sentiment(self, transcript: str, turn_key: str):
+        """Classify caller emotion/intent from the transcript and merge it into the
+        call's emotion profile (real values vs the acoustic-only defaults). Powers
+        emotion analytics; never blocks the conversation."""
+        try:
+            result = await self.emotion_engine.sentiment.classify(transcript, call_id=self.call.id)
+            if not result:
+                return
+            existing = dict((self.call.emotion_profile or {}).get(turn_key, {}))
+            for k in ("emotion", "intent", "urgency", "engagement", "reasoning"):
+                if result.get(k) is not None:
+                    existing[k] = result[k]
+            self.call.emotion_profile = {**(self.call.emotion_profile or {}), turn_key: existing}
+            log.debug("Sentiment classified", turn=turn_key,
+                      emotion=result.get("emotion"), intent=result.get("intent"))
+        except Exception as exc:
+            log.debug("Sentiment classification failed", error=str(exc))
+
     def _get_conversation_snapshot(self) -> list[dict]:
         return []  # In native mode, history is managed by OpenAI — return empty snapshot
 
@@ -876,8 +922,39 @@ class OpenAIRealtimeHandler:
             await self.db.flush()
             log.info("Call linked to contact", phone=phone, contact_id=contact.id,
                      call_id=self.call.id)
+
+            # Deep Memory Graph: now that we know who we're talking to, inject their
+            # memory (past calls, preferences, open items) into the live session so the
+            # agent is personalized from its first reply.
+            await self._inject_memory_context(contact.id)
         except Exception as exc:
             log.warning("Could not link call to contact", call_sid=call_sid, error=str(exc))
+
+    async def _inject_memory_context(self, contact_id: str):
+        """Fetch the contact's memory graph and append it to the agent's live
+        instructions via session.update. Runs once, right after the contact is
+        resolved and before the agent's first response."""
+        try:
+            if not (self.agent.config or {}).get("memory_graph", True):
+                return
+            if not getattr(self, "_base_instructions", None):
+                return
+            from backend.features.memory_graph.retriever import MemoryRetriever
+            context = await MemoryRetriever(self.db).get_context_for_call(contact_id)
+            if not context:
+                return
+            instructions = (
+                self._base_instructions
+                + "\n\n## Contact Memory (from previous calls — use it to personalize)\n"
+                + context
+            )
+            await self.openai_ws.send(json.dumps({
+                "type": "session.update",
+                "session": {"type": "realtime", "instructions": instructions},
+            }))
+            log.info("Memory context injected", contact_id=contact_id, chars=len(context))
+        except Exception as exc:
+            log.warning("Memory injection failed", contact_id=contact_id, error=str(exc))
 
     async def _persist_cost(self):
         """Finalize the call record: cost + status via a dedicated fresh session.
