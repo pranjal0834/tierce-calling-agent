@@ -143,6 +143,24 @@ async def _execute_calendar_booking(tool: dict, arguments: dict) -> str:
             from backend.integrations.calendly import create_scheduling_link
             return await create_scheduling_link(api_key, event_type_uri)
 
+    elif integration == "google_calendar":
+        if action == "check_availability":
+            from backend.integrations.google_calendar import check_availability
+            date = arguments.get("date", "")
+            if not date:
+                return "Please ask the caller for their preferred date before checking availability."
+            return await check_availability(cfg, date)
+        elif action == "book":
+            from backend.integrations.google_calendar import book_appointment
+            return await book_appointment(
+                cfg,
+                arguments.get("datetime_iso", ""),
+                arguments.get("caller_name", ""),
+                arguments.get("caller_email", ""),
+                arguments.get("caller_phone", ""),
+                arguments.get("notes", ""),
+            )
+
     return f"Unsupported calendar integration: {integration}"
 
 
@@ -154,10 +172,10 @@ SCHEDULE_CALLBACK_PARAMS = {
         "relative_minutes": {
             "type": "integer",
             "description": (
-                "Minutes from now to schedule the callback. "
-                "Use for relative expressions: 'after 2 minutes' → 2, 'in 30 minutes' → 30, "
-                "'in an hour' → 60, 'in 2 hours' → 120. "
-                "Prefer this over datetime_iso whenever the caller gives a relative duration."
+                "Minutes from now, taken ONLY from a duration the caller explicitly stated "
+                "(e.g. 'in 30 minutes' → 30, 'in an hour' → 60, 'in 2 hours' → 120). "
+                "Do NOT invent or default a value — if the caller did not say a duration, leave this empty "
+                "and ask them when to call back. Never use 2 unless they literally said 'two minutes'."
             ),
         },
         "datetime_iso": {

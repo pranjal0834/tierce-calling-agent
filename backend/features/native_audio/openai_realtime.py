@@ -156,6 +156,7 @@ def _transcription_language_code(name: str) -> str | None:
     otherwise None — in which case the caller should omit the language param
     and let Whisper auto-detect (sending an unsupported value breaks the session).
     """
+    
     key = (name or "").strip().lower()
     code = _LANG_NAME_TO_CODE.get(key, key)  # accept either a name or a raw code
     return code if code in _OPENAI_TRANSCRIBE_LANGS else None
@@ -372,12 +373,27 @@ class OpenAIRealtimeHandler:
             "If the audio is unclear or sounds like background noise rather than a direct question or statement, do not respond — wait for the caller to speak clearly."
             "\n\nEND-OF-CALL RULE: When the caller signals they want to end the conversation (says bye, goodbye, that's all, take care, not interested, etc.), "
             "give a brief warm closing (one or two sentences maximum), then stop speaking. Do not ask follow-up questions or extend the conversation."
-            "\n\nCALLBACK RULE: If the caller says they are busy or asks to be called back later — "
-            "do NOT ask for their name, phone number, or email (you already have their number). "
-            "Immediately call the schedule_callback tool using relative_minutes for durations ('2 minutes' → 2, '1 hour' → 60) "
-            "or datetime_iso for specific times ('tomorrow 5 PM'). "
-            "After the tool responds, give ONE short confirmation sentence in the caller's language "
-            "(e.g. 'Okay, I will call you back in 2 minutes!') then say goodbye and stop."
+            "\n\nCALLBACK RULE: Only schedule a callback when the caller EXPLICITLY and clearly asks to be "
+            "called back later (e.g. 'call me tomorrow', 'call me in an hour', 'I'm busy, call me this evening'). "
+            "Do NOT schedule a callback just because the caller is hesitant, silent, confused, or you misheard. "
+            "If you are not certain they asked for a callback, do NOT call the tool — keep talking or ask a clarifying question. "
+            "NEVER invent or assume a time the caller did not say, and NEVER default to '2 minutes'. "
+            "If the caller wants a callback but did not give a time, ASK 'When would be a good time to call you back?' "
+            "and use only the time they actually state. "
+            "(Note: phrases like 'a quick 2-minute call' describe the call's LENGTH, not when to call back — do not "
+            "schedule a 2-minute callback for that.) "
+            "Only once you have an explicit time, call schedule_callback with relative_minutes (for durations the caller "
+            "stated, e.g. 'in an hour' → 60) or datetime_iso (for specific times, e.g. 'tomorrow 5 PM'). "
+            "Then give ONE short confirmation in the caller's language and say goodbye."
+            "\n\nAPPOINTMENT RULE: To book, schedule, reschedule, set up, or change an appointment or MEETING, you MUST "
+            "use your calendar tool — NEVER use schedule_callback for this. Step 1: call the calendar tool with "
+            "action='check_availability' for the caller's requested date to get the open slots. Step 2: offer ONLY "
+            "those returned slots; if the caller's requested time is not among them, say it's unavailable and suggest "
+            "the nearest open slots. Step 3: once the caller confirms an AVAILABLE slot, call the calendar tool with "
+            "action='book' and that exact datetime_iso to create the appointment, then confirm it briefly. "
+            "Remember: schedule_callback only arranges for YOU to phone the caller again later — it does NOT create a "
+            "calendar appointment. Words like 'book', 'reschedule', 'set up a meeting', 'appointment' always mean the "
+            "calendar tool, not schedule_callback."
         )
         # Remember the base prompt so we can re-send it with the contact's memory graph
         # appended once the contact is resolved (Twilio strips the call_id from the WS
@@ -404,11 +420,16 @@ class OpenAIRealtimeHandler:
             "type": "function",
             "name": "schedule_callback",
             "description": (
-                "Schedule an outbound callback to this caller at their requested time. "
-                "Use immediately when the caller says they are busy or asks to be called back later. "
-                "The caller's phone number is already known — do NOT ask for name, phone, or email. "
-                "For 'after 2 minutes' use relative_minutes=2. For 'in an hour' use relative_minutes=60. "
-                "For 'tomorrow at 5 PM' use datetime_iso. Call this tool right away — do not ask extra questions."
+                "Schedule an outbound callback ONLY when the caller has EXPLICITLY asked to be called back at a "
+                "specific time they stated themselves. Do NOT call this tool on a guess, on hesitation/silence, or "
+                "if you are unsure — when in doubt, do not schedule. NEVER default to or invent a time; in particular "
+                "NEVER use 2 minutes unless the caller literally said 'two minutes'. A phrase like 'a quick 2-minute "
+                "call' refers to the call's length, not a callback time — do not schedule from it. Set relative_minutes "
+                "only from a duration the caller stated (e.g. 'in an hour' → 60), or datetime_iso for a specific time "
+                "they gave (e.g. 'tomorrow at 5 PM'). The caller's number is already known — do not ask for it. "
+                "This only arranges another PHONE CALL to the caller — it does NOT book a meeting or appointment. "
+                "For booking, rescheduling, or setting up an appointment/meeting, use the calendar booking tool "
+                "(check_availability then action='book'), never this tool."
             ),
             "parameters": SCHEDULE_CALLBACK_PARAMS,
         })

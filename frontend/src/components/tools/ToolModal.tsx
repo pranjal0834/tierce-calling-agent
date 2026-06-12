@@ -4,6 +4,7 @@ import {
   Globe, PhoneOff, UserCheck, Calendar, X, Plus, Trash
 } from "lucide-react";
 import { addTool, updateTool } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import toast from "react-hot-toast";
 
 const TOOL_TYPES = [
@@ -45,6 +46,7 @@ const CALENDAR_INTEGRATIONS = [
   {
     value: "calcom",
     label: "Cal.com",
+    oauth: false,
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "cal_live_xxxxxxxxxxxxxxxxxxxx",
     apiKeyHint: "app.cal.com → Settings → Developer → API Keys",
@@ -60,6 +62,7 @@ const CALENDAR_INTEGRATIONS = [
   {
     value: "calendly",
     label: "Calendly",
+    oauth: false,
     apiKeyLabel: "Personal Access Token",
     apiKeyPlaceholder: "eyJraWQiOiIxMjM0NTY3ODk...",
     apiKeyHint: "calendly.com → Integrations → API & Webhooks → Personal Access Token",
@@ -71,6 +74,22 @@ const CALENDAR_INTEGRATIONS = [
     autoDesc:
       "Check available Calendly slots. Use action='check_availability' with a date to see open times. After the caller confirms a slot, use action='book' to send them a personal one-time scheduling link.",
     supportsDirectBooking: false,
+  },
+  {
+    value: "google_calendar",
+    label: "Google Calendar",
+    oauth: true,
+    apiKeyLabel: "",
+    apiKeyPlaceholder: "",
+    apiKeyHint: "",
+    idLabel: "",
+    idKey: "calendar_id",
+    idPlaceholder: "",
+    idHint: "",
+    autoName: "schedule_appointment",
+    autoDesc:
+      "Check availability and book appointments on Google Calendar. Use action='check_availability' with a date first to see open slots, then action='book' after the caller confirms a time.",
+    supportsDirectBooking: true,
   },
 ];
 
@@ -161,9 +180,19 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
     if (type === "calendar_booking") {
       const preset = CALENDAR_INTEGRATIONS.find(c => c.value === calIntegration);
       config.integration = calIntegration;
-      config.api_key = calApiKey;
       config.timezone = calTimezone;
-      if (preset) config[preset.idKey] = calEventId;
+      // Google Calendar uses OAuth (connected separately) — no API key / event id.
+      if (preset && !preset.oauth) {
+        config.api_key = calApiKey;
+        config[preset.idKey] = calEventId;
+      } else if (preset && preset.oauth) {
+        // Preserve the OAuth connection set by the Connect flow — don't wipe it on save.
+        const ec = (existing?.config ?? {}) as Record<string, string>;
+        if (ec.refresh_token) config.refresh_token = ec.refresh_token;
+        if (ec.client_id) config.client_id = ec.client_id;
+        if (ec.client_secret) config.client_secret = ec.client_secret;
+        config.calendar_id = ec.calendar_id || "primary";
+      }
     }
 
     return { name, type, description, parameters, config, enabled: true };
@@ -173,8 +202,13 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
     if (!name.trim()) { toast.error("Tool name is required"); return; }
     if (type === "webhook" && !webhookUrl.trim()) { toast.error("Webhook URL is required"); return; }
     if (type === "transfer_call" && !transferTo.trim()) { toast.error("Transfer phone number is required"); return; }
-    if (type === "calendar_booking" && !calApiKey.trim()) { toast.error("API key is required"); return; }
-    if (type === "calendar_booking" && !calEventId.trim()) { toast.error("Event type ID / URI is required"); return; }
+    if (type === "calendar_booking") {
+      const preset = CALENDAR_INTEGRATIONS.find(c => c.value === calIntegration);
+      if (preset && !preset.oauth) {
+        if (!calApiKey.trim()) { toast.error("API key is required"); return; }
+        if (!calEventId.trim()) { toast.error("Event type ID / URI is required"); return; }
+      }
+    }
 
     setSaving(true);
     try {
@@ -304,7 +338,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                           : "border-neutral-200 bg-neutral-50 hover:border-neutral-300"
                       }`}
                     >
-                      <span className="text-xl">{ci.value === "calcom" ? "🗓" : "📅"}</span>
+                      <span className="text-xl">{ci.value === "calcom" ? "🗓" : ci.value === "google_calendar" ? "📆" : "📅"}</span>
                       <div>
                         <p className="text-xs font-semibold text-neutral-800">{ci.label}</p>
                         <p className="text-xs text-neutral-500">{ci.supportsDirectBooking ? "Direct booking" : "Link booking"}</p>
@@ -315,14 +349,39 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                 <p className="text-xs text-neutral-500 mt-1.5">
                   {calIntegration === "calcom"
                     ? "Checks real availability and books appointments directly via the Cal.com API."
+                    : calIntegration === "google_calendar"
+                    ? "Checks availability and books directly on your Google Calendar. Connect your Google account below — no API key or caller email needed."
                     : "Checks availability. For booking, sends the caller a personal one-time Calendly link."}
                 </p>
               </div>
 
-              {/* API Key + Event ID */}
+              {/* OAuth connect (Google) — no API key needed */}
+              {CALENDAR_INTEGRATIONS.find(c => c.value === calIntegration)?.oauth && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-semibold text-blue-700">Connect your Google account</p>
+                  <p className="text-xs text-neutral-600">
+                    Save this tool first, then authorize Google Calendar. Appointments are booked on your
+                    primary calendar — no caller email required.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!agentId) { toast.error("Save the agent first, then connect."); return; }
+                      const tk = getToken();
+                      const base = process.env.NEXT_PUBLIC_API_URL || "";
+                      window.open(`${base}/auth/google/calendar/connect?agent_id=${agentId}&token=${tk}`, "_blank");
+                    }}
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-neutral-300 rounded-lg text-sm font-medium text-neutral-700 hover:border-brand-500 transition-colors"
+                  >
+                    📆 Connect Google Calendar
+                  </button>
+                </div>
+              )}
+
+              {/* API Key + Event ID (non-OAuth providers) */}
               {(() => {
                 const preset = CALENDAR_INTEGRATIONS.find(c => c.value === calIntegration);
-                if (!preset) return null;
+                if (!preset || preset.oauth) return null;
                 return (
                   <>
                     <div>

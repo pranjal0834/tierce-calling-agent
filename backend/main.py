@@ -411,6 +411,8 @@ app.add_middleware(
 # ─── Auth Router ───────────────────────────────────────────────────────────────
 
 app.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
+from backend.api import google_calendar_oauth as _gcal_oauth
+app.include_router(_gcal_oauth.router, prefix="/auth/google/calendar", tags=["GoogleCalendar"])
 
 # ─── REST Routers ──────────────────────────────────────────────────────────────
 

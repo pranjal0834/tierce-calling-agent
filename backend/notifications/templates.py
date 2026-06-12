@@ -139,6 +139,35 @@ def welcome(workspace_name: str, user_email: str, frontend_url: str = "") -> tup
     return _render(f"Welcome to {BRAND_NAME} — your workspace is ready", content, frontend_url)
 
 
+# ── Appointment confirmation ──────────────────────────────────────────────────
+
+def appointment_confirmation(name: str, when_str: str, business_name: str = "",
+                             notes: str = "", frontend_url: str = "") -> tuple[str, str]:
+    biz = business_name or BRAND_NAME
+    note_html = (
+        f'<p class="feature-desc" style="margin-top:8px;">{notes}</p>' if notes else ""
+    )
+    content = f"""
+    <p class="greeting">Your appointment is confirmed &#9989;</p>
+    <p class="text">
+      Hi {name or 'there'}, your appointment with <strong>{biz}</strong> has been scheduled.
+      We look forward to speaking with you.
+    </p>
+
+    <div class="feature-box">
+      <div class="badge">Appointment</div>
+      <p class="feature-title">&#128197; {when_str}</p>
+      {note_html}
+    </div>
+
+    <hr class="divider" />
+    <p class="text" style="font-size:13px;color:#A3A3A0;">
+      Need to reschedule or cancel? Just reply to this email or call us back &mdash; we&rsquo;re happy to help.
+    </p>
+    """
+    return _render(f"Appointment confirmed — {when_str}", content, frontend_url)
+
+
 # ── Feature announcement ──────────────────────────────────────────────────────
 
 def announcement(subject: str, headline: str, body: str,
