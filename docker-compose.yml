@@ -65,7 +65,7 @@ services:
         # Must be a PUBLICLY reachable backend URL (not localhost) so the app
         # works from phones / dev tunnels. Baked into the client bundle at build
         # time, so rebuild the frontend after changing this.
-        NEXT_PUBLIC_API_URL: https://compound-corroding-pauper.ngrok-free.dev
+        NEXT_PUBLIC_API_URL: https://intense-funeral-suitable-connector.trycloudflare.com
     container_name: tierce_frontend
     ports:
       - "3000:3000"
@@ -73,15 +73,14 @@ services:
       - backend
     restart: unless-stopped
 
-  # ── ngrok (local dev tunnel for telephony webhooks) ─────────────────────────
-  ngrok:
-    image: ngrok/ngrok:latest
-    container_name: tierce_ngrok
-    command: http backend:8000
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
-    ports:
-      - "4040:4040"
+  # ── Cloudflare Tunnel (free, unlimited bandwidth — replaces ngrok) ───────────
+  # Quick tunnel: exposes the backend at a random *.trycloudflare.com URL.
+  # The URL changes whenever THIS container restarts — read it from the logs
+  # (`docker compose logs cloudflared`) and update BASE_URL + the frontend build arg.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: tierce_cloudflared
+    command: tunnel --no-autoupdate --url http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped

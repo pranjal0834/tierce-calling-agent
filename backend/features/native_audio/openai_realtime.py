@@ -434,6 +434,28 @@ class OpenAIRealtimeHandler:
             "parameters": SCHEDULE_CALLBACK_PARAMS,
         })
 
+        # Inject the WhatsApp tool when a WhatsApp system is configured, so the agent
+        # can text the caller information/links on request during the call.
+        from backend.integrations.whatsapp import is_configured as _wa_configured
+        if _wa_configured():
+            openai_tools.append({
+                "type": "function",
+                "name": "send_whatsapp",
+                "description": (
+                    "Send a WhatsApp message to the caller's own phone with information they asked for — "
+                    "details, a link, an address, pricing, a summary, next steps, etc. Use whenever the caller "
+                    "asks you to send, share, or text them something on WhatsApp. The message goes to their "
+                    "number automatically — do NOT ask for their number. Put the full text in 'message'."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "message": {"type": "string", "description": "The exact text to send to the caller on WhatsApp."},
+                    },
+                    "required": ["message"],
+                },
+            })
+
         # Inject knowledge-base retrieval tool when the agent has KBs attached
         kb_ids = cfg.get("knowledge_base_ids") or []
         if kb_ids:
@@ -1123,12 +1145,26 @@ class OpenAIRealtimeHandler:
             passages = await search_knowledge(kb_ids, query, call_id=self.call.id)
             result = passages or "No relevant information was found in the knowledge base for that question."
             log.info("KB query", query=query[:80], found=bool(passages))
+        elif tool_name == "send_whatsapp":
+            from backend.integrations.whatsapp import send_info
+            msg = arguments.get("message", "")
+            to = self.call.phone_number or ""
+            name = getattr(self.call, "caller_name", "") or ""
+            business = (self.agent.config or {}).get("business_name") or self.agent.name or ""
+            ok = await send_info(to, msg, name, business) if (msg and to) else False
+            result = ("Done — I've sent that to your WhatsApp."
+                      if ok else "Sorry, I couldn't send the WhatsApp message right now.")
+            log.info("WhatsApp tool", to=to, ok=ok)
         else:
             cfg_tools = (self.agent.config or {}).get("tools") or []
             tool = next((t for t in cfg_tools if t.get("name") == tool_name), None)
             # Built-in tools not stored in agent config
             if tool is None and tool_name == "schedule_callback":
                 tool = {"type": "schedule_callback", "name": "schedule_callback"}
+            # Always use the call's real E.164 number for booking/WhatsApp — the model
+            # sometimes passes caller_phone without the country code, which WhatsApp rejects.
+            if self.call.phone_number and not str(arguments.get("caller_phone", "")).startswith("+"):
+                arguments["caller_phone"] = self.call.phone_number
             result = await execute_tool(tool, arguments, call=self.call) if tool else f"Tool '{tool_name}' not found"
             log.info("Tool result", tool=tool_name, result=result[:100])
 

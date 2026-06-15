@@ -1,3 +1,4 @@
+
 """
 Google Calendar integration — availability check + appointment booking.
 
@@ -156,6 +157,7 @@ async def book_appointment(cfg: dict, datetime_iso: str, caller_name: str = "",
         await loop.run_in_executor(None, _insert_event_sync, service, calendar_id, body)
         when = start_dt.strftime("%A, %d %B at %I:%M %p").replace(" 0", " ")
 
+        biz = cfg.get("business_name") or "us"
         # Send a branded confirmation email to the caller (best-effort, non-blocking).
         if caller_email:
             try:
@@ -167,6 +169,17 @@ async def book_appointment(cfg: dict, datetime_iso: str, caller_name: str = "",
                 await send_email(caller_email, subject, html)
             except Exception as exc:
                 log.warning("Appointment confirmation email failed", error=str(exc))
+
+        # Send a WhatsApp confirmation to the caller's number (best-effort).
+        # Uses the Meta template in production, or free-form text in dev — driven by
+        # the WhatsApp templates module so the wording stays in one place.
+        if caller_phone:
+            try:
+                from backend.integrations.whatsapp import send_appointment_confirmation, is_configured
+                if is_configured():
+                    await send_appointment_confirmation(caller_phone, caller_name, when, biz)
+            except Exception as exc:
+                log.warning("Appointment confirmation WhatsApp failed", error=str(exc))
 
         return f"Appointment booked for {when}. It has been added to the calendar."
     except Exception as exc:

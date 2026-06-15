@@ -13,6 +13,15 @@ _DEFAULTS = {
     "SMTP_FROM_NAME": "Vaaniq Voice",
     # Super admin — comma-separated email whitelist
     "ADMIN_EMAILS": "",
+    # WhatsApp (external automation system) — POST text messages via its API
+    "WHATSAPP_API_URL": "",
+    "WHATSAPP_ACCESS_TOKEN": "",
+    "WHATSAPP_PHONE_NUMBER_ID": "",
+    # Production: send via Meta-approved templates instead of free-form text.
+    # Flip on once templates are registered + the template endpoint is set.
+    "WHATSAPP_USE_TEMPLATES": False,
+    "WHATSAPP_TEMPLATE_API_URL": "",   # e.g. .../api/v1/messages/send/template
+    "WHATSAPP_TEMPLATE_LANG": "en",
     # Billing — Razorpay (India/INR)
     "RAZORPAY_KEY_ID": "",
     "RAZORPAY_KEY_SECRET": "",
@@ -37,7 +46,27 @@ _DEFAULTS = {
     "FINE_TUNE_BASE_MODEL": "gpt-4o-mini-2024-07-18",
     "OPENAI_REALTIME_URL": "wss://api.openai.com/v1/realtime",
     "OPENAI_REALTIME_MODEL": "gpt-realtime-mini",
-    "GEMINI_LIVE_MODEL": "gemini-2.0-flash-live-001",
+    "GEMINI_LIVE_MODEL": "gemini-2.5-flash-native-audio-latest",
+    # Native-audio engine: "openai" (gpt-realtime-mini, default) or "gemini" (Gemini Live).
+    # Per-agent override via agent.config["engine"]; this is the global fallback so all
+    # calls can be flipped to Gemini for testing regional-language quality.
+    "NATIVE_AUDIO_ENGINE": "openai",
+    # Gemini Live pricing (USD per 1M tokens) — gemini-2.5-flash native audio. Estimates;
+    # verify on https://ai.google.dev/gemini-api/docs/pricing before relying on for billing.
+    "GEMINI_AUDIO_IN_COST_PER_M":  3.00,
+    "GEMINI_AUDIO_OUT_COST_PER_M": 12.00,
+    "GEMINI_TEXT_IN_COST_PER_M":   0.50,
+    "GEMINI_TEXT_OUT_COST_PER_M":  2.00,
+    # Gemini tokenizes audio at ~25 tokens/sec — used to estimate cost (the 1.0.0
+    # Live API gives no usage_metadata, so we meter audio seconds and estimate).
+    "GEMINI_AUDIO_TOKENS_PER_SEC": 25,
+    # Local barge-in (telephony has no echo cancellation): while the agent is speaking
+    # we don't feed its echo to Gemini; instead we detect the caller interrupting by
+    # audio energy. RMS above this for BARGE_FRAMES consecutive 20ms frames = barge-in.
+    # Raise RMS if the agent cuts itself off on its own echo; lower it if it ignores you.
+    "GEMINI_BARGE_RMS": 1500,
+    "GEMINI_BARGE_FRAMES": 8,      # ~160ms of speech to declare the caller is talking
+    "GEMINI_SILENCE_FRAMES": 40,   # ~800ms of quiet to declare the caller finished
     # OpenAI Realtime API pricing (USD per 1M tokens) — gpt-realtime-mini rates
     "REALTIME_AUDIO_IN_COST_PER_M":          10.0,   # $10   per 1M audio input tokens (uncached)
     "REALTIME_AUDIO_IN_CACHED_COST_PER_M":    0.30,  # $0.30 per 1M audio input tokens (cached context)

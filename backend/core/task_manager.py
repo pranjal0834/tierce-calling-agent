@@ -100,9 +100,19 @@ class TaskManager:
     # ── Native pipeline (GPT-4o Realtime / Gemini Live) ──────────────────────
 
     async def _run_native_pipeline(self):
-        from backend.features.native_audio.openai_realtime import OpenAIRealtimeHandler
+        # Engine selection: per-agent override (agent.config["engine"]) else the
+        # global default (settings.NATIVE_AUDIO_ENGINE). "gemini" → Gemini Live
+        # (better Hindi/Gujarati); anything else → OpenAI gpt-realtime-mini.
+        from backend.config import settings
+        engine = ((self.agent.config or {}).get("engine")
+                  or settings.NATIVE_AUDIO_ENGINE or "openai").lower()
+        if engine.startswith("gemini"):
+            from backend.features.native_audio.gemini_live import GeminiLiveHandler as Handler
+        else:
+            from backend.features.native_audio.openai_realtime import OpenAIRealtimeHandler as Handler
+        log.info("Native pipeline engine selected", call_id=self.call.id, engine=engine)
 
-        handler = OpenAIRealtimeHandler(
+        handler = Handler(
             agent=self.agent,
             call=self.call,
             websocket=self.ws,

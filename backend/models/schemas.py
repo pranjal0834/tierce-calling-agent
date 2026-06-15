@@ -87,6 +87,9 @@ class AgentConfig(BaseModel):
     accent: str = ""
     speech_pace: str = "natural"
     languages: List[str] = Field(default_factory=lambda: ["English"])
+    # Native-audio engine: "" (use system default), "openai" (gpt-realtime-mini),
+    # or "gemini" (Gemini Live — better for Hindi/Gujarati/regional languages).
+    engine: str = ""
 
 
 class AgentCreate(BaseModel):

@@ -235,6 +235,22 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
             />
           </Field>
 
+          <Field label="AI Engine">
+            <select
+              className="input-base"
+              value={(form.config as any).engine || ""}
+              onChange={e => setForm(f => ({ ...f, config: { ...f.config, engine: e.target.value } }))}
+            >
+              <option value="">Default (system setting)</option>
+              <option value="openai">OpenAI Realtime (best for English)</option>
+              <option value="gemini">Gemini Live (best for Hindi / Gujarati / regional)</option>
+            </select>
+            <p className="mt-1.5 text-xs text-neutral-500">
+              Gemini handles Indian regional languages better and costs less; OpenAI is strongest in English.
+              Leave on Default to use the system-wide engine.
+            </p>
+          </Field>
+
           {/* Features */}
           <div className="pt-1 space-y-1">
             <p className="label-base mb-3">Features</p>
