@@ -53,6 +53,26 @@ _JSON_TO_GEMINI_TYPE = {
     "integer": "INTEGER", "boolean": "BOOLEAN", "array": "ARRAY",
 }
 
+# Agent language name → Whisper ISO-639-1 code, used to FORCE the caller-transcription
+# language (Whisper auto-detect mislabels regional speech, e.g. Gujarati → Telugu).
+# Only applied when the agent has a single language; multi-language agents auto-detect.
+# Languages Whisper doesn't support (Odia/Maithili) are omitted → auto-detect fallback.
+_LANG_ISO639 = {
+    # English variants
+    "english": "en", "british english": "en", "australian english": "en",
+    # Indian languages
+    "hindi": "hi", "gujarati": "gu", "marathi": "mr", "tamil": "ta",
+    "telugu": "te", "kannada": "kn", "malayalam": "ml", "bengali": "bn",
+    "punjabi": "pa", "urdu": "ur", "assamese": "as", "sanskrit": "sa", "sindhi": "sd",
+    # European
+    "spanish": "es", "french": "fr", "german": "de", "portuguese": "pt",
+    "russian": "ru", "italian": "it", "dutch": "nl", "polish": "pl", "turkish": "tr",
+    # Asian / other
+    "arabic": "ar", "hebrew": "he", "persian": "fa", "japanese": "ja", "korean": "ko",
+    "chinese": "zh", "mandarin": "zh", "mandarin chinese": "zh", "indonesian": "id",
+    "malay": "ms", "vietnamese": "vi", "thai": "th", "swahili": "sw",
+}
+
 
 def _to_schema(js: dict):
     """Convert a JSON-schema dict (as used by the OpenAI tools) into a genai Schema."""
@@ -99,12 +119,21 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         self._out_queue: asyncio.Queue = asyncio.Queue()
         self._out_buf = b""          # leftover PCM8k bytes between frames
         self._pacer_task = None
-        self._greeted = False
-        # Local VAD-driven turn-taking (the line has clean echo separation, so our own
-        # energy detection is faster + more reliable than Gemini's turn events).
-        self._user_speaking = False  # caller currently talking (drives barge-in + recovery)
+        # Manual turn-taking (auto-VAD disabled): our own energy VAD decides when the
+        # caller is talking, and we tell Gemini via activity_start / activity_end. Audio
+        # is sent ONLY between those signals, so the agent's echo never reaches Gemini.
+        self._user_speaking = False
         self._voice_frames = 0       # consecutive loud frames
         self._silence_frames = 0     # consecutive quiet frames
+        self._user_tr_buf = ""       # native input transcription accumulator (caller)
+        self._memory_context = ""    # contact memory graph (re-injected on reconnect)
+        # Exact billing from Gemini's per-turn usage_metadata (summed across turns).
+        self._g_have_usage = False
+        self._g_audio_in = 0
+        self._g_text_in = 0
+        self._g_audio_out = 0
+        self._g_text_out = 0
+        self._g_cached_in = 0
 
     # ── Main run loop ────────────────────────────────────────────────────────
 
@@ -114,40 +143,69 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             return
         client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         config = self._build_config()
+        self._pacer_task = asyncio.create_task(self._pace_output())
+        # Telephony runs for the WHOLE call (created once). The Gemini session can drop
+        # mid-call (the experimental/free-tier API sometimes closes with a 1008 error);
+        # when it does we RECONNECT a fresh Gemini session and keep the call going,
+        # instead of dropping the caller.
+        tel = asyncio.create_task(self._receive_from_telephony())
+        reconnects = 0
         try:
-            async with client.aio.live.connect(
-                model=settings.GEMINI_LIVE_MODEL, config=config
-            ) as session:
-                self.session = session
-                log.info("Gemini Live connected", call_id=self.call.id,
-                         model=settings.GEMINI_LIVE_MODEL)
-                self._pacer_task = asyncio.create_task(self._pace_output())
-                # NOTE: no text greeting trigger — mixing a client_content text turn
-                # with the realtime audio stream made Gemini interrupt itself and then
-                # never reply. The agent responds once the caller speaks first.
-                #
-                # Use wait(FIRST_COMPLETED), NOT gather: when the caller hangs up the
-                # telephony loop ends, but session.receive() would block forever waiting
-                # for Gemini — leaving the call stuck "live". So when either side ends,
-                # cancel the other and fall through to finalize.
-                tel = asyncio.create_task(self._receive_from_telephony())
-                gem = asyncio.create_task(self._receive_from_gemini())
-                done, pending = await asyncio.wait(
-                    {tel, gem}, return_when=asyncio.FIRST_COMPLETED
-                )
-                self._running = False
-                for t in pending:
-                    t.cancel()
-                    try:
-                        await t
-                    except asyncio.CancelledError:
-                        pass
-        except Exception as exc:
-            log.exception("Gemini Live session error", call_id=self.call.id, error=str(exc))
+            while self._running:
+                try:
+                    async with client.aio.live.connect(
+                        model=settings.GEMINI_LIVE_MODEL, config=config
+                    ) as session:
+                        self.session = session
+                        log.info("Gemini Live connected", call_id=self.call.id,
+                                 model=settings.GEMINI_LIVE_MODEL, reconnects=reconnects)
+                        # Re-inject contact memory into the fresh session after a reconnect
+                        # (first connect: contact not resolved yet, so this no-ops).
+                        if reconnects > 0:
+                            await self._send_memory_context()
+                        gem = asyncio.create_task(self._receive_from_gemini())
+                        done, _ = await asyncio.wait(
+                            {tel, gem}, return_when=asyncio.FIRST_COMPLETED
+                        )
+                        if tel in done:
+                            # Caller hung up / telephony ended → end the call.
+                            self._running = False
+                            gem.cancel()
+                            try:
+                                await gem
+                            except asyncio.CancelledError:
+                                pass
+                            break
+                        # Otherwise the Gemini session ended on its own (error/drop).
+                except Exception as exc:
+                    if not self._running:
+                        break
+                    log.warning("Gemini session error", error=str(exc)[:160], call_id=self.call.id)
+                if not self._running:
+                    break
+                reconnects += 1
+                if reconnects > 20:
+                    log.error("Too many Gemini reconnects — ending call", call_id=self.call.id)
+                    self._running = False
+                    break
+                log.info("Reconnecting Gemini session", call_id=self.call.id, attempt=reconnects)
+                self._flush_agent_audio()
+                self._agent_speaking = False
+                self._user_speaking = False
+                self._voice_frames = 0
+                self._silence_frames = 0
+                self._user_tr_buf = ""
+                await asyncio.sleep(0.4)
         finally:
             self._running = False
             if self._pacer_task:
                 self._pacer_task.cancel()
+            if not tel.done():
+                tel.cancel()
+                try:
+                    await tel
+                except asyncio.CancelledError:
+                    pass
             try:
                 await self.db.commit()
             except Exception as exc:
@@ -176,6 +234,18 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                 parts=[types.Part(text=self._build_instructions())]
             ),
             tools=self._build_tools(),
+            # Disable Gemini's automatic voice-activity detection — it was unreliable on
+            # telephony audio (the agent often never replied). We drive turns ourselves
+            # with activity_start / activity_end from our own energy VAD.
+            realtime_input_config=types.RealtimeInputConfig(
+                automatic_activity_detection=types.AutomaticActivityDetection(disabled=True),
+            ),
+            # Agent's OWN speech: native output transcription (accurate — it knows what it
+            # generated). The CALLER's speech is transcribed via Whisper with a forced
+            # language instead, because Gemini's native input transcription auto-detects
+            # and mislabels regional speech (e.g. Gujarati → Telugu), and the language_codes
+            # hint that would fix it is NOT supported on the Gemini Developer API.
+            output_audio_transcription=types.AudioTranscriptionConfig(),
         )
 
     def _build_instructions(self) -> str:
@@ -277,6 +347,11 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             "the caller confirms an AVAILABLE slot, call the calendar tool with action='book' and that exact "
             "datetime_iso, then confirm briefly. schedule_callback only arranges for YOU to phone the caller again — "
             "it does NOT create a calendar appointment."
+            "\n\nCONVERSATION STYLE RULE: This is a live phone call — speak like a real person, not a script reader. "
+            "Keep every reply SHORT: one or two sentences at a time, make a single point, then STOP and let the caller "
+            "respond. Do NOT deliver long monologues or list many things at once — share one benefit or ask one "
+            "question, then wait. Speak naturally and warmly in clear, simple Gujarati (mixing in common English words "
+            "where a real person would). If the caller interrupts you, stop immediately and listen to what they say."
         )
 
     def _build_tools(self):
@@ -329,11 +404,37 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             ))
         return [types.Tool(function_declarations=decls)] if decls else None
 
-    # Gemini Live (1.0.0) cannot update system_instruction mid-session, so contact
-    # memory injection is skipped here (the OpenAI engine still does it). Tracked as
-    # a follow-up; the core conversation is unaffected.
     async def _inject_memory_context(self, contact_id: str):
-        log.info("Gemini engine: skipping mid-session memory injection", contact_id=contact_id)
+        """Inject the contact's memory graph as background context once the contact is
+        resolved. Sent as a non-triggering client_content turn (turn_complete=False), so
+        the agent is personalized from its first reply. Stored for re-injection on reconnect."""
+        try:
+            if not (self.agent.config or {}).get("memory_graph", True):
+                return
+            from backend.features.memory_graph.retriever import MemoryRetriever
+            context = await MemoryRetriever(self.db).get_context_for_call(contact_id)
+            if not context:
+                return
+            self._memory_context = context  # remember so we can re-inject after a reconnect
+            await self._send_memory_context()
+            log.info("Gemini memory context injected", contact_id=contact_id, chars=len(context))
+        except Exception as exc:
+            log.warning("Gemini memory injection failed", error=str(exc))
+
+    async def _send_memory_context(self):
+        if not self._memory_context or self.session is None:
+            return
+        try:
+            await self.session.send_client_content(
+                turns=types.Content(role="user", parts=[types.Part(text=(
+                    "[Background notes about this caller from previous calls — use them to "
+                    "personalize naturally. Do NOT read them aloud or mention them verbatim.]\n"
+                    + self._memory_context
+                ))]),
+                turn_complete=False,
+            )
+        except Exception as exc:
+            log.debug("send_memory_context failed", error=str(exc))
 
     # ── Telephony → Gemini ───────────────────────────────────────────────────
 
@@ -357,36 +458,50 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                         asyncio.create_task(self._link_call_to_contact(self.call_sid))
 
                 elif event == "media":
+                    # Skip until the Gemini session is connected (avoids losing the first
+                    # words to a None session during the ~1s connect at call start).
+                    if self.session is None:
+                        continue
                     raw = base64.b64decode(data["media"]["payload"])
                     self._current_user_audio.append(raw)   # emotion analysis buffer
-                    self._user_turn_audio.append(raw)       # Whisper transcription buffer
                     pcm8 = audioop.ulaw2lin(raw, 2)
+                    rms = audioop.rms(pcm8, 2)
 
-                    # Fast LOCAL barge-in — only stops PLAYBACK so the agent goes quiet
-                    # instantly when the caller talks over it. We do NOT change what we send
-                    # to Gemini: the audio below always flows, so Gemini keeps managing its
-                    # own turns + native interruption (that's what stays stable across turns).
-                    if self._agent_audible() and audioop.rms(pcm8, 2) >= settings.GEMINI_BARGE_RMS:
+                    # ── Manual turn-taking via our own energy VAD ──
+                    if rms >= settings.GEMINI_BARGE_RMS:
                         self._voice_frames += 1
-                        if self._voice_frames >= settings.GEMINI_BARGE_FRAMES:
-                            self._voice_frames = 0
-                            self._agent_speaking = False
-                            self._flush_agent_audio()
-                            await self._clear_telephony_audio()
-                            log.info("Barge-in: stopped agent playback", call_id=self.call.id)
+                        self._silence_frames = 0
+                        if not self._user_speaking and self._voice_frames >= settings.GEMINI_BARGE_FRAMES:
+                            # Caller started talking → tell Gemini (this also interrupts the
+                            # agent), and stop our playback immediately (barge-in).
+                            self._user_speaking = True
+                            await self._send_activity_start()
+                            if self._agent_audible():
+                                self._agent_speaking = False
+                                self._flush_agent_audio()
+                                await self._clear_telephony_audio()
+                            log.info("Caller speaking — activity_start", call_id=self.call.id)
                     else:
                         self._voice_frames = max(0, self._voice_frames - 1)
+                        self._silence_frames += 1
+                        if self._user_speaking and self._silence_frames >= settings.GEMINI_SILENCE_FRAMES:
+                            # Caller finished → tell Gemini to reply now.
+                            self._user_speaking = False
+                            await self._send_activity_end()
+                            log.info("Caller stopped — activity_end (reply now)", call_id=self.call.id)
 
-                    # ALWAYS forward to Gemini (echo is ~RMS 8 — negligible, so it won't
-                    # self-interrupt; real speech is loud and triggers Gemini's own VAD).
-                    pcm16k, self._in_state = audioop.ratecv(pcm8, 2, 1, 8000, 16000, self._in_state)
-                    self._gemini_in_bytes += len(pcm16k)
-                    try:
-                        await self.session.send(input=types.LiveClientRealtimeInput(
-                            media_chunks=[types.Blob(data=pcm16k, mime_type="audio/pcm;rate=16000")]
-                        ))
-                    except Exception as exc:
-                        log.warning("Gemini audio send failed", error=str(exc), call_id=self.call.id)
+                    # Send audio ONLY while the caller is speaking (between the activity
+                    # signals). This means the agent's echo is never sent to Gemini.
+                    if self._user_speaking:
+                        self._user_turn_audio.append(raw)  # μ-law buffer for Whisper transcript
+                        pcm16k, self._in_state = audioop.ratecv(pcm8, 2, 1, 8000, 16000, self._in_state)
+                        self._gemini_in_bytes += len(pcm16k)
+                        try:
+                            await self.session.send_realtime_input(
+                                audio=types.Blob(data=pcm16k, mime_type="audio/pcm;rate=16000")
+                            )
+                        except Exception as exc:
+                            log.warning("Gemini audio send failed", error=str(exc), call_id=self.call.id)
 
                 elif event == "stop":
                     self._running = False
@@ -410,31 +525,65 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         # CRITICAL: session.receive() yields messages for ONE turn then the generator
         # ends. We must re-call it for each subsequent turn, otherwise the agent speaks
         # exactly once and then goes silent. The outer loop keeps the conversation alive.
+        # Returns (rather than killing the call) when the Gemini session drops — run()'s
+        # reconnect loop then opens a fresh session. Does NOT set self._running = False,
+        # so a Gemini-side 1008/drop doesn't end the caller's call.
         try:
             while self._running:
                 got = False
                 async for msg in self.session.receive():
                     got = True
                     if not self._running:
-                        break
+                        return
                     await self._handle_gemini_message(msg)
-                log.info("Gemini turn stream ended — re-subscribing", got_messages=got,
-                         call_id=self.call.id)
                 if not got:
                     await asyncio.sleep(0.1)  # avoid a tight spin if it returns empty
         except Exception as exc:
-            log.exception("Error receiving from gemini", error=str(exc))
-            self._running = False
+            log.warning("Gemini receive ended (will reconnect)", error=str(exc)[:160],
+                        call_id=self.call.id)
+
+    async def _send_activity_start(self):
+        try:
+            await self.session.send_realtime_input(activity_start=types.ActivityStart())
+        except Exception as exc:
+            log.debug("activity_start failed", error=str(exc))
+
+    async def _send_activity_end(self):
+        try:
+            await self.session.send_realtime_input(activity_end=types.ActivityEnd())
+        except Exception as exc:
+            log.debug("activity_end failed", error=str(exc))
 
     async def _handle_gemini_message(self, msg):
         if getattr(msg, "setup_complete", None) is not None:
             log.info("Gemini Live session ready", call_id=self.call.id)
             return
 
+        # Exact billing: accumulate per-turn token usage (modality-split).
+        um = getattr(msg, "usage_metadata", None)
+        if um is not None:
+            self._g_have_usage = True
+            for d in (getattr(um, "prompt_tokens_details", None) or []):
+                tc = getattr(d, "token_count", 0) or 0
+                if "AUDIO" in str(getattr(d, "modality", "")).upper():
+                    self._g_audio_in += tc
+                else:
+                    self._g_text_in += tc
+            for d in (getattr(um, "response_tokens_details", None) or []):
+                tc = getattr(d, "token_count", 0) or 0
+                if "AUDIO" in str(getattr(d, "modality", "")).upper():
+                    self._g_audio_out += tc
+                else:
+                    self._g_text_out += tc
+            self._g_cached_in += getattr(um, "cached_content_token_count", 0) or 0
+
+        # Gemini may signal it's closing soon — let run()'s loop reconnect.
+        if getattr(msg, "go_away", None) is not None:
+            log.info("Gemini go_away received — will reconnect", call_id=self.call.id)
+
         sc = getattr(msg, "server_content", None)
         if sc is not None:
             if getattr(sc, "interrupted", None):
-                # Gemini's own barge signal (backup to our local VAD).
                 self._agent_speaking = False
                 self._flush_agent_audio()
                 await self._clear_telephony_audio()
@@ -445,28 +594,26 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                     inline = getattr(part, "inline_data", None)
                     if inline is not None and getattr(inline, "data", None):
                         if not self._agent_speaking:
-                            # New agent turn — drop any stale leftover audio first.
-                            self._flush_agent_audio()
-                            await self._clear_telephony_audio()
                             self._agent_speaking = True
                             self._response_start_time = time.monotonic()
-                            self._flush_user_turn()  # caller's turn ended → transcribe it
+                            self._flush_user_transcript()  # caller's turn ended → log it
                             log.info("Agent turn started (gemini)", call_id=self.call.id)
                         audio = inline.data
                         if isinstance(audio, str):
                             audio = base64.b64decode(audio)
                         self._gemini_out_bytes += len(audio)
                         self._enqueue_agent_audio(audio)
-                    txt = getattr(part, "text", None)
-                    if txt:
-                        self._agent_text_buf += txt
+
+            # Native transcription of the agent's own speech.
+            ot = getattr(sc, "output_transcription", None)
+            if ot is not None and getattr(ot, "text", None):
+                self._agent_text_buf += ot.text
 
             if getattr(sc, "turn_complete", None):
                 await self._on_agent_turn_complete()
 
         tc = getattr(msg, "tool_call", None)
         if tc and getattr(tc, "function_calls", None):
-            self._flush_user_turn()
             for fc in tc.function_calls:
                 asyncio.create_task(self._handle_tool_call(fc))
 
@@ -552,54 +699,73 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         await asyncio.sleep(0.3)
         await self._hangup()
 
-    # ── Caller transcription (Whisper side-channel) ──────────────────────────
+    # ── Caller transcription (Whisper, with forced language) ─────────────────
 
-    def _flush_user_turn(self):
-        if not self._user_turn_audio:
-            return
+    def _whisper_language(self):
+        """Force Whisper to the agent's language so it doesn't mislabel regional speech.
+        Only when the agent has ONE language; multi-language agents auto-detect."""
+        langs = (self.agent.config or {}).get("languages") or []
+        if len(langs) == 1:
+            return _LANG_ISO639.get(str(langs[0]).strip().lower())
+        return None
+
+    def _flush_user_transcript(self):
+        """The caller's turn just ended → transcribe the buffered audio (forced language).
+        Emotion/intent comes from the LLM sentiment classifier on the transcript (accurate);
+        we do NOT run the librosa acoustic pass here — it returns neutral/unclear defaults
+        and was overwriting the real sentiment under a mismatched turn key."""
         mulaw = b"".join(self._user_turn_audio)
         self._user_turn_audio = []
-        # Buffer used for emotion analysis too
-        if self._current_user_audio:
-            asyncio.create_task(self._analyze_emotion(self._current_user_audio.copy()))
         self._current_user_audio = []
-        asyncio.create_task(self._transcribe_user_turn(mulaw))
+        if mulaw:
+            asyncio.create_task(self._transcribe_user_turn(mulaw))
 
     async def _transcribe_user_turn(self, mulaw: bytes):
-        if len(mulaw) < 1600:  # < ~0.2s — ignore noise blips
+        if len(mulaw) < 2400:  # < ~0.3s — ignore blips
             return
         try:
             self._transcription_seconds += len(mulaw) / 8000.0
             pcm = audioop.ulaw2lin(mulaw, 2)
             buf = io.BytesIO()
             w = wave.open(buf, "wb")
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(8000)
-            w.writeframes(pcm)
-            w.close()
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000)
+            w.writeframes(pcm); w.close()
             buf.seek(0)
-            data = buf.read()
-
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-            langs = (self.agent.config or {}).get("languages") or []
-            code = _transcription_language_code(langs[0]) if len(langs) == 1 else None
-            kwargs = {"model": "whisper-1", "file": ("turn.wav", data, "audio/wav")}
-            if code and code != "en":
+            # gpt-4o-transcribe (NOT whisper-1): whisper-1 rejects many regional languages
+            # (e.g. Gujarati 'gu'); the gpt-4o family supports them all, and the full model
+            # is more accurate than -mini on noisy 8kHz telephony audio.
+            kwargs = {"model": "gpt-4o-transcribe", "file": ("turn.wav", buf.read(), "audio/wav")}
+            code = self._whisper_language()
+            if code:
                 kwargs["language"] = code
             tr = await client.audio.transcriptions.create(**kwargs)
             await self._on_user_transcript((tr.text or "").strip())
         except Exception as exc:
-            log.debug("Gemini caller transcription failed", error=str(exc))
+            log.debug("Caller transcription failed (gemini)", error=str(exc))
+
+    @staticmethod
+    def _collapse_repeats(text: str) -> str:
+        """Collapse hallucinated repetition like 'Bye bye. Bye bye. Bye bye.' → 'Bye bye.'
+        (transcription on noise/silence tends to loop a short phrase)."""
+        if not text:
+            return text
+        # Sentence-level: drop consecutive duplicate segments.
+        import re as _re
+        segs = [s.strip() for s in _re.split(r'[.!?]\s*', text) if s.strip()]
+        out = []
+        for s in segs:
+            if not out or out[-1].lower() != s.lower():
+                out.append(s)
+        result = ". ".join(out)
+        # Word-level: if one short token repeats 4+ times back-to-back, keep two.
+        result = _re.sub(r'\b(\w{1,12})(\s+\1\b){3,}', r'\1 \1', result, flags=_re.IGNORECASE)
+        return result.strip()
 
     async def _on_user_transcript(self, transcript: str):
-        if not transcript or len(transcript) < 3:
-            return
-        t_norm = transcript.lower().strip().rstrip("!?.,")
-        if t_norm in _WHISPER_HALLUCINATIONS:
-            return
-        if t_norm.replace(",", "").replace("  ", " ") in _WHISPER_HALLUCINATIONS:
+        transcript = self._collapse_repeats((transcript or "").strip())
+        if not transcript or len(transcript) < 2:
             return
         self._turn_index += 1
         await self.call_logger.log_turn(
@@ -635,11 +801,11 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             result = await self._do_transfer(phone)
 
         try:
-            await self.session.send(input=types.LiveClientToolResponse(
-                function_responses=[types.FunctionResponse(
+            await self.session.send_tool_response(function_responses=[
+                types.FunctionResponse(
                     id=getattr(fc, "id", None), name=name, response={"result": result},
-                )]
-            ))
+                )
+            ])
         except Exception as exc:
             log.warning("Gemini tool response failed", tool=name, error=str(exc))
 
@@ -681,37 +847,60 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             log.warning("Transfer failed (gemini)", error=str(exc))
             return "Transfer unavailable at the moment."
 
-    # ── Cost (estimated from audio seconds) ──────────────────────────────────
+    # ── Cost (exact from usage_metadata; falls back to seconds estimate) ──────
 
     async def _persist_cost(self):
         from datetime import datetime as _dt
         from sqlalchemy.orm.attributes import flag_modified
         from backend.db.database import AsyncSessionLocal
         try:
-            tps = settings.GEMINI_AUDIO_TOKENS_PER_SEC
-            in_secs = self._gemini_in_bytes / 32000.0    # 16kHz * 2 bytes
-            out_secs = self._gemini_out_bytes / 48000.0   # 24kHz * 2 bytes
-            audio_in_tokens = int(in_secs * tps)
-            audio_out_tokens = int(out_secs * tps)
-            audio_in_cost = audio_in_tokens * settings.GEMINI_AUDIO_IN_COST_PER_M / 1_000_000
-            audio_out_cost = audio_out_tokens * settings.GEMINI_AUDIO_OUT_COST_PER_M / 1_000_000
-            transcription_cost = self._transcription_seconds / 60.0 * settings.WHISPER_COST_PER_MIN
-            total = audio_in_cost + audio_out_cost + transcription_cost
-
-            cost_breakdown = {
-                "engine": "gemini",
-                "estimated": True,
-                "model": settings.GEMINI_LIVE_MODEL,
-                "audio_in_seconds": round(in_secs, 1),
-                "audio_out_seconds": round(out_secs, 1),
-                "audio_in_tokens": audio_in_tokens,
-                "audio_out_tokens": audio_out_tokens,
-                "transcription_seconds": round(self._transcription_seconds, 1),
-                "audio_in_usd": round(audio_in_cost, 6),
-                "audio_out_usd": round(audio_out_cost, 6),
-                "transcription_usd": round(transcription_cost, 6),
-                "total_usd": round(total, 6),
-            }
+            if self._g_have_usage:
+                # EXACT: real token counts from Gemini usage_metadata (summed per-turn).
+                audio_in_cost  = self._g_audio_in  * settings.GEMINI_AUDIO_IN_COST_PER_M  / 1_000_000
+                text_in_cost   = self._g_text_in   * settings.GEMINI_TEXT_IN_COST_PER_M   / 1_000_000
+                audio_out_cost = self._g_audio_out * settings.GEMINI_AUDIO_OUT_COST_PER_M / 1_000_000
+                text_out_cost  = self._g_text_out  * settings.GEMINI_TEXT_OUT_COST_PER_M  / 1_000_000
+                transcription_cost = self._transcription_seconds / 60.0 * settings.WHISPER_COST_PER_MIN
+                total = audio_in_cost + text_in_cost + audio_out_cost + text_out_cost + transcription_cost
+                cost_breakdown = {
+                    "engine": "gemini",
+                    "estimated": False,
+                    "model": settings.GEMINI_LIVE_MODEL,
+                    "audio_in_tokens":  self._g_audio_in,
+                    "text_in_tokens":   self._g_text_in,
+                    "audio_out_tokens": self._g_audio_out,
+                    "text_out_tokens":  self._g_text_out,
+                    "cached_in_tokens": self._g_cached_in,
+                    "transcription_seconds": round(self._transcription_seconds, 1),
+                    "audio_in_usd":  round(audio_in_cost, 6),
+                    "text_in_usd":   round(text_in_cost, 6),
+                    "audio_out_usd": round(audio_out_cost, 6),
+                    "text_out_usd":  round(text_out_cost, 6),
+                    "transcription_usd": round(transcription_cost, 6),
+                    "total_usd":     round(total, 6),
+                }
+            else:
+                # FALLBACK: estimate from audio seconds (no usage_metadata received).
+                tps = settings.GEMINI_AUDIO_TOKENS_PER_SEC
+                in_secs = self._gemini_in_bytes / 32000.0
+                out_secs = self._gemini_out_bytes / 48000.0
+                audio_in_tokens = int(in_secs * tps)
+                audio_out_tokens = int(out_secs * tps)
+                audio_in_cost = audio_in_tokens * settings.GEMINI_AUDIO_IN_COST_PER_M / 1_000_000
+                audio_out_cost = audio_out_tokens * settings.GEMINI_AUDIO_OUT_COST_PER_M / 1_000_000
+                total = audio_in_cost + audio_out_cost
+                cost_breakdown = {
+                    "engine": "gemini",
+                    "estimated": True,
+                    "model": settings.GEMINI_LIVE_MODEL,
+                    "audio_in_seconds": round(in_secs, 1),
+                    "audio_out_seconds": round(out_secs, 1),
+                    "audio_in_tokens": audio_in_tokens,
+                    "audio_out_tokens": audio_out_tokens,
+                    "audio_in_usd": round(audio_in_cost, 6),
+                    "audio_out_usd": round(audio_out_cost, 6),
+                    "total_usd": round(total, 6),
+                }
             call_id = self.call.id
             _terminal = {"completed", "voicemail", "not_answered", "failed", "cancelled"}
             async with AsyncSessionLocal() as fresh_db:
@@ -733,6 +922,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                         )
                     await fresh_db.commit()
                     log.info("Call finalized (gemini)", call_id=call_id, cost_usd=round(total, 6),
-                             status=real_call.status, audio_in_s=round(in_secs, 1), audio_out_s=round(out_secs, 1))
+                             status=real_call.status, exact=self._g_have_usage,
+                             breakdown=cost_breakdown)
         except Exception as exc:
             log.warning("Could not finalize call (gemini)", call_id=self.call.id, error=str(exc))

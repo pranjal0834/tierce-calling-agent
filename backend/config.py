@@ -65,8 +65,9 @@ _DEFAULTS = {
     # audio energy. RMS above this for BARGE_FRAMES consecutive 20ms frames = barge-in.
     # Raise RMS if the agent cuts itself off on its own echo; lower it if it ignores you.
     "GEMINI_BARGE_RMS": 1500,
-    "GEMINI_BARGE_FRAMES": 8,      # ~160ms of speech to declare the caller is talking
-    "GEMINI_SILENCE_FRAMES": 40,   # ~800ms of quiet to declare the caller finished
+    "GEMINI_BARGE_FRAMES": 8,        # ~160ms of speech to declare the caller is talking
+    "GEMINI_SILENCE_FRAMES": 16,     # ~320ms of quiet → caller finished → tell Gemini to reply
+    "GEMINI_BARGE_COOLDOWN_S": 0.8,  # (legacy; unused with manual VAD)
     # OpenAI Realtime API pricing (USD per 1M tokens) — gpt-realtime-mini rates
     "REALTIME_AUDIO_IN_COST_PER_M":          10.0,   # $10   per 1M audio input tokens (uncached)
     "REALTIME_AUDIO_IN_CACHED_COST_PER_M":    0.30,  # $0.30 per 1M audio input tokens (cached context)
