@@ -66,7 +66,7 @@ _DEFAULTS = {
     # Raise RMS if the agent cuts itself off on its own echo; lower it if it ignores you.
     "GEMINI_BARGE_RMS": 1500,
     "GEMINI_BARGE_FRAMES": 8,        # ~160ms of speech to declare the caller is talking
-    "GEMINI_SILENCE_FRAMES": 16,     # ~320ms of quiet → caller finished → tell Gemini to reply
+    "GEMINI_SILENCE_FRAMES": 20,     # ~400ms quiet → caller finished (avoids fragmenting turns into tiny clips that get no reply)
     "GEMINI_BARGE_COOLDOWN_S": 0.8,  # (legacy; unused with manual VAD)
     # OpenAI Realtime API pricing (USD per 1M tokens) — gpt-realtime-mini rates
     "REALTIME_AUDIO_IN_COST_PER_M":          10.0,   # $10   per 1M audio input tokens (uncached)
@@ -89,6 +89,9 @@ _DEFAULTS = {
     "TTS_COST_PER_M_CHARS":     15.0,
     # text-embedding-3-small (knowledge base) — billed per 1M tokens
     "EMBED_COST_PER_M":         0.02,
+    # Knowledge base: when a URL is added, crawl up to this many same-domain pages
+    # (so services/contact/about pages are captured, not just the homepage).
+    "KB_CRAWL_MAX_PAGES":       25,
 }
 
 

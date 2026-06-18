@@ -64,7 +64,7 @@ async def _whisper(ulaw_bytes: bytes) -> str:
                 "https://api.openai.com/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
                 files={"file": ("audio.wav", wav, "audio/wav")},
-                data={"model": "whisper-1"},
+                data={"model": "gpt-4o-transcribe"},  # handles regional langs; whisper-1 rejects gu
                 timeout=30,
             )
         if resp.status_code == 200:

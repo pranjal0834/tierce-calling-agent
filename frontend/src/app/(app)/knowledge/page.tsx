@@ -2,12 +2,12 @@
 import { useEffect, useState, useRef } from "react";
 import {
   BookOpen, Plus, Trash2, FileText, Globe, Type, UploadCloud,
-  ChevronLeft, CheckCircle2, AlertCircle, X, Loader2,
+  ChevronLeft, CheckCircle2, AlertCircle, X, Loader2, Eye, User as UserIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   getKnowledgeBases, createKnowledgeBase, getKnowledgeBase, deleteKnowledgeBase,
-  addKbTextDoc, addKbUrlDoc, uploadKbPdf, deleteKbDoc,
+  addKbTextDoc, addKbUrlDoc, uploadKbPdf, deleteKbDoc, getKbDocContent,
 } from "@/lib/api";
 
 interface KB {
@@ -18,6 +18,7 @@ interface KbDoc {
   id: string; source_type: "pdf" | "url" | "text"; title: string;
   source_ref?: string; status: "processing" | "ready" | "failed";
   error_message?: string; char_count: number; chunk_count: number; created_at?: string;
+  uploaded_by?: string | null;
 }
 
 const SOURCE_META: Record<string, { icon: any; label: string; color: string; bg: string }> = {
@@ -41,6 +42,7 @@ export default function KnowledgePage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<KbDoc | null>(null);
 
   const loadKbs = () => getKnowledgeBases().then(setKbs).catch(() => {}).finally(() => setLoading(false));
   useEffect(() => { loadKbs(); }, []);
@@ -216,19 +218,35 @@ export default function KnowledgePage() {
                             {doc.status === "ready" && (
                               <span className="text-[10px] text-neutral-400">{doc.chunk_count} chunks · {(doc.char_count / 1000).toFixed(1)}k chars</span>
                             )}
+                            {doc.uploaded_by && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-neutral-400" title={`Uploaded by ${doc.uploaded_by}`}>
+                                <UserIcon className="w-3 h-3" /> {doc.uploaded_by}
+                              </span>
+                            )}
                             {doc.status === "failed" && doc.error_message && (
                               <span className="text-[10px] text-red-500 truncate max-w-[200px]" title={doc.error_message}>{doc.error_message}</span>
                             )}
                           </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDeleteDoc(doc)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {doc.status === "ready" && (
+                          <button
+                            onClick={() => setPreviewDoc(doc)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                            title="Preview content"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteDoc(doc)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -251,6 +269,70 @@ export default function KnowledgePage() {
           onAdded={(doc) => { setDocs(prev => [doc, ...prev]); setShowAddDoc(false); }}
         />
       )}
+      {previewDoc && selected && (
+        <PreviewDocModal
+          kbId={selected.id}
+          doc={previewDoc}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Document preview modal ──────────────────────────────────────────────────────
+
+function PreviewDocModal({ kbId, doc, onClose }: { kbId: string; doc: KbDoc; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
+
+  useEffect(() => {
+    getKbDocContent(kbId, doc.id)
+      .then(setData)
+      .catch(() => toast.error("Failed to load content"))
+      .finally(() => setLoading(false));
+  }, [kbId, doc.id]);
+
+  const meta = SOURCE_META[doc.source_type] ?? SOURCE_META.text;
+  const Icon = meta.icon;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 sm:p-4 animate-fade-in">
+      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-modal w-full sm:max-w-2xl max-h-[92vh] sm:max-h-[88vh] flex flex-col animate-scale-in">
+        <div className="px-6 py-4 border-b border-neutral-100 flex items-start justify-between gap-3 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-8 h-8 rounded-lg ${meta.bg} flex items-center justify-center shrink-0`}>
+              <Icon className={`w-4 h-4 ${meta.color}`} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-semibold text-neutral-900 truncate">{doc.title}</h2>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[11px] text-neutral-400">
+                <span>{meta.label}</span>
+                {doc.source_ref && <span className="truncate max-w-[200px]">· {doc.source_ref}</span>}
+                {doc.uploaded_by && <span className="inline-flex items-center gap-1">· <UserIcon className="w-3 h-3" /> {doc.uploaded_by}</span>}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors shrink-0"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-6 overflow-y-auto flex-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <>
+              <p className="text-[11px] text-neutral-400 mb-3">
+                {doc.chunk_count} chunks · {(doc.char_count / 1000).toFixed(1)}k chars — this is the exact text the agent searches during calls.
+              </p>
+              <pre className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-neutral-700 font-sans">
+                {(data?.content || "").trim() || "No extractable content."}
+              </pre>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

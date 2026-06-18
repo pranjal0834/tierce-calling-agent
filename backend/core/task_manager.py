@@ -92,10 +92,44 @@ class TaskManager:
     # ── System prompt ────────────────────────────────────────────────────────
 
     def _build_system_prompt(self, memory_context: str) -> str:
-        base = self.agent.system_prompt
+        base = self._apply_variables(self.agent.system_prompt)
         if memory_context:
             base = f"{base}\n\n## Contact Memory\n{memory_context}"
         return base
+
+    def _apply_variables(self, text: str) -> str:
+        """Replace [Placeholder] tokens in the prompt with real values:
+          - agent-defined variables (config['variables'], e.g. Agent Name → Pranjal)
+          - the lead/contact's name (from the uploaded sheet) for [Customer Name]/[Name]/etc.
+        So the agent says 'Hi Ravi, this is Pranjal…' instead of 'Hi [Customer Name]…'.
+        Unknown placeholders are left untouched."""
+        import re
+        if not text:
+            return text
+        # agent-defined variables — accept either a list of {name,value} or a dict
+        raw = self.config.get("variables") or []
+        items = raw.items() if isinstance(raw, dict) else [
+            (d.get("name"), d.get("value")) for d in raw if isinstance(d, dict)
+        ]
+        variables = {str(k).strip().lower(): str(v) for k, v in items if k and str(v).strip()}
+        # dynamic: the lead's name from the sheet/contact
+        cust = (self.contact.name if (self.contact and self.contact.name) else "").strip()
+        for key in ("customer name", "lead name", "name", "customer", "client name"):
+            variables.setdefault(key, cust)
+
+        def repl(m):
+            inner = m.group(1).strip().lower()
+            if inner in variables:
+                val = variables[inner]
+                if val:
+                    return val
+                # name-type placeholder with no value → friendly fallback
+                if any(w in inner for w in ("name", "customer", "client")):
+                    return "there"
+                return ""
+            return m.group(0)  # leave placeholders we don't have a value for
+
+        return re.sub(r"\[([^\[\]]{1,40})\]", repl, text)
 
     # ── Native pipeline (GPT-4o Realtime / Gemini Live) ──────────────────────
 

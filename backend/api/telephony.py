@@ -115,11 +115,34 @@ async def twilio_status_callback(request: Request, db: AsyncSession = Depends(ge
     elif new_status in _terminal:
         if not call.ended_at:
             call.ended_at = now
-        if call_duration and not call.duration_seconds:
+        full_dur = None
+        if call_duration:
             try:
-                call.duration_seconds = int(call_duration)
+                full_dur = int(call_duration)
             except (ValueError, TypeError):
-                pass
+                full_dur = None
+        if full_dur is not None and not call.duration_seconds:
+            call.duration_seconds = full_dur
+        elif full_dur is not None and full_dur > (call.duration_seconds or 0) + 2:
+            # Twilio's full duration exceeds the AI portion we already finalized + billed —
+            # this is the post-transfer (human handoff) time. Correct the call's duration to
+            # the true full length and bill ONLY the extra minutes, exactly once.
+            extra_secs = full_dur - (call.duration_seconds or 0)
+            call.duration_seconds = full_dur
+            _ed = dict(call.extra_data or {})
+            if not _ed.get("post_transfer_billed"):
+                try:
+                    from backend.billing.credits import deduct_credits
+                    if call.workspace_id:
+                        await deduct_credits(db, call.workspace_id, extra_secs, call.id)
+                    _ed["post_transfer_billed"] = True
+                    from sqlalchemy.orm.attributes import flag_modified
+                    call.extra_data = _ed
+                    flag_modified(call, "extra_data")
+                    log.info("Billed extra post-transfer minutes",
+                             call_id=call.id, extra_seconds=extra_secs, full_seconds=full_dur)
+                except Exception as exc:
+                    log.warning("Post-transfer billing failed", call_id=call.id, error=str(exc))
         if call.started_at and call.ended_at and not call.duration_seconds:
             call.duration_seconds = int((call.ended_at - call.started_at).total_seconds())
 

@@ -112,6 +112,12 @@ async def _repair_null_jsonb():
             pass
         try:
             await db.execute(text(
+                "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS created_by VARCHAR(36)"
+            ))
+        except Exception:
+            pass
+        try:
+            await db.execute(text(
                 "ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS provider VARCHAR(20) DEFAULT 'twilio'"
             ))
         except Exception:

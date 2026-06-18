@@ -24,6 +24,7 @@ const DEFAULT_FORM = {
     speech_pace: "natural",
     languages: ["English"] as string[],
     knowledge_base_ids: [] as string[],
+    variables: [] as { name: string; value: string }[],
   },
 };
 
@@ -75,12 +76,21 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
           speech_pace: editingAgent.config?.speech_pace ?? "natural",
           languages: editingAgent.config?.languages ?? ["English"],
           knowledge_base_ids: editingAgent.config?.knowledge_base_ids ?? [],
+          variables: editingAgent.config?.variables ?? [],
         },
       });
     } else {
       setForm(DEFAULT_FORM);
     }
   }, [editingAgent]);
+
+  const variables: { name: string; value: string }[] = (form.config as any).variables ?? [];
+  const setVariables = (next: { name: string; value: string }[]) =>
+    setForm(f => ({ ...f, config: { ...f.config, variables: next } }));
+  const addVariable = () => setVariables([...variables, { name: "", value: "" }]);
+  const updateVariable = (i: number, key: "name" | "value", val: string) =>
+    setVariables(variables.map((v, idx) => (idx === i ? { ...v, [key]: val } : v)));
+  const removeVariable = (i: number) => setVariables(variables.filter((_, idx) => idx !== i));
 
   const selectedKbs: string[] = (form.config as any).knowledge_base_ids ?? [];
   const toggleKb = (id: string) => {
@@ -172,10 +182,52 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
           <Field label="System Prompt" required>
             <textarea
               className="input-base min-h-[120px] resize-none"
-              placeholder="You are a helpful sales agent..."
+              placeholder="You are a helpful sales agent... e.g. Hi [Customer Name], this is [Agent Name] from [Company Name]."
               value={form.system_prompt}
               onChange={e => setForm(f => ({ ...f, system_prompt: e.target.value }))}
             />
+          </Field>
+
+          {/* Prompt variables */}
+          <Field label="Prompt Variables">
+            <p className="text-xs text-neutral-500 -mt-0.5 mb-1">
+              Use <code className="px-1 bg-neutral-100 rounded">[Placeholder]</code> in the prompt, then set its value here.
+              <span className="text-neutral-400"> <code className="px-1 bg-neutral-100 rounded">[Customer Name]</code> is filled automatically from the uploaded lead sheet.</span>
+            </p>
+            <div className="space-y-2">
+              {variables.map((v, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    className="input-base flex-1"
+                    placeholder="Variable (e.g. Agent Name)"
+                    value={v.name}
+                    onChange={e => updateVariable(i, "name", e.target.value)}
+                  />
+                  <span className="text-neutral-400 text-sm">=</span>
+                  <input
+                    className="input-base flex-1"
+                    placeholder="Value (e.g. Pranjal)"
+                    value={v.value}
+                    onChange={e => updateVariable(i, "value", e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeVariable(i)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addVariable}
+                className="inline-flex items-center gap-1.5 h-8 px-3 text-sm font-medium text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
+              >
+                + Add variable
+              </button>
+            </div>
           </Field>
 
 

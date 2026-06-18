@@ -69,6 +69,8 @@ export const uploadKbPdf = (kbId: string, file: File) => {
 };
 export const deleteKbDoc = (kbId: string, docId: string) =>
   api.delete(`/api/knowledge/${kbId}/documents/${docId}`);
+export const getKbDocContent = (kbId: string, docId: string) =>
+  api.get(`/api/knowledge/${kbId}/documents/${docId}/content`).then((r: AxiosResponse) => r.data);
 
 // ── Calls ────────────────────────────────────────────────────────────────────
 

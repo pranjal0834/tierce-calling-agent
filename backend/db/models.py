@@ -240,6 +240,7 @@ class KnowledgeDocument(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     char_count: Mapped[int] = mapped_column(Integer, default=0)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_by: Mapped[str | None] = mapped_column(String(36))   # User.id who uploaded it
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     knowledge_base: Mapped["KnowledgeBase"] = relationship("KnowledgeBase", back_populates="documents")

@@ -12,8 +12,8 @@ from backend.knowledge.embeddings import embed_query
 
 log = structlog.get_logger()
 
-TOP_K = 5
-MIN_SCORE = 0.25  # ignore weakly-related chunks
+TOP_K = 8           # broader coverage now that KBs span whole sites (multi-page crawl)
+MIN_SCORE = 0.25    # ignore weakly-related chunks
 
 
 async def search_knowledge(kb_ids: list[str], query: str, top_k: int = TOP_K, call_id: str = "") -> str:

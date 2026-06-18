@@ -280,7 +280,7 @@ export default function CallsPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "transcript" | "data">("overview");
   const [showDial, setShowDial] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
-  const [dialForm, setDialForm] = useState({ agent_id: "", phone_number: "" });
+  const [dialForm, setDialForm] = useState({ agent_id: "", phone_number: "", name: "" });
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 8;
 
@@ -331,7 +331,9 @@ export default function CallsPage() {
       return;
     }
     try {
-      const call = await initiateCall(dialForm);
+      const payload: any = { agent_id: dialForm.agent_id, phone_number: dialForm.phone_number };
+      if (dialForm.name.trim()) payload.contact_data = { name: dialForm.name.trim() };
+      const call = await initiateCall(payload);
       setCalls((c: any[]) => [call, ...c]);
       setShowDial(false);
       toast.success("Call initiated!");
@@ -930,6 +932,15 @@ export default function CallsPage() {
                   placeholder="+1234567890"
                   value={dialForm.phone_number}
                   onChange={e => setDialForm(f => ({ ...f, phone_number: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm text-neutral-700">Name <span className="text-neutral-400 font-normal">(optional)</span></label>
+                <input
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm"
+                  placeholder="e.g. Ravi — fills [Customer Name] in the prompt"
+                  value={dialForm.name}
+                  onChange={e => setDialForm(f => ({ ...f, name: e.target.value }))}
                 />
               </div>
             </div>

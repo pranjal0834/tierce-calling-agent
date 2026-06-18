@@ -24,6 +24,7 @@ import base64
 import io
 import time
 import wave
+from collections import deque
 
 import structlog
 from google import genai
@@ -125,8 +126,11 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         self._user_speaking = False
         self._voice_frames = 0       # consecutive loud frames
         self._silence_frames = 0     # consecutive quiet frames
+        self._preroll = deque(maxlen=15)  # ~300ms of recent μ-law frames (capture word onset)
+        self._last_agent_text = ""   # agent's previous line — context for caller transcription
         self._user_tr_buf = ""       # native input transcription accumulator (caller)
         self._memory_context = ""    # contact memory graph (re-injected on reconnect)
+        self._resume_handle = None   # session-resumption token → reconnect WITH context after a 1008
         # Exact billing from Gemini's per-turn usage_metadata (summed across turns).
         self._g_have_usage = False
         self._g_audio_in = 0
@@ -142,7 +146,6 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             log.error("Gemini engine selected but GOOGLE_API_KEY is empty")
             return
         client = genai.Client(api_key=settings.GOOGLE_API_KEY)
-        config = self._build_config()
         self._pacer_task = asyncio.create_task(self._pace_output())
         # Telephony runs for the WHOLE call (created once). The Gemini session can drop
         # mid-call (the experimental/free-tier API sometimes closes with a 1008 error);
@@ -153,16 +156,25 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         try:
             while self._running:
                 try:
+                    resuming = bool(self._resume_handle)
+                    # Rebuild config each connect so it carries the latest resume handle.
+                    config = self._build_config()
                     async with client.aio.live.connect(
                         model=settings.GEMINI_LIVE_MODEL, config=config
                     ) as session:
                         self.session = session
                         log.info("Gemini Live connected", call_id=self.call.id,
-                                 model=settings.GEMINI_LIVE_MODEL, reconnects=reconnects)
-                        # Re-inject contact memory into the fresh session after a reconnect
-                        # (first connect: contact not resolved yet, so this no-ops).
-                        if reconnects > 0:
+                                 model=settings.GEMINI_LIVE_MODEL, reconnects=reconnects,
+                                 resuming=resuming)
+                        # If resuming after a 1008, the session keeps its context — don't
+                        # re-greet or re-inject memory. Only a fresh (non-resumed) reconnect
+                        # needs memory re-injected; the very first connect greets.
+                        if reconnects > 0 and not resuming:
                             await self._send_memory_context()
+                        elif reconnects == 0:
+                            # First connect: have the agent GREET immediately so there's no
+                            # dead air while it waits for the caller to speak first.
+                            await self._trigger_greeting()
                         gem = asyncio.create_task(self._receive_from_gemini())
                         done, _ = await asyncio.wait(
                             {tel, gem}, return_when=asyncio.FIRST_COMPLETED
@@ -181,6 +193,10 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                     if not self._running:
                         break
                     log.warning("Gemini session error", error=str(exc)[:160], call_id=self.call.id)
+                    # If a resume attempt itself failed, drop the (possibly stale) handle so
+                    # the next reconnect starts a fresh session instead of looping on it.
+                    if self._resume_handle:
+                        self._resume_handle = None
                 if not self._running:
                     break
                 reconnects += 1
@@ -240,6 +256,9 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             realtime_input_config=types.RealtimeInputConfig(
                 automatic_activity_detection=types.AutomaticActivityDetection(disabled=True),
             ),
+            # Resume the session WITH context after a dropped connection (1008) instead of
+            # starting fresh. handle=None on the first connect = brand-new session.
+            session_resumption=types.SessionResumptionConfig(handle=self._resume_handle),
             # Agent's OWN speech: native output transcription (accurate — it knows what it
             # generated). The CALLER's speech is transcribed via Whisper with a forced
             # language instead, because Gemini's native input transcription auto-detects
@@ -311,11 +330,23 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         kb_block = ""
         if cfg.get("knowledge_base_ids"):
             kb_block = (
-                "\n\nKNOWLEDGE BASE RULE: You have access to a company knowledge base via the "
-                "query_knowledge_base tool. Whenever the caller asks anything not explicitly covered "
-                "in your instructions above (products, pricing, policies, services, company details, etc.), "
-                "call query_knowledge_base with their question BEFORE answering. Base your answer on what it "
-                "returns. Only say you don't have the information if the tool returns nothing relevant."
+                "\n\nKNOWLEDGE BASE RULE: You have a private tool, query_knowledge_base, that looks up "
+                "company information. For ANY factual question about the company — services, products, "
+                "pricing, policies, LOCATION/ADDRESS, contact details, team, hours, or anything not "
+                "explicitly in your instructions above — silently call query_knowledge_base FIRST and "
+                "answer ONLY from what it returns. "
+                "INVISIBLE TOOL (very important): This lookup is INTERNAL and INSTANT. NEVER tell the "
+                "caller you are 'checking', 'looking it up', 'searching', or that you have a 'knowledge "
+                "base', 'database', 'system', or 'documents'. Do NOT say things like 'let me check' or "
+                "'please wait'. Just answer naturally and directly, as a knowledgeable employee who "
+                "already knows the answer. "
+                "ANTI-HALLUCINATION (critical): NEVER invent or guess company facts — never make up a "
+                "location, address, phone number, email, price, or a service the company offers. If the "
+                "lookup returns nothing relevant, respond naturally like a human who doesn't have that "
+                "detail on hand — e.g. 'I don't have that exact detail in front of me right now, but I "
+                "can have someone share it with you' or offer to send it on WhatsApp — WITHOUT "
+                "mentioning any tool or knowledge base. Do not claim the company does NOT offer "
+                "something unless the lookup clearly says so; if unsure, offer to confirm and follow up."
             )
 
         learned = (cfg.get("learned_guidance") or "").strip()
@@ -464,6 +495,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                         continue
                     raw = base64.b64decode(data["media"]["payload"])
                     self._current_user_audio.append(raw)   # emotion analysis buffer
+                    self._preroll.append(raw)              # rolling lead-in (word onset)
                     pcm8 = audioop.ulaw2lin(raw, 2)
                     rms = audioop.rms(pcm8, 2)
 
@@ -475,6 +507,9 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                             # Caller started talking → tell Gemini (this also interrupts the
                             # agent), and stop our playback immediately (barge-in).
                             self._user_speaking = True
+                            # Seed the transcript buffer with the pre-roll so the START of the
+                            # caller's first word (the ~300ms before we detected speech) isn't lost.
+                            self._user_turn_audio = list(self._preroll)[:-1]
                             await self._send_activity_start()
                             if self._agent_audible():
                                 self._agent_speaking = False
@@ -577,6 +612,12 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                     self._g_text_out += tc
             self._g_cached_in += getattr(um, "cached_content_token_count", 0) or 0
 
+        # Session-resumption handle: store the latest so a reconnect (after a 1008) can
+        # RESUME this session with its full context instead of starting fresh.
+        sru = getattr(msg, "session_resumption_update", None)
+        if sru is not None and getattr(sru, "resumable", False) and getattr(sru, "new_handle", None):
+            self._resume_handle = sru.new_handle
+
         # Gemini may signal it's closing soon — let run()'s loop reconnect.
         if getattr(msg, "go_away", None) is not None:
             log.info("Gemini go_away received — will reconnect", call_id=self.call.id)
@@ -669,6 +710,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         self._agent_text_buf = ""
         self._agent_speaking = False
         if text:
+            self._last_agent_text = text   # context for the next caller-turn transcription
             self._turn_index += 1
             latency = int((time.monotonic() - self._response_start_time) * 1000) if self._response_start_time else None
             await self.call_logger.log_turn(
@@ -679,14 +721,18 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             asyncio.create_task(self._drain_then_hangup())
 
     async def _trigger_greeting(self):
-        """Make the agent speak first so there's no dead air at call start."""
+        """Make the agent speak first (2.8.0 API) so there's no dead air while it waits
+        for the caller. send_client_content(turn_complete=True) triggers the opening turn;
+        auto-VAD is disabled and the caller is silent at connect, so nothing conflicts."""
         try:
-            await self.session.send(
-                input="The call has just connected. Greet the caller now and begin the "
-                      "conversation in the configured language.",
-                end_of_turn=True,
+            await self.session.send_client_content(
+                turns=types.Content(role="user", parts=[types.Part(text=(
+                    "The call has just connected. Greet the caller now and open the "
+                    "conversation in the configured language."))]),
+                turn_complete=True,
             )
             self._greeted = True
+            log.info("Gemini greeting triggered", call_id=self.call.id)
         except Exception as exc:
             log.debug("Gemini greeting trigger failed", error=str(exc))
 
@@ -702,12 +748,66 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
     # ── Caller transcription (Whisper, with forced language) ─────────────────
 
     def _whisper_language(self):
-        """Force Whisper to the agent's language so it doesn't mislabel regional speech.
-        Only when the agent has ONE language; multi-language agents auto-detect."""
+        """Force the transcription to the agent's PRIMARY language (first in the list) so
+        it doesn't mislabel regional speech. gpt-4o-transcribe still handles other words
+        (e.g. English) even with a hint set."""
         langs = (self.agent.config or {}).get("languages") or []
-        if len(langs) == 1:
+        if langs:
             return _LANG_ISO639.get(str(langs[0]).strip().lower())
         return None
+
+    def _expected_scripts(self) -> set:
+        """Unicode scripts the agent's languages can legitimately produce (Latin always
+        allowed for mixed-in English). Used to drop wrong-script transcription hallucinations."""
+        m = {
+            "hindi": "deva", "marathi": "deva", "sanskrit": "deva", "gujarati": "gujr",
+            "tamil": "taml", "telugu": "telu", "kannada": "knda", "malayalam": "mlym",
+            "bengali": "beng", "assamese": "beng", "punjabi": "guru", "odia": "orya",
+            "urdu": "arab", "arabic": "arab", "persian": "arab", "sindhi": "arab",
+            "hebrew": "hebr", "russian": "cyrl", "japanese": "jpan", "korean": "hang",
+            "chinese": "hani", "mandarin": "hani", "mandarin chinese": "hani", "thai": "thai",
+        }
+        scripts = {"latin"}
+        for l in (self.agent.config or {}).get("languages") or []:
+            s = m.get(str(l).strip().lower())
+            if s:
+                scripts.add(s)
+        return scripts
+
+    @staticmethod
+    def _char_script(ch: str):
+        o = ord(ch)
+        if 0x0900 <= o <= 0x097F: return "deva"
+        if 0x0A80 <= o <= 0x0AFF: return "gujr"
+        if 0x0B80 <= o <= 0x0BFF: return "taml"
+        if 0x0C00 <= o <= 0x0C7F: return "telu"
+        if 0x0C80 <= o <= 0x0CFF: return "knda"
+        if 0x0D00 <= o <= 0x0D7F: return "mlym"
+        if 0x0980 <= o <= 0x09FF: return "beng"
+        if 0x0A00 <= o <= 0x0A7F: return "guru"
+        if 0x0B00 <= o <= 0x0B7F: return "orya"
+        if 0x0600 <= o <= 0x06FF: return "arab"
+        if 0x0590 <= o <= 0x05FF: return "hebr"
+        if 0x0400 <= o <= 0x04FF: return "cyrl"
+        if 0xAC00 <= o <= 0xD7A3: return "hang"
+        if 0x3040 <= o <= 0x30FF: return "jpan"
+        if 0x4E00 <= o <= 0x9FFF: return "hani"
+        if 0x0E00 <= o <= 0x0E7F: return "thai"
+        if ch.isascii() and ch.isalpha(): return "latin"
+        return None
+
+    def _wrong_script(self, text: str) -> bool:
+        """True if the transcript's dominant script isn't one the agent's languages use —
+        i.e. a transcription hallucination (Gujarati audio coming back as Japanese/Korean)."""
+        counts = {}
+        for ch in text:
+            s = self._char_script(ch)
+            if s:
+                counts[s] = counts.get(s, 0) + 1
+        if not counts:
+            return False
+        dominant = max(counts, key=counts.get)
+        return dominant not in self._expected_scripts()
 
     def _flush_user_transcript(self):
         """The caller's turn just ended → transcribe the buffered audio (forced language).
@@ -731,19 +831,25 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000)
             w.writeframes(pcm); w.close()
             buf.seek(0)
+            wav = buf.read()
+            # Transcribe the caller with gpt-4o-transcribe (OpenAI), NOT Gemini — running
+            # transcription on Gemini too adds concurrent load to the same key and can trigger
+            # 1008/1011 server errors that choke the live conversation. Keeping it on OpenAI
+            # leaves Gemini dedicated to the call. Accuracy is helped by: forced language +
+            # the conversation context as a bias prompt + the pre-roll (word onset).
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-            # gpt-4o-transcribe (NOT whisper-1): whisper-1 rejects many regional languages
-            # (e.g. Gujarati 'gu'); the gpt-4o family supports them all, and the full model
-            # is more accurate than -mini on noisy 8kHz telephony audio.
-            kwargs = {"model": "gpt-4o-transcribe", "file": ("turn.wav", buf.read(), "audio/wav")}
+            kwargs = {"model": "gpt-4o-transcribe", "file": ("turn.wav", wav, "audio/wav")}
             code = self._whisper_language()
             if code:
                 kwargs["language"] = code
+            ctx = (self._last_agent_text or "").strip()
+            if ctx:
+                kwargs["prompt"] = ctx[:200]   # bias toward the on-topic reply
             tr = await client.audio.transcriptions.create(**kwargs)
             await self._on_user_transcript((tr.text or "").strip())
         except Exception as exc:
-            log.debug("Caller transcription failed (gemini)", error=str(exc))
+            log.debug("Caller transcription failed", error=str(exc))
 
     @staticmethod
     def _collapse_repeats(text: str) -> str:
@@ -766,6 +872,12 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
     async def _on_user_transcript(self, transcript: str):
         transcript = self._collapse_repeats((transcript or "").strip())
         if not transcript or len(transcript) < 2:
+            return
+        # Drop transcription hallucinations that come back in a script the agent's
+        # languages never use (e.g. Gujarati audio returned as Korean/Japanese).
+        if self._wrong_script(transcript):
+            log.info("Dropping wrong-script transcript (hallucination)",
+                     text=transcript[:40], call_id=self.call.id)
             return
         self._turn_index += 1
         await self.call_logger.log_turn(

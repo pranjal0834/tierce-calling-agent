@@ -52,7 +52,7 @@ async def _get_kb(kb_id: str, workspace_id: str, db: AsyncSession) -> KnowledgeB
     return kb
 
 
-def _doc_out(d: KnowledgeDocument) -> dict:
+def _doc_out(d: KnowledgeDocument, uploader: str | None = None) -> dict:
     return {
         "id": d.id,
         "source_type": d.source_type,
@@ -62,6 +62,8 @@ def _doc_out(d: KnowledgeDocument) -> dict:
         "error_message": d.error_message,
         "char_count": d.char_count,
         "chunk_count": d.chunk_count,
+        "created_by": d.created_by,
+        "uploaded_by": uploader,   # email of the user who added it
         "created_at": d.created_at.isoformat() if d.created_at else None,
     }
 
@@ -121,13 +123,53 @@ async def get_kb(kb_id: str, user: User = Depends(get_current_user), db: AsyncSe
         select(KnowledgeDocument).where(KnowledgeDocument.kb_id == kb.id)
         .order_by(KnowledgeDocument.created_at.desc())
     )
-    documents = [_doc_out(d) for d in docs_res.scalars().all()]
+    docs = docs_res.scalars().all()
+    # Resolve uploader emails for the documents.
+    uploader_ids = {d.created_by for d in docs if d.created_by}
+    emails: dict[str, str] = {}
+    if uploader_ids:
+        urows = await db.execute(select(User.id, User.email).where(User.id.in_(uploader_ids)))
+        emails = {uid: em for uid, em in urows.all()}
+    documents = [_doc_out(d, emails.get(d.created_by)) for d in docs]
     return {
         "id": kb.id,
         "name": kb.name,
         "description": kb.description,
         "created_at": kb.created_at.isoformat() if kb.created_at else None,
         "documents": documents,
+    }
+
+
+@router.get("/{kb_id}/documents/{doc_id}/content")
+async def get_document_content(
+    kb_id: str, doc_id: str,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Return a document's extracted text (joined chunks) for previewing what was added."""
+    await _get_kb(kb_id, user.workspace_id, db)
+    doc = await db.get(KnowledgeDocument, doc_id)
+    if not doc or doc.kb_id != kb_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    chunks_res = await db.execute(
+        select(KnowledgeChunk.content).where(KnowledgeChunk.document_id == doc_id)
+        .order_by(KnowledgeChunk.idx)
+    )
+    content = "\n\n".join(c for (c,) in chunks_res.all())
+    uploader = None
+    if doc.created_by:
+        urow = await db.execute(select(User.email).where(User.id == doc.created_by))
+        uploader = urow.scalar()
+    return {
+        "id": doc.id,
+        "title": doc.title,
+        "source_type": doc.source_type,
+        "source_ref": doc.source_ref,
+        "status": doc.status,
+        "char_count": doc.char_count,
+        "chunk_count": doc.chunk_count,
+        "uploaded_by": uploader,
+        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        "content": content,
     }
 
 
@@ -153,7 +195,7 @@ async def add_text_document(
     doc = KnowledgeDocument(
         kb_id=kb_id, workspace_id=user.workspace_id,
         source_type="text", title=(payload.title.strip() or "Untitled note")[:500],
-        status="processing",
+        status="processing", created_by=user.id,
     )
     db.add(doc)
     await db.commit()
@@ -174,7 +216,7 @@ async def add_url_document(
     doc = KnowledgeDocument(
         kb_id=kb_id, workspace_id=user.workspace_id,
         source_type="url", title=(payload.title.strip() or url)[:500], source_ref=url,
-        status="processing",
+        status="processing", created_by=user.id,
     )
     db.add(doc)
     await db.commit()
@@ -201,7 +243,7 @@ async def upload_pdf_document(
     doc = KnowledgeDocument(
         kb_id=kb_id, workspace_id=user.workspace_id,
         source_type="pdf", title=filename[:500], source_ref=filename,
-        status="processing",
+        status="processing", created_by=user.id,
     )
     db.add(doc)
     await db.commit()

@@ -113,3 +113,77 @@ async def extract_url(url: str) -> tuple[str, str]:
     title = (title_match.group(1).strip() if title_match else url)[:300]
     text = _strip_html(html)
     return title, text
+
+
+_SKIP_EXT = re.compile(
+    r"\.(pdf|jpe?g|png|gif|svg|webp|ico|zip|rar|gz|mp4|mp3|wav|avi|mov|css|js|woff2?|ttf|eot|xml|json)(\?|$)",
+    re.I,
+)
+
+
+async def crawl_url(start_url: str, max_pages: int = 20) -> tuple[str, str]:
+    """
+    Crawl a website starting at `start_url`, following SAME-DOMAIN internal links
+    (breadth-first) up to `max_pages`, and return (title, combined_text) where each
+    page's text is under a "# <page title>" heading. This is what lets the knowledge
+    base actually answer about services/contact/about pages, not just the homepage.
+    Raises only if the FIRST page fails (so the doc is marked failed); later page
+    failures are skipped silently.
+    """
+    from urllib.parse import urljoin, urlparse, urldefrag
+
+    if not start_url.startswith(("http://", "https://")):
+        start_url = "https://" + start_url
+    base_host = urlparse(start_url).netloc.lower().replace("www.", "")
+
+    def _norm(u: str) -> str:
+        return urldefrag(u)[0].rstrip("/")
+
+    seen: set[str] = set()
+    queue: list[str] = [start_url]
+    pages: list[str] = []
+    first_title = None
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; VaaniqBot/1.0; +knowledge-base)"}
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=20, headers=headers) as client:
+        while queue and len(pages) < max_pages:
+            url = queue.pop(0)
+            n = _norm(url)
+            if n in seen:
+                continue
+            seen.add(n)
+            try:
+                resp = await client.get(url)
+                if resp.status_code != 200 or "html" not in resp.headers.get("content-type", "").lower():
+                    continue
+                html = resp.text
+            except Exception as exc:
+                if first_title is None:   # first page failed → let caller mark it failed
+                    raise
+                log.debug("crawl: skipping page", url=url, error=str(exc)[:80])
+                continue
+
+            tm = re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
+            ptitle = (tm.group(1).strip() if tm else url)[:200]
+            if first_title is None:
+                first_title = ptitle
+            text = _strip_html(html).strip()
+            if len(text) > 50:
+                pages.append(f"# {ptitle}\n{text}")
+
+            # Enqueue same-domain internal links.
+            for href in re.findall(r'(?is)href=["\']([^"\']+)["\']', html):
+                link = urljoin(url, href.strip())
+                p = urlparse(link)
+                if p.scheme not in ("http", "https"):
+                    continue
+                if p.netloc.lower().replace("www.", "") != base_host:
+                    continue
+                if _SKIP_EXT.search(link):
+                    continue
+                if _norm(link) not in seen:
+                    queue.append(link)
+
+    combined = "\n\n".join(pages)
+    log.info("crawl complete", start=start_url, pages=len(pages), chars=len(combined))
+    return (first_title or start_url), combined

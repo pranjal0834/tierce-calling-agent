@@ -9,7 +9,8 @@ from backend.db.database import AsyncSessionLocal
 from backend.db.models import KnowledgeChunk, KnowledgeDocument
 from backend.knowledge.chunking import chunk_text
 from backend.knowledge.embeddings import embed_texts
-from backend.knowledge.extract import extract_pdf, extract_url
+from backend.knowledge.extract import extract_pdf, crawl_url
+from backend.config import settings
 
 log = structlog.get_logger()
 
@@ -29,7 +30,9 @@ async def ingest_document(doc_id: str, *, pdf_bytes: bytes | None = None,
             if pdf_bytes is not None:
                 text = extract_pdf(pdf_bytes)
             elif url is not None:
-                title, text = await extract_url(url)
+                # Crawl the whole site (same-domain internal links), not just the one page,
+                # so the KB can answer about services/contact/about pages too.
+                title, text = await crawl_url(url, max_pages=settings.KB_CRAWL_MAX_PAGES)
                 if title and (not doc.title or doc.title == url):
                     doc.title = title[:500]
             else:

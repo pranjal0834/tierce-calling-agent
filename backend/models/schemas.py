@@ -90,6 +90,12 @@ class AgentConfig(BaseModel):
     # Native-audio engine: "" (use system default), "openai" (gpt-realtime-mini),
     # or "gemini" (Gemini Live — better for Hindi/Gujarati/regional languages).
     engine: str = ""
+    # Knowledge bases attached to this agent (for RAG via the query_knowledge_base tool).
+    # Must be declared here or it gets stripped on save by this strict schema.
+    knowledge_base_ids: List[str] = Field(default_factory=list)
+    # Prompt variables: [{"name": "Agent Name", "value": "Pranjal"}, ...]. Used to replace
+    # [Placeholder] tokens in the system prompt at call time ([Customer Name] = lead's name).
+    variables: List[dict] = Field(default_factory=list)
 
 
 class AgentCreate(BaseModel):
