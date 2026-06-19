@@ -8,12 +8,6 @@ interface AgentCardProps {
   onDelete: (id: string) => void;
 }
 
-const featurePills: Record<string, { label: string; cls: string }> = {
-  backchannel_enabled:     { label: "Backchannel", cls: "bg-emerald-50 text-emerald-700 border-emerald-100" },
-  emotional_intelligence:  { label: "Emotions",    cls: "bg-pink-50 text-pink-700 border-pink-100" },
-  memory_graph:            { label: "Memory",      cls: "bg-blue-50 text-blue-700 border-blue-100" },
-};
-
 export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
   return (
     <div className="group bg-white rounded-xl border border-neutral-200 shadow-card p-4 flex items-start justify-between hover:shadow-hover hover:border-neutral-300 transition-all duration-200">
@@ -39,22 +33,6 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
               {agent.description}
             </p>
           )}
-
-          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-100">
-              Native Audio
-            </span>
-            <span className="inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
-              {agent.llm_model}
-            </span>
-            {Object.entries(featurePills).map(([key, { label, cls }]) =>
-              agent.config?.[key] ? (
-                <span key={key} className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border ${cls}`}>
-                  {label}
-                </span>
-              ) : null
-            )}
-          </div>
         </div>
       </div>
 

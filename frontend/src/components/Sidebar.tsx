@@ -3,8 +3,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Bot, Phone, BarChart3, Brain, Settings, Zap, LogOut,
-  Wrench, CalendarClock, Hash, CreditCard, Webhook,
+  Bot, Phone, BarChart3, Settings, Zap, LogOut,
+  CalendarClock, Hash, CreditCard, Webhook,
   ShieldCheck, Code2, ChevronLeft, ChevronRight, LayoutDashboard, X, BookOpen,
   LayoutTemplate,
 } from "lucide-react";
@@ -28,14 +28,12 @@ const NAV_GROUPS = [
       { href: "/scheduling",    icon: CalendarClock,  label: "Scheduling"    },
       { href: "/knowledge",     icon: BookOpen,       label: "Knowledge Base"},
       { href: "/analytics",     icon: BarChart3,      label: "Analytics"     },
-      { href: "/memory",        icon: Brain,          label: "Memory"        },
     ],
   },
   {
     label: "Platform",
     items: [
       { href: "/webhooks",    icon: Webhook,    label: "Webhooks"    },
-      { href: "/tools",       icon: Wrench,     label: "Tools"       },
       { href: "/developers",  icon: Code2,      label: "Developers"  },
       { href: "/billing",     icon: CreditCard, label: "Billing"     },
       { href: "/settings",    icon: Settings,   label: "Settings"    },

@@ -92,6 +92,7 @@ class EmotionState:
             "energy_mean": self.energy_mean,
             "speaking_rate": self.speaking_rate,
             "pause_ratio": self.pause_ratio,
+            "reasoning": self.reasoning,
         }
 
 
@@ -116,23 +117,22 @@ class EmotionFusionEngine:
         Full fusion pipeline. Returns EmotionState.to_dict() for storage.
         Non-blocking — meant to run as asyncio.create_task().
         """
-        # Run acoustic analysis in thread (CPU-bound)
+        # Run acoustic analysis FIRST (CPU-bound, in a thread) so the caller's TONE
+        # can actually inform the emotion label. Without this the label comes from the
+        # transcribed WORDS alone — so an angry voice with plain words reads as
+        # neutral/confused. We're off the reply critical path (background task), so the
+        # extra few ms of serializing acoustic→sentiment costs the conversation nothing.
         loop = asyncio.get_event_loop()
-        acoustic_task = loop.run_in_executor(
+        acoustic = await loop.run_in_executor(
             None, self.paralinguistic.analyze, audio_bytes, sample_rate
         )
 
-        # Run LLM sentiment (if we have a transcript)
-        sentiment_task = None
-        if transcript:
-            sentiment_task = asyncio.create_task(
-                self.sentiment.classify(transcript, call_id=call_id)
-            )
-
-        acoustic = await acoustic_task
+        # LLM sentiment, now fed the acoustic signals so tone is weighed with the words.
         sentiment = {}
-        if sentiment_task:
-            sentiment = await sentiment_task
+        if transcript:
+            sentiment = await self.sentiment.classify(
+                transcript, paralinguistic=acoustic, call_id=call_id
+            )
 
         state = EmotionState(
             emotion=sentiment.get("emotion", "neutral"),

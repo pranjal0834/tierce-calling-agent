@@ -23,6 +23,16 @@ Given a user's spoken transcript and acoustic signals, classify:
 4. engagement: float 0.0-1.0 (0=disengaged, 1=highly engaged)
 5. brief reasoning (1 sentence)
 
+How to read the acoustic signals (when provided) — TONE often matters more than words:
+- High energy + high or sharp pitch + fast speaking_rate → angry or frustrated
+  (use the words to choose: hostile/demanding = angry; blocked/impatient = frustrated).
+- Long pauses (high pause_ratio) + slower rate → confused or thinking.
+- Low energy + flat/low pitch → sad or disengaged.
+- High pitch + fast rate + high energy with positive words → excited.
+IMPORTANT: when the tone and the words conflict, let the TONE carry significant weight —
+people often say plain or polite words in an angry or frustrated voice. Do not default to
+"confused" or "neutral" if the voice sounds heated.
+
 Respond ONLY with valid JSON:
 {"emotion":"...", "intent":"...", "urgency":0.5, "engagement":0.7, "reasoning":"..."}"""
 

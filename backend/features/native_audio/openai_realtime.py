@@ -41,7 +41,6 @@ from backend.telephony.twilio_handler import TwilioHandler
 from backend.utils.phone import normalize_phone
 from backend.features.emotional_intelligence.fusion import EmotionFusionEngine
 from backend.features.backchannel.engine import BackchannelEngine
-from backend.features.predictive_engine.speculation_engine import SpeculationEngine
 from backend.features.feedback_loop.call_logger import CallLogger
 from backend.features.tools.executor import execute_tool
 
@@ -190,7 +189,6 @@ class OpenAIRealtimeHandler:
         interruption_manager: InterruptionManager,
         emotion_engine: EmotionFusionEngine,
         backchannel_engine: BackchannelEngine,
-        speculation_engine: SpeculationEngine,
         call_logger: CallLogger,
         db: AsyncSession,
     ):
@@ -201,7 +199,6 @@ class OpenAIRealtimeHandler:
         self.im = interruption_manager
         self.emotion_engine = emotion_engine
         self.backchannel_engine = backchannel_engine
-        self.speculation_engine = speculation_engine
         self.call_logger = call_logger
         self.db = db
 
@@ -672,15 +669,6 @@ class OpenAIRealtimeHandler:
             if self._is_end_of_call(transcript):
                 self._pending_hangup = True
                 log.info("End-of-call intent detected", transcript=transcript)
-            # Speculation: pre-generate responses for predicted next turns
-            asyncio.create_task(
-                self.speculation_engine.speculate(
-                    conversation_history=self._get_conversation_snapshot(),
-                    latest_user_text=transcript,
-                    system_prompt=self.system_prompt,
-                    call_id=self.call.id,
-                )
-            )
 
         elif etype == "response.created":
             self._response_active = True
@@ -892,9 +880,6 @@ class OpenAIRealtimeHandler:
                       emotion=result.get("emotion"), intent=result.get("intent"))
         except Exception as exc:
             log.debug("Sentiment classification failed", error=str(exc))
-
-    def _get_conversation_snapshot(self) -> list[dict]:
-        return []  # In native mode, history is managed by OpenAI — return empty snapshot
 
     async def _link_call_to_contact(self, call_sid: str):
         """

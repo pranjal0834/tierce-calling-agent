@@ -303,32 +303,6 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
             </p>
           </Field>
 
-          {/* Features */}
-          <div className="pt-1 space-y-1">
-            <p className="label-base mb-3">Features</p>
-            <div className="grid grid-cols-2 gap-2">
-              {([
-                ["backchannel_enabled",    "Backchannel Engine"],
-                ["emotional_intelligence", "Emotional Intelligence"],
-                ["predictive_engine",      "Predictive Engine"],
-                ["memory_graph",           "Deep Memory Graph"],
-              ] as [string, string][]).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2.5 cursor-pointer p-3 rounded-xl border border-neutral-200 hover:border-brand-200 hover:bg-brand-50/30 transition-all duration-150">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 accent-brand-500 rounded"
-                    checked={(form.config as any)[key]}
-                    onChange={e => setForm(f => ({
-                      ...f,
-                      config: { ...f.config, [key]: e.target.checked },
-                    }))}
-                  />
-                  <span className="text-sm text-neutral-700 font-medium">{label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
           {/* Knowledge Base */}
           <div className="pt-1 space-y-2">
             <div className="flex items-center justify-between">

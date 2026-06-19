@@ -33,6 +33,14 @@ function fmtDuration(s?: number | null) {
   return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
 }
 
+// sentiment_score is a 0–10 positivity score → map to a human label.
+function sentimentLabel(score?: number | null) {
+  if (score == null) return null;
+  if (score >= 7) return "Positive";
+  if (score >= 4) return "Neutral";
+  return "Negative";
+}
+
 function fmtDate(iso?: string | null) {
   if (!iso) return "—";
   return new Date(toUTC(iso)).toLocaleString("en-GB", {
@@ -565,12 +573,12 @@ export default function CallsPage() {
                     icon={<TrendingUp className="w-3 h-3" />}
                     label="Sentiment"
                     value={detail.call.sentiment_score != null
-                      ? `${(detail.call.sentiment_score * 10).toFixed(0)}%`
+                      ? `${sentimentLabel(detail.call.sentiment_score)} · ${(detail.call.sentiment_score * 10).toFixed(0)}%`
                       : "—"}
                     valueClass={
                       detail.call.sentiment_score == null ? "text-neutral-400" :
-                      detail.call.sentiment_score >= 0.7 ? "text-green-400" :
-                      detail.call.sentiment_score >= 0.4 ? "text-yellow-400" : "text-red-400"
+                      detail.call.sentiment_score >= 7 ? "text-green-400" :
+                      detail.call.sentiment_score >= 4 ? "text-yellow-400" : "text-red-400"
                     }
                   />
                   <StatChip
@@ -832,7 +840,7 @@ export default function CallsPage() {
                                 <span className="text-xs text-neutral-500">Overall positivity</span>
                                 <span className={`text-sm font-bold ${
                                   pct >= 70 ? "text-green-400" : pct >= 40 ? "text-yellow-400" : "text-red-400"
-                                }`}>{pct}%</span>
+                                }`}>{sentimentLabel(detail.call.sentiment_score)} · {pct}%</span>
                               </div>
                               <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
                                 <div

@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Zap, Layers, Pencil, Trash2, Phone,
-  CheckCircle2, XCircle, Clock, TrendingUp,
-  Smile, Mic2, Network, Wrench, Brain
+  CheckCircle2, XCircle, Clock,
+  Wrench, Brain
 } from "lucide-react";
 import Link from "next/link";
 import { getAgent, getCalls, getAgentAnalytics, deleteAgent } from "@/lib/api";
@@ -15,6 +15,24 @@ const VOICE_LABELS: Record<string, string> = {
   alloy: "Alloy", ash: "Ash", ballad: "Ballad", coral: "Coral",
   echo: "Echo", sage: "Sage", shimmer: "Shimmer", verse: "Verse",
 };
+
+const TOOL_TYPE_LABELS: Record<string, string> = {
+  webhook: "Webhook", end_call: "End Call", transfer_call: "Transfer to Human",
+  calendar_booking: "Book Appointment", schedule_callback: "Schedule Callback",
+};
+
+// One-line detail for a tool, shown next to its name in the Overview summary.
+function toolDetail(t: any): string {
+  if (t.type === "webhook" && t.config?.url) {
+    try { return new URL(String(t.config.url)).host; } catch { return String(t.config.url); }
+  }
+  if (t.type === "transfer_call" && t.config?.transfer_to) return `→ ${t.config.transfer_to}`;
+  if (t.type === "calendar_booking" && t.config?.integration) {
+    const m: Record<string, string> = { calcom: "Cal.com", calendly: "Calendly", google_calendar: "Google Calendar" };
+    return m[String(t.config.integration)] ?? String(t.config.integration);
+  }
+  return "";
+}
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; dot: string; text: string; bg: string }> = {
@@ -111,13 +129,6 @@ export default function AgentViewPage() {
   const avgDuration = calls.length
     ? Math.round(calls.filter(c => c.duration_seconds).reduce((s, c) => s + (c.duration_seconds || 0), 0) / Math.max(calls.filter(c => c.duration_seconds).length, 1))
     : 0;
-
-  const features = [
-    { key: "backchannel_enabled", label: "Backchannel Engine", icon: Mic2, color: "text-green-400" },
-    { key: "emotional_intelligence", label: "Emotional Intelligence", icon: Smile, color: "text-pink-400" },
-    { key: "predictive_engine", label: "Predictive Engine", icon: TrendingUp, color: "text-orange-400" },
-    { key: "memory_graph", label: "Memory Graph", icon: Network, color: "text-blue-400" },
-  ];
 
   return (
     <div className="space-y-6">
@@ -247,22 +258,35 @@ export default function AgentViewPage() {
               )}
             </div>
 
+            {/* Tools summary */}
             <div className="bg-white rounded-xl border border-neutral-200 shadow-sm p-5 space-y-3">
-              <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Features</h2>
-              {features.map(({ key, label, icon: Icon, color }) => {
-                const enabled = agent.config?.[key];
-                return (
-                  <div key={key} className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${enabled ? color : "text-neutral-400"}`} />
-                      <span className={`text-sm ${enabled ? "text-neutral-800" : "text-neutral-400"}`}>{label}</span>
-                    </div>
-                    <span className={`text-xs font-medium ${enabled ? "text-green-600" : "text-neutral-400"}`}>
-                      {enabled ? "ON" : "OFF"}
-                    </span>
-                  </div>
-                );
-              })}
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-neutral-500 uppercase tracking-wide">Tools</h2>
+                <button
+                  onClick={() => setActiveTab("tools")}
+                  className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
+                >
+                  {(agent.config?.tools?.length ?? 0) > 0 ? "Manage" : "Add"}
+                </button>
+              </div>
+              {(agent.config?.tools?.length ?? 0) > 0 ? (
+                <div className="space-y-2">
+                  {agent.config.tools.map((t: any) => {
+                    const detail = toolDetail(t);
+                    return (
+                      <div key={t.id ?? t.name} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.enabled === false ? "bg-neutral-300" : "bg-green-500"}`} />
+                          <span className="text-sm text-neutral-800 truncate">{TOOL_TYPE_LABELS[t.type] ?? t.type}</span>
+                        </div>
+                        {detail && <span className="text-xs text-neutral-400 font-mono truncate max-w-[50%]">{detail}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-neutral-400">No tools configured yet.</p>
+              )}
             </div>
           </div>
 

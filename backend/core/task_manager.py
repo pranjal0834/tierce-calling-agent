@@ -17,7 +17,6 @@ from backend.db.models import Agent, Call, CallTurn, Contact
 from backend.features.emotional_intelligence.fusion import EmotionFusionEngine
 from backend.features.memory_graph.retriever import MemoryRetriever
 from backend.features.backchannel.engine import BackchannelEngine
-from backend.features.predictive_engine.speculation_engine import SpeculationEngine
 from backend.features.feedback_loop.call_logger import CallLogger
 
 log = structlog.get_logger()
@@ -49,11 +48,6 @@ class TaskManager:
         self.backchannel_engine = BackchannelEngine(
             enabled=self.config.get("backchannel_enabled", True),
             rate_limit_s=self.config.get("backchannel_rate_limit_s", 12.0),
-        )
-        self.speculation_engine = SpeculationEngine(
-            redis=redis,
-            agent_id=agent.id,
-            enabled=self.config.get("predictive_engine", True),
         )
         self.call_logger = CallLogger(db=db, call_id=call.id)
         self.memory_retriever = MemoryRetriever(db=db)
@@ -154,7 +148,6 @@ class TaskManager:
             interruption_manager=self.interruption_manager,
             emotion_engine=self.emotion_engine,
             backchannel_engine=self.backchannel_engine,
-            speculation_engine=self.speculation_engine,
             call_logger=self.call_logger,
             db=self.db,
         )

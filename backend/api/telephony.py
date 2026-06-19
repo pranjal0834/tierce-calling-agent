@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.db.database import get_db
-from backend.db.models import Agent, Call, Contact, PhoneNumber
+from backend.db.models import Agent, Call, Contact, PhoneNumber, Workspace
 from sqlalchemy import select as sa_select
 from backend.telephony.twilio_handler import TwilioHandler
 from backend.utils.phone import normalize_phone
@@ -292,6 +292,17 @@ async def twilio_inbound(request: Request, db: AsyncSession = Depends(get_db)):
         return Response(content=twiml, media_type="application/xml")
 
     effective_workspace_id = workspace_id_override or agent.workspace_id
+
+    # Balance gate: don't answer inbound calls for an out-of-credit workspace
+    # (matches the outbound HTTP 402 gate). Otherwise inbound usage is uncapped
+    # and bills the workspace into the negative.
+    workspace = await db.get(Workspace, effective_workspace_id)
+    if not workspace or (workspace.credits_balance or 0.0) <= 0:
+        log.info("Inbound call rejected — insufficient credits",
+                 call_sid=call_sid, workspace_id=effective_workspace_id)
+        twiml = ("<Response><Say>We are unable to take your call at the moment. "
+                 "Please try again later.</Say><Hangup/></Response>")
+        return Response(content=twiml, media_type="application/xml")
 
     # Upsert contact for the caller scoped to workspace
     result = await db.execute(

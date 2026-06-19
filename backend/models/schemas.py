@@ -96,6 +96,11 @@ class AgentConfig(BaseModel):
     # Prompt variables: [{"name": "Agent Name", "value": "Pranjal"}, ...]. Used to replace
     # [Placeholder] tokens in the system prompt at call time ([Customer Name] = lead's name).
     variables: List[dict] = Field(default_factory=list)
+    # Self-improvement output: coaching distilled from automated review of past calls,
+    # written by PromptLearner and injected into every future call's system prompt. MUST be
+    # declared here or it gets stripped whenever the agent is saved from the dashboard.
+    learned_guidance: str = ""
+    learned_guidance_updated_at: str = ""
 
 
 class AgentCreate(BaseModel):

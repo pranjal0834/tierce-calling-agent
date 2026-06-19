@@ -811,9 +811,9 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
 
     def _flush_user_transcript(self):
         """The caller's turn just ended → transcribe the buffered audio (forced language).
-        Emotion/intent comes from the LLM sentiment classifier on the transcript (accurate);
-        we do NOT run the librosa acoustic pass here — it returns neutral/unclear defaults
-        and was overwriting the real sentiment under a mismatched turn key."""
+        The same μ-law buffer also feeds the emotion fusion (acoustic tone/pace/energy +
+        LLM sentiment/intent), combined under the correct turn key in one background task —
+        so it never delays the agent's reply."""
         mulaw = b"".join(self._user_turn_audio)
         self._user_turn_audio = []
         self._current_user_audio = []
@@ -847,7 +847,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             if ctx:
                 kwargs["prompt"] = ctx[:200]   # bias toward the on-topic reply
             tr = await client.audio.transcriptions.create(**kwargs)
-            await self._on_user_transcript((tr.text or "").strip())
+            await self._on_user_transcript((tr.text or "").strip(), mulaw)
         except Exception as exc:
             log.debug("Caller transcription failed", error=str(exc))
 
@@ -869,7 +869,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         result = _re.sub(r'\b(\w{1,12})(\s+\1\b){3,}', r'\1 \1', result, flags=_re.IGNORECASE)
         return result.strip()
 
-    async def _on_user_transcript(self, transcript: str):
+    async def _on_user_transcript(self, transcript: str, mulaw: bytes = b""):
         transcript = self._collapse_repeats((transcript or "").strip())
         if not transcript or len(transcript) < 2:
             return
@@ -884,7 +884,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             turn_index=self._turn_index, role="user", transcript=transcript, latency_ms=None,
         )
         if (self.agent.config or {}).get("emotion_detection", True):
-            asyncio.create_task(self._classify_sentiment(transcript, f"turn_{self._turn_index}"))
+            asyncio.create_task(self._emotion_turn(transcript, mulaw, f"turn_{self._turn_index}"))
         t_lower = " ".join(transcript.lower().split())
         if any(phrase in t_lower for phrase in _VOICEMAIL_PHRASES):
             log.info("Voicemail detected via transcript (gemini) — hanging up", transcript=transcript)
@@ -893,6 +893,58 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         if self._is_end_of_call(transcript):
             self._pending_hangup = True
             log.info("End-of-call intent detected (gemini)", transcript=transcript)
+
+    # ── Emotional intelligence (fusion + adaptive loop) ───────────────────────
+    # Caller emotions that benefit from EXPLICIT steering. We only inject guidance
+    # on these (rare) turns — neutral/engaged turns are left alone so ordinary
+    # conversation keeps its current quality and we add no extra tokens/latency.
+    _ADAPTIVE_EMOTIONS = {"frustrated", "confused", "angry", "sad", "excited"}
+
+    async def _emotion_turn(self, transcript: str, mulaw: bytes, turn_key: str):
+        """Fuse acoustic tone/pace/energy + LLM sentiment/intent for this turn, store it
+        for analytics, and — only on emotionally-charged turns — feed a short adaptive
+        cue back to the agent. Runs as a background task: never on the reply critical path."""
+        try:
+            fused = await self.emotion_engine.analyze(
+                audio_bytes=mulaw or b"", transcript=transcript,
+                sample_rate=8000, call_id=self.call.id,
+            )
+            if not fused:
+                return
+            # Non-destructive merge into the call's emotion profile (analytics).
+            existing = dict((self.call.emotion_profile or {}).get(turn_key, {}))
+            existing.update(fused)
+            self.call.emotion_profile = {**(self.call.emotion_profile or {}), turn_key: existing}
+            log.debug("Emotion fused (gemini)", turn=turn_key,
+                      emotion=fused.get("emotion"), intent=fused.get("intent"))
+            await self._inject_emotion_guidance(fused)
+        except Exception as exc:
+            log.debug("Emotion turn failed (gemini)", error=str(exc))
+
+    async def _inject_emotion_guidance(self, fused: dict):
+        """Close the loop: tell the agent how the caller sounds so it adapts (calm an
+        angry caller, slow down for a confused one). Sent as NON-triggering background
+        context (turn_complete=False) — the same proven channel as memory injection, so
+        it shapes the next reply without interrupting the current one."""
+        if self.session is None:
+            return
+        if fused.get("emotion") not in self._ADAPTIVE_EMOTIONS:
+            return  # light touch — only steer on charged turns
+        try:
+            guidance = self.emotion_engine.build_prompt_injection(fused)
+            if not guidance:
+                return
+            await self.session.send_client_content(
+                turns=types.Content(role="user", parts=[types.Part(text=(
+                    "[Live read of how the caller sounds right now — adjust your tone and "
+                    "approach to match. Do NOT mention this or read it aloud.] " + guidance
+                ))]),
+                turn_complete=False,
+            )
+            log.info("Emotion guidance injected (gemini)",
+                     emotion=fused.get("emotion"), intent=fused.get("intent"))
+        except Exception as exc:
+            log.debug("Emotion guidance injection failed", error=str(exc))
 
     # ── Tool execution ───────────────────────────────────────────────────────
 
