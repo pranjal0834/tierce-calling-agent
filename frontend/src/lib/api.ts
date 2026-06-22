@@ -188,6 +188,14 @@ export const getTelephonyConfig = () =>
 export const saveTelephonyConfig = (data: unknown) =>
   api.put("/api/phone-numbers/config", data).then((r: AxiosResponse) => r.data);
 
+// ── WhatsApp (per-workspace connection) ──────────────────────────────────────
+export const getWhatsappConfig = () =>
+  api.get("/api/whatsapp/config").then((r: AxiosResponse) => r.data);
+export const saveWhatsappConfig = (api_key: string) =>
+  api.put("/api/whatsapp/config", { api_key }).then((r: AxiosResponse) => r.data);
+export const testWhatsappConfig = (to: string) =>
+  api.post("/api/whatsapp/test", { to }).then((r: AxiosResponse) => r.data);
+
 // ── KYC / Regulatory Bundles ──────────────────────────────────────────────────
 
 export const getKycBundles = () =>

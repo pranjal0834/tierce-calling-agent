@@ -25,6 +25,10 @@ class Workspace(Base):
     credits_balance: Mapped[float] = mapped_column(Float, default=0.0)   # call minutes remaining
     number_balance_inr: Mapped[float] = mapped_column(Float, default=0.0)  # number rental wallet (INR)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # WhatsApp: per-workspace API key for the customer's OWN (official) WhatsApp account.
+    # The platform relays through settings.WHATSAPP_API_URL using THIS key, so each
+    # customer sends from their own number. Empty = WhatsApp not connected.
+    whatsapp_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="workspace")
@@ -192,7 +196,7 @@ class Agent(Base):
     description: Mapped[str | None] = mapped_column(Text)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     pipeline_mode: Mapped[str] = mapped_column(String(20), default="native")
-    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini-realtime-preview-2024-12-17")
+    llm_model: Mapped[str] = mapped_column(String(100), default="Tierce Voice Engine")
     voice_id: Mapped[str | None] = mapped_column(String(100))
     config: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -14,6 +14,34 @@ from backend.db.models import CallTurn
 log = structlog.get_logger()
 
 
+def _apply_whatsapp_vars(text: str, cfg: dict, contact) -> str:
+    """Substitute [Placeholder] tokens in the WhatsApp message — agent-defined variables
+    plus the caller's name for [Customer Name]/[Name]/etc. Mirrors task_manager._apply_variables."""
+    import re
+    if not text:
+        return text
+    raw = (cfg or {}).get("variables") or []
+    items = raw.items() if isinstance(raw, dict) else [
+        (d.get("name"), d.get("value")) for d in raw if isinstance(d, dict)
+    ]
+    variables = {str(k).strip().lower(): str(v) for k, v in items if k and str(v).strip()}
+    cust = (contact.name if (contact and getattr(contact, "name", None)) else "").strip()
+    for key in ("customer name", "lead name", "name", "customer", "client name"):
+        variables.setdefault(key, cust)
+
+    def repl(m):
+        inner = m.group(1).strip().lower()
+        if inner in variables:
+            val = variables[inner]
+            if val:
+                return val
+            if any(w in inner for w in ("name", "customer", "client")):
+                return "there"
+        return m.group(0)
+
+    return re.sub(r"\[([^\[\]]+)\]", repl, text)
+
+
 class CallLogger:
     def __init__(self, db: AsyncSession, call_id: str):
         self.db = db
@@ -55,6 +83,32 @@ class CallLogger:
             await self.db.flush()
         except Exception as exc:
             log.warning("CallLogger flush failed", error=str(exc))
+
+    async def _maybe_send_whatsapp(self):
+        """Auto-send the agent's WhatsApp message after the call, from the customer's own
+        number (per-workspace api_key). No-op unless enabled + connected + message set."""
+        from backend.db.models import Call, Agent, Workspace, Contact
+        from backend.integrations import whatsapp as wa
+        if not wa.system_configured():
+            return
+        call = await self.db.get(Call, self.call_id)
+        if not call or not call.phone_number or not call.workspace_id or not call.agent_id:
+            return
+        agent = await self.db.get(Agent, call.agent_id)
+        cfg = (agent.config if agent else {}) or {}
+        if not cfg.get("whatsapp_enabled"):
+            return
+        message = (cfg.get("whatsapp_message") or "").strip()
+        if not message:
+            return
+        ws = await self.db.get(Workspace, call.workspace_id)
+        api_key = getattr(ws, "whatsapp_api_key", None) if ws else None
+        if not api_key:
+            return
+        contact = await self.db.get(Contact, call.contact_id) if call.contact_id else None
+        text = _apply_whatsapp_vars(message, cfg, contact)
+        ok = await wa.send_message(api_key=api_key, to=call.phone_number, text=text)
+        log.info("WhatsApp after-call send", call_id=self.call_id, to=call.phone_number, ok=ok)
 
     async def finalize(self):
         """Called when call ends. Runs evaluation + memory extraction before the DB session closes."""
@@ -98,6 +152,14 @@ class CallLogger:
                 await self._extract_call_data()
             except Exception as exc:
                 log.exception("Call data extraction failed", call_id=self.call_id, error=str(exc))
+
+        # WhatsApp: auto-send the agent's configured message after the call (if the agent
+        # has it enabled AND the workspace connected WhatsApp). Sends from the customer's
+        # own number via their per-workspace api_key.
+        try:
+            await self._maybe_send_whatsapp()
+        except Exception as exc:
+            log.warning("WhatsApp after-call send failed", call_id=self.call_id, error=str(exc))
 
         # Dispatch outbound webhook events
         try:

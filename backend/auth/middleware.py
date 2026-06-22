@@ -18,6 +18,7 @@ _PUBLIC_PREFIXES = (
     "/openapi.json",
     "/redoc",
     "/billing/razorpay/webhook",
+    "/voice-samples/",   # public voice-preview clips for the agent Voice picker
 )
 
 

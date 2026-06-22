@@ -200,6 +200,7 @@ class OpenAIRealtimeHandler:
         self.emotion_engine = emotion_engine
         self.backchannel_engine = backchannel_engine
         self.call_logger = call_logger
+        self._wa_api_key = ""    # workspace's WhatsApp api_key (loaded at run start)
         self.db = db
 
         self.openai_ws: Optional[websockets.WebSocketClientProtocol] = None
@@ -237,6 +238,14 @@ class OpenAIRealtimeHandler:
         headers = {
             "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
         }
+        # Load the workspace's WhatsApp key once so send_whatsapp sends from their number.
+        try:
+            from backend.db.models import Workspace as _Ws
+            if self.call.workspace_id:
+                _ws = await self.db.get(_Ws, self.call.workspace_id)
+                self._wa_api_key = (getattr(_ws, "whatsapp_api_key", None) or "") if _ws else ""
+        except Exception:
+            self._wa_api_key = ""
         # Generate backchannel audio in the background — don't block the call start.
         # maybe_play() returns None until _initialized=True so this is safe.
         voice = self.agent.voice_id or "alloy"
@@ -433,8 +442,8 @@ class OpenAIRealtimeHandler:
 
         # Inject the WhatsApp tool when a WhatsApp system is configured, so the agent
         # can text the caller information/links on request during the call.
-        from backend.integrations.whatsapp import is_configured as _wa_configured
-        if _wa_configured():
+        from backend.integrations.whatsapp import system_configured as _wa_configured
+        if (self.agent.config or {}).get("whatsapp_enabled") and self._wa_api_key and _wa_configured():
             openai_tools.append({
                 "type": "function",
                 "name": "send_whatsapp",
@@ -1136,7 +1145,7 @@ class OpenAIRealtimeHandler:
             to = self.call.phone_number or ""
             name = getattr(self.call, "caller_name", "") or ""
             business = (self.agent.config or {}).get("business_name") or self.agent.name or ""
-            ok = await send_info(to, msg, name, business) if (msg and to) else False
+            ok = await send_info(to, msg, name, business, api_key=self._wa_api_key) if (msg and to and self._wa_api_key) else False
             result = ("Done — I've sent that to your WhatsApp."
                       if ok else "Sorry, I couldn't send the WhatsApp message right now.")
             log.info("WhatsApp tool", to=to, ok=ok)

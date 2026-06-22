@@ -2,12 +2,13 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Users, Globe, Copy, Check,
-  Trash2, UserPlus, Shield, Crown, Bell, KeyRound, UserCircle,
+  Trash2, UserPlus, Shield, Crown, Bell, KeyRound, UserCircle, MessageCircle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   getWorkspace, getMe, updateWorkspace,
   getMembers, removeMember, createInvite,
+  getWhatsappConfig, saveWhatsappConfig, testWhatsappConfig,
   api,
 } from "@/lib/api";
 import PasswordInput from "@/components/ui/PasswordInput";
@@ -495,8 +496,156 @@ function NotificationsTab() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+// ── WhatsApp section ─────────────────────────────────────────────────────────────
+
+function WhatsAppSection() {
+  const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [masked, setMasked] = useState("");
+  const [systemAvailable, setSystemAvailable] = useState(true);
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [testTo, setTestTo] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const c = await getWhatsappConfig();
+      setConnected(!!c.connected);
+      setMasked(c.api_key_masked || "");
+      setSystemAvailable(c.system_available !== false);
+    } catch {
+      toast.error("Failed to load WhatsApp settings");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const r = await saveWhatsappConfig(apiKey.trim());
+      setConnected(!!r.connected);
+      setMasked(r.api_key_masked || "");
+      setApiKey("");
+      toast.success(r.connected ? "WhatsApp connected" : "WhatsApp disconnected");
+    } catch {
+      toast.error("Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function disconnect() {
+    if (!confirm("Disconnect WhatsApp? Agents will stop sending messages.")) return;
+    setSaving(true);
+    try {
+      await saveWhatsappConfig("");
+      setConnected(false); setMasked(""); setApiKey("");
+      toast.success("WhatsApp disconnected");
+    } catch {
+      toast.error("Failed to disconnect");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function test() {
+    if (!testTo.trim()) { toast.error("Enter a number to test (e.g. +9198…)"); return; }
+    setTesting(true);
+    try {
+      await testWhatsappConfig(testTo.trim());
+      toast.success("Test message sent ✓");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Test failed");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-40">
+      <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <SectionCard
+        title="WhatsApp"
+        description="Connect your own WhatsApp so agents can message callers from your number."
+        icon={MessageCircle}
+        action={connected
+          ? <span className="text-xs font-medium text-green-600 bg-green-50 border border-green-200 px-2 py-1 rounded-full">Connected</span>
+          : <span className="text-xs font-medium text-neutral-500 bg-neutral-100 border border-neutral-200 px-2 py-1 rounded-full">Not connected</span>}
+      >
+        {!systemAvailable && (
+          <div className="mb-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            The WhatsApp relay isn’t configured on the platform yet. Contact support to enable it.
+          </div>
+        )}
+
+        <div className="text-xs text-neutral-500 leading-relaxed mb-4">
+          Create an account in the <span className="font-medium text-neutral-700">Vaaniq WhatsApp automation system</span>,
+          connect your number there, then paste its <span className="font-medium text-neutral-700">API key</span> below.
+          Messages will then send from <span className="font-medium text-neutral-700">your own WhatsApp number</span>.
+        </div>
+
+        {connected && (
+          <div className="mb-4 flex items-center justify-between gap-2 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2">
+            <span className="text-sm text-neutral-700 font-mono">{masked}</span>
+            <button onClick={disconnect} disabled={saving}
+              className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50">Disconnect</button>
+          </div>
+        )}
+
+        <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
+          {connected ? "Replace API Key" : "API Key"}
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            value={apiKey}
+            onChange={e => setApiKey(e.target.value)}
+            placeholder="Paste your WhatsApp system API key"
+            className="flex-1 bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
+          />
+          <button
+            onClick={save}
+            disabled={saving || !apiKey.trim()}
+            className="px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </SectionCard>
+
+      {connected && (
+        <SectionCard title="Send a test message" description="Verify the connection by sending yourself a WhatsApp.">
+          <div className="flex gap-2">
+            <input
+              value={testTo}
+              onChange={e => setTestTo(e.target.value)}
+              placeholder="+919812345678"
+              className="flex-1 bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
+            />
+            <button
+              onClick={test}
+              disabled={testing || !testTo.trim()}
+              className="px-4 py-2 text-sm font-medium bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {testing ? "Sending…" : "Send test"}
+            </button>
+          </div>
+        </SectionCard>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
-  const [tab, setTab] = useState<"general" | "account" | "notifications" | "team">("general");
+  const [tab, setTab] = useState<"general" | "account" | "whatsapp" | "notifications" | "team">("general");
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -526,6 +675,7 @@ export default function SettingsPage() {
   const SECTIONS = [
     { key: "general",       label: "General",       icon: Globe },
     { key: "account",       label: "Account",       icon: UserCircle },
+    { key: "whatsapp",      label: "WhatsApp",      icon: MessageCircle },
     { key: "notifications", label: "Notifications", icon: Bell },
     { key: "team",          label: "Team",          icon: Users },
   ] as const;
@@ -564,6 +714,7 @@ export default function SettingsPage() {
       <div className="max-w-3xl">
         {tab === "general"       && <GeneralSection workspace={workspace} me={me} onSaved={load} />}
         {tab === "account"       && <AccountSection me={me} onSaved={load} />}
+        {tab === "whatsapp"      && <WhatsAppSection />}
         {tab === "notifications" && <NotificationsTab />}
         {tab === "team"          && <TeamTab me={me} />}
       </div>

@@ -96,6 +96,12 @@ class AgentConfig(BaseModel):
     # Prompt variables: [{"name": "Agent Name", "value": "Pranjal"}, ...]. Used to replace
     # [Placeholder] tokens in the system prompt at call time ([Customer Name] = lead's name).
     variables: List[dict] = Field(default_factory=list)
+    # WhatsApp (per-agent): when enabled, the agent sends `whatsapp_message` to the caller —
+    # automatically after the call AND on request during it. Variables like [Customer Name]
+    # are substituted at send time. Requires the workspace to have connected WhatsApp.
+    # Must be declared here or it gets stripped on save by this strict schema.
+    whatsapp_enabled: bool = False
+    whatsapp_message: str = ""
     # Self-improvement output: coaching distilled from automated review of past calls,
     # written by PromptLearner and injected into every future call's system prompt. MUST be
     # declared here or it gets stripped whenever the agent is saved from the dashboard.
@@ -108,7 +114,7 @@ class AgentCreate(BaseModel):
     description: Optional[str] = None
     system_prompt: str
     pipeline_mode: str = "native"
-    llm_model: str = "gpt-realtime-2"
+    llm_model: str = "Tierce Voice Engine"
     voice_id: Optional[str] = None
     config: AgentConfig = Field(default_factory=AgentConfig)
     is_personal: bool = False

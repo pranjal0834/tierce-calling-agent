@@ -190,13 +190,14 @@ class FineTuner:
                 if job.status == "succeeded":
                     async with AsyncSessionLocal() as db:
                         ft_run = await db.get(FineTuningRun, ft_run_id)
-                        agent = await db.get(Agent, self.agent_id)
                         if ft_run:
                             ft_run.status = "succeeded"
                             ft_run.fine_tuned_model = job.fine_tuned_model
                             ft_run.completed_at = datetime.utcnow()
-                        if agent:
-                            agent.llm_model = job.fine_tuned_model
+                        # NOTE: deliberately do NOT copy job.fine_tuned_model onto
+                        # agent.llm_model — that field is surfaced in the UI/API and the
+                        # underlying model name is kept confidential. The authoritative
+                        # fine-tuned model id lives on FineTuningRun.fine_tuned_model.
                         await db.commit()
                     log.info("Fine-tuning succeeded", new_model=job.fine_tuned_model,
                              agent_id=self.agent_id)

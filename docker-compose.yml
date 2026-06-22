@@ -80,7 +80,9 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: tierce_cloudflared
-    command: tunnel --no-autoupdate --url http://backend:8000
+    # --protocol http2: QUIC (UDP) to Cloudflare's edge is unreliable on some networks
+    # (datagram timeouts → tunnel flaps). http2 uses TCP and is far more stable here.
+    command: tunnel --no-autoupdate --protocol http2 --url http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped

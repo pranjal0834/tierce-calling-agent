@@ -11,7 +11,10 @@ import { getAgent, getCalls, getAgentAnalytics, deleteAgent } from "@/lib/api";
 import toast from "react-hot-toast";
 import { ToolsTab } from "@/components/tools/ToolsTab";
 
+// Gemini voices (current) plus legacy OpenAI ids so older agents still show a name.
 const VOICE_LABELS: Record<string, string> = {
+  Aoede: "Aoede", Kore: "Kore", Leda: "Leda", Callirrhoe: "Callirrhoe",
+  Puck: "Puck", Charon: "Charon", Fenrir: "Fenrir", Orus: "Orus",
   alloy: "Alloy", ash: "Ash", ballad: "Ballad", coral: "Coral",
   echo: "Echo", sage: "Sage", shimmer: "Shimmer", verse: "Verse",
 };
@@ -218,7 +221,7 @@ export default function AgentViewPage() {
                 </span>
               </Row>
               <Row label="Model">
-                <span className="text-sm text-neutral-900 font-mono">{agent.llm_model}</span>
+                <span className="text-sm text-neutral-900">Tierce Voice Engine</span>
               </Row>
               <Row label="Voice">
                 <span className="text-sm text-neutral-900">{VOICE_LABELS[agent.voice_id] ?? agent.voice_id ?? "—"}</span>

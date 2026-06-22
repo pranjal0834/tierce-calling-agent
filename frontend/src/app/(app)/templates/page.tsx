@@ -262,7 +262,7 @@ export default function TemplatesPage() {
                 </div>
                 <div>
                   <p className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider">Model</p>
-                  <p className="text-xs font-semibold text-neutral-700 mt-0.5">gpt-4o-mini-realtime</p>
+                  <p className="text-xs font-semibold text-neutral-700 mt-0.5">Tierce Voice Engine</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider">Voice ID</p>

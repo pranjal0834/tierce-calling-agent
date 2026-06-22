@@ -25,21 +25,29 @@ from backend.config import settings
 log = structlog.get_logger()
 
 
+def system_configured() -> bool:
+    """The platform's WhatsApp relay endpoint is set (global). Per-customer sending also
+    requires that workspace's own api_key (passed explicitly to the send functions)."""
+    return bool(settings.WHATSAPP_API_URL)
+
+
 def is_configured() -> bool:
+    # Legacy global check (endpoint + a global key). New per-workspace sending passes
+    # an explicit api_key instead — see system_configured().
     return bool(settings.WHATSAPP_API_URL and settings.WHATSAPP_ACCESS_TOKEN)
 
 
-def _headers() -> dict:
+def _headers(api_key: str = "") -> dict:
     return {
-        "X-API-Key": settings.WHATSAPP_ACCESS_TOKEN,
+        "X-API-Key": api_key or settings.WHATSAPP_ACCESS_TOKEN,
         "Content-Type": "application/json",
     }
 
 
-async def _post(url: str, payload: dict, to: str) -> bool:
+async def _post(url: str, payload: dict, to: str, api_key: str = "") -> bool:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(url, headers=_headers(), json=payload)
+            resp = await client.post(url, headers=_headers(api_key), json=payload)
         if resp.is_success:
             log.info("WhatsApp message sent", to=to)
             return True
@@ -50,9 +58,20 @@ async def _post(url: str, payload: dict, to: str) -> bool:
         return False
 
 
-async def send_text(to: str, body: str) -> bool:
+async def send_message(api_key: str, to: str, text: str) -> bool:
+    """Per-workspace send: relay a message through the platform's WhatsApp system using
+    the WORKSPACE's own api_key, so it goes out from that customer's connected number."""
+    if not system_configured():
+        log.warning("WhatsApp system endpoint not configured — skipping", to=to)
+        return False
+    if not (api_key and to and text):
+        return False
+    return await send_text(to, text, api_key=api_key)
+
+
+async def send_text(to: str, body: str, api_key: str = "") -> bool:
     """Send a free-form WhatsApp text message. Returns True on success."""
-    if not is_configured():
+    if not system_configured():
         log.warning("WhatsApp not configured — skipping", to=to)
         return False
     if not to or not body:
@@ -60,14 +79,14 @@ async def send_text(to: str, body: str) -> bool:
     payload = {"to": to, "body": body}
     if settings.WHATSAPP_PHONE_NUMBER_ID:
         payload["phone_number_id"] = settings.WHATSAPP_PHONE_NUMBER_ID
-    return await _post(settings.WHATSAPP_API_URL, payload, to)
+    return await _post(settings.WHATSAPP_API_URL, payload, to, api_key=api_key)
 
 
-async def send_template(to: str, template_name: str, params: list[str], language: str = "") -> bool:
+async def send_template(to: str, template_name: str, params: list[str], language: str = "", api_key: str = "") -> bool:
     """Send a Meta-approved WhatsApp template via the system's /send/template endpoint.
     `params` are the ordered body variables ({{1}}, {{2}}, ...). Payload matches the
     system's TemplateSendRequest schema: to, template_name, language_code, components."""
-    if not is_configured() or not settings.WHATSAPP_TEMPLATE_API_URL:
+    if not system_configured() or not settings.WHATSAPP_TEMPLATE_API_URL:
         return False
     lang = language or settings.WHATSAPP_TEMPLATE_LANG or "en"
     payload = {
@@ -81,22 +100,22 @@ async def send_template(to: str, template_name: str, params: list[str], language
     }
     if settings.WHATSAPP_PHONE_NUMBER_ID:
         payload["phone_number_id"] = settings.WHATSAPP_PHONE_NUMBER_ID
-    return await _post(settings.WHATSAPP_TEMPLATE_API_URL, payload, to)
+    return await _post(settings.WHATSAPP_TEMPLATE_API_URL, payload, to, api_key=api_key)
 
 
-async def send_appointment_confirmation(to: str, name: str, when: str, business: str = "") -> bool:
+async def send_appointment_confirmation(to: str, name: str, when: str, business: str = "", api_key: str = "") -> bool:
     """Send the appointment confirmation — Meta template in production, text in dev."""
     from backend.notifications.whatsapp_templates import AppointmentConfirmation as AC
     if settings.WHATSAPP_USE_TEMPLATES:
-        return await send_template(to, AC.meta_name, AC.params(name, when, business))
-    return await send_text(to, AC.text(name, when, business))
+        return await send_template(to, AC.meta_name, AC.params(name, when, business), api_key=api_key)
+    return await send_text(to, AC.text(name, when, business), api_key=api_key)
 
 
-async def send_info(to: str, content: str, name: str = "", business: str = "") -> bool:
+async def send_info(to: str, content: str, name: str = "", business: str = "", api_key: str = "") -> bool:
     """Send caller-requested info (the in-call send_whatsapp tool).
     Uses the Meta `info_message` template in production (content goes in {{3}}),
     or free-form text in dev / inside the 24h window."""
     from backend.notifications.whatsapp_templates import InfoMessage as IM
     if settings.WHATSAPP_USE_TEMPLATES:
-        return await send_template(to, IM.meta_name, IM.params(content, name, business))
-    return await send_text(to, IM.text(content, name, business))
+        return await send_template(to, IM.meta_name, IM.params(content, name, business), api_key=api_key)
+    return await send_text(to, IM.text(content, name, business), api_key=api_key)

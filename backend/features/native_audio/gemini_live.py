@@ -42,8 +42,18 @@ from backend.features.native_audio.openai_realtime import (
 
 log = structlog.get_logger()
 
-# Gemini Live prebuilt voices. Map common OpenAI voice ids → the nearest Gemini one.
-_GEMINI_VOICES = {"Puck", "Charon", "Kore", "Fenrir", "Aoede"}
+# Gemini Live prebuilt voices (gemini-2.5 native-audio supports all 30). A voice_id
+# matching one of these (case-insensitive) is passed straight through to Gemini.
+_GEMINI_VOICES = {
+    "Zephyr", "Puck", "Charon", "Kore", "Fenrir", "Leda", "Orus", "Aoede",
+    "Callirrhoe", "Autonoe", "Enceladus", "Iapetus", "Umbriel", "Algieba",
+    "Despina", "Erinome", "Algenib", "Rasalgethi", "Laomedeia", "Achernar",
+    "Alnilam", "Schedar", "Gacrux", "Pulcherrima", "Achird", "Zubenelgenubi",
+    "Vindemiatrix", "Sadachbia", "Sadaltager", "Sulafat",
+}
+# Canonical-case lookup so a stored "kore"/"KORE" still resolves to "Kore".
+_GEMINI_VOICES_LC = {v.lower(): v for v in _GEMINI_VOICES}
+# Legacy fallback: older agents stored OpenAI voice ids → map to the nearest Gemini one.
 _VOICE_MAP = {
     "alloy": "Aoede", "echo": "Charon", "shimmer": "Kore", "ash": "Puck",
     "ballad": "Charon", "coral": "Kore", "sage": "Aoede", "verse": "Fenrir",
@@ -114,6 +124,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         self._gemini_out_bytes = 0   # PCM16 @24k bytes received from Gemini
         self._user_turn_audio: list[bytes] = []  # μ-law buffer for Whisper transcription
         self._agent_text_buf = ""
+        self._wa_api_key = ""    # workspace's WhatsApp api_key (loaded at run start)
         # Paced playback: Gemini generates a whole turn almost instantly, so we must
         # NOT dump it into Twilio at once (it becomes an uninterruptible monologue).
         # Queue μ-law 20ms frames and meter them out at real time; flush on barge-in.
@@ -145,6 +156,14 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         if not settings.GOOGLE_API_KEY:
             log.error("Gemini engine selected but GOOGLE_API_KEY is empty")
             return
+        # Load the workspace's WhatsApp key once so send_whatsapp sends from their number.
+        try:
+            from backend.db.models import Workspace as _Ws
+            if self.call.workspace_id:
+                _ws = await self.db.get(_Ws, self.call.workspace_id)
+                self._wa_api_key = (getattr(_ws, "whatsapp_api_key", None) or "") if _ws else ""
+        except Exception:
+            self._wa_api_key = ""
         client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         self._pacer_task = asyncio.create_task(self._pace_output())
         # Telephony runs for the WHOLE call (created once). The Gemini session can drop
@@ -231,10 +250,11 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
     # ── Session configuration ────────────────────────────────────────────────
 
     def _gemini_voice(self) -> str:
-        v = self.agent.voice_id or ""
-        if v in _GEMINI_VOICES:
-            return v
-        return _VOICE_MAP.get(v.lower(), "Aoede")
+        v = (self.agent.voice_id or "").strip()
+        if v.lower() in _GEMINI_VOICES_LC:        # a real Gemini voice (any casing)
+            return _GEMINI_VOICES_LC[v.lower()]
+        return _VOICE_MAP.get(v.lower(), "Aoede")  # legacy OpenAI id → nearest Gemini
+
 
     def _build_config(self) -> types.LiveConnectConfig:
         return types.LiveConnectConfig(
@@ -408,8 +428,8 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             ),
             parameters=_to_schema(SCHEDULE_CALLBACK_PARAMS),
         ))
-        from backend.integrations.whatsapp import is_configured as _wa_configured
-        if _wa_configured():
+        from backend.integrations.whatsapp import system_configured as _wa_configured
+        if cfg.get("whatsapp_enabled") and self._wa_api_key and _wa_configured():
             decls.append(types.FunctionDeclaration(
                 name="send_whatsapp",
                 description=(
@@ -985,7 +1005,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             to = self.call.phone_number or ""
             nm = getattr(self.call, "caller_name", "") or ""
             biz = (self.agent.config or {}).get("business_name") or self.agent.name or ""
-            ok = await send_info(to, msg, nm, biz) if (msg and to) else False
+            ok = await send_info(to, msg, nm, biz, api_key=self._wa_api_key) if (msg and to and self._wa_api_key) else False
             return ("Done — I've sent that to your WhatsApp." if ok
                     else "Sorry, I couldn't send the WhatsApp message right now.")
         cfg_tools = (self.agent.config or {}).get("tools") or []

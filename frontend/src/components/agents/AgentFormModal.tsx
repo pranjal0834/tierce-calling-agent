@@ -12,8 +12,8 @@ const DEFAULT_FORM = {
   description: "",
   system_prompt: "You are a helpful sales agent calling leads. Be friendly and professional.",
   pipeline_mode: "native",
-  llm_model: "gpt-4o-realtime-preview",
-  voice_id: "alloy",
+  llm_model: "Tierce Voice Engine",
+  voice_id: "Aoede",
   is_personal: false,
   config: {
     backchannel_enabled: true,
@@ -25,8 +25,19 @@ const DEFAULT_FORM = {
     languages: ["English"] as string[],
     knowledge_base_ids: [] as string[],
     variables: [] as { name: string; value: string }[],
+    whatsapp_enabled: false,
+    whatsapp_message: "",
   },
 };
+
+// Starter WhatsApp messages the user can pick and then edit. [Customer Name] etc. are
+// filled in per call. "Custom" = start blank.
+const WHATSAPP_TEMPLATES: { label: string; text: string }[] = [
+  { label: "Custom (write your own)", text: "" },
+  { label: "Thank you / business info", text: "Hi [Customer Name]! Thanks for speaking with us. Here are our details — feel free to reach out anytime. 🙏" },
+  { label: "Appointment confirmation", text: "Hi [Customer Name], your appointment is confirmed. We look forward to seeing you. Reply here if you need to reschedule." },
+  { label: "Follow-up / callback", text: "Hi [Customer Name], thanks for your time on the call. We'll follow up as discussed. Let us know if you have any questions." },
+];
 
 interface AgentFormModalProps {
   editingAgent: any | null;
@@ -63,7 +74,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
         system_prompt: editingAgent.system_prompt,
         pipeline_mode: editingAgent.pipeline_mode,
         llm_model: editingAgent.llm_model,
-        voice_id: editingAgent.voice_id || "alloy",
+        voice_id: editingAgent.voice_id || "Aoede",
         is_personal: editingAgent.is_personal ?? false,
         config: {
           // Preserve any existing config keys (e.g. tools) on edit
@@ -77,6 +88,8 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
           languages: editingAgent.config?.languages ?? ["English"],
           knowledge_base_ids: editingAgent.config?.knowledge_base_ids ?? [],
           variables: editingAgent.config?.variables ?? [],
+          whatsapp_enabled: editingAgent.config?.whatsapp_enabled ?? false,
+          whatsapp_message: editingAgent.config?.whatsapp_message ?? "",
         },
       });
     } else {
@@ -345,6 +358,49 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                     </label>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* WhatsApp */}
+          <div className="pt-1 space-y-2">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand-500 rounded"
+                checked={(form.config as any).whatsapp_enabled ?? false}
+                onChange={e => setForm(f => ({ ...f, config: { ...f.config, whatsapp_enabled: e.target.checked } }))}
+              />
+              <span className="label-base mb-0">WhatsApp follow-up</span>
+            </label>
+            <p className="text-xs text-neutral-500">
+              Sends this message to the caller — automatically after the call, and on request during it.
+              Requires WhatsApp to be connected in <span className="font-medium">Settings → WhatsApp</span>.
+            </p>
+
+            {(form.config as any).whatsapp_enabled && (
+              <div className="space-y-2 pl-6">
+                <select
+                  defaultValue=""
+                  onChange={e => {
+                    const t = WHATSAPP_TEMPLATES.find(t => t.label === e.target.value);
+                    if (t) setForm(f => ({ ...f, config: { ...f.config, whatsapp_message: t.text } }));
+                  }}
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:border-brand-500"
+                >
+                  <option value="" disabled>Start from a template…</option>
+                  {WHATSAPP_TEMPLATES.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
+                </select>
+                <textarea
+                  rows={4}
+                  value={(form.config as any).whatsapp_message ?? ""}
+                  onChange={e => setForm(f => ({ ...f, config: { ...f.config, whatsapp_message: e.target.value } }))}
+                  placeholder="Hi [Customer Name]! Thanks for calling. Here are the details you asked for…"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 resize-none"
+                />
+                <p className="text-xs text-neutral-400">
+                  Variables like <span className="font-mono">[Customer Name]</span> are filled in per call.
+                </p>
               </div>
             )}
           </div>

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -8,6 +9,7 @@ import redis.asyncio as aioredis
 import structlog
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
@@ -22,6 +24,7 @@ from backend.api import phone_numbers as phone_numbers_api
 from backend.api import kyc as kyc_api
 from backend.api import knowledge as knowledge_api
 from backend.api import templates as templates_api
+from backend.api import whatsapp as whatsapp_api
 from backend.auth import router as auth_router
 from backend.billing import router as billing_router
 from backend.notifications import router as notifications_router
@@ -95,6 +98,12 @@ async def _repair_null_jsonb():
         try:
             await db.execute(text(
                 "ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"
+            ))
+        except Exception:
+            pass
+        try:
+            await db.execute(text(
+                "ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS whatsapp_api_key VARCHAR(255)"
             ))
         except Exception:
             pass
@@ -436,9 +445,16 @@ app.include_router(phone_numbers_api.router, prefix="/api/phone-numbers", tags=[
 app.include_router(kyc_api.router, prefix="/api/kyc", tags=["KYC"])
 app.include_router(knowledge_api.router, prefix="/api/knowledge", tags=["Knowledge"])
 app.include_router(templates_api.router, prefix="/api/templates", tags=["Templates"])
+app.include_router(whatsapp_api.router, prefix="/api/whatsapp", tags=["WhatsApp"])
 app.include_router(notifications_router.router)
 app.include_router(exotel_telephony_api.router, prefix="/telephony/exotel", tags=["ExotelTelephony"])
 app.include_router(plivo_telephony_api.router, prefix="/telephony/plivo", tags=["PlivoTelephony"])
+
+# Voice-preview samples for the agent Voice picker (one short WAV per Gemini voice).
+# Pre-generated via backend/scripts/generate_voice_samples.py; served at /voice-samples/<Voice>.wav
+_VOICE_SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "static", "voice-samples")
+os.makedirs(_VOICE_SAMPLES_DIR, exist_ok=True)
+app.mount("/voice-samples", StaticFiles(directory=_VOICE_SAMPLES_DIR), name="voice-samples")
 
 
 # ─── WebSocket — Main Call Handler ────────────────────────────────────────────
