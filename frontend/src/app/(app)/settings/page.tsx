@@ -682,11 +682,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Settings</h1>
-        <p className="text-sm text-neutral-500 mt-0.5">Manage your workspace, team, and account preferences</p>
-      </div>
-
       {/* Horizontal section tabs */}
       <div className="border-b border-neutral-200 overflow-x-auto">
         <div className="flex gap-1 min-w-max">

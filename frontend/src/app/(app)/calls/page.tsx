@@ -4,7 +4,7 @@ import {
   Phone, PhoneCall, Clock, Zap, Activity, ChevronRight, ChevronLeft, Upload,
   Users, X, FileSpreadsheet, Calendar, MessageSquare, BarChart2,
   User, Globe, TrendingUp, CheckCircle2, XCircle, Mic2, ArrowUpRight,
-  ArrowDownLeft, Database, Repeat, DollarSign, PhoneOff,
+  ArrowDownLeft, Database, Repeat, DollarSign, PhoneOff, Search, Download,
 } from "lucide-react";
 import { getCalls, getAgents, getCallDetail, initiateCall, bulkCall, getRecordingUrl, hangupCall } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -46,13 +46,6 @@ function fmtDate(iso?: string | null) {
   return new Date(toUTC(iso)).toLocaleString("en-GB", {
     timeZone: IST, day: "2-digit", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit", hour12: true,
-  });
-}
-
-function fmtTime(iso?: string | null) {
-  if (!iso) return "—";
-  return new Date(toUTC(iso)).toLocaleTimeString("en-GB", {
-    timeZone: IST, hour: "2-digit", minute: "2-digit", hour12: true,
   });
 }
 
@@ -285,12 +278,19 @@ export default function CallsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [detail, setDetail] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "transcript" | "data">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "data">("overview");
   const [showDial, setShowDial] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [dialForm, setDialForm] = useState({ agent_id: "", phone_number: "", name: "" });
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 8;
+
+  // Filters
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dirFilter, setDirFilter] = useState("all");
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all"); // all | today | 7d | 30d
 
   useEffect(() => {
     getCalls().then(setCalls).catch((e: unknown) => { console.error("getCalls failed:", e); });
@@ -376,19 +376,86 @@ export default function CallsPage() {
 
   const closeDetail = () => { setDetail(null); setDetailLoading(false); };
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(calls.length / PAGE_SIZE));
+  // ── KPIs (computed over ALL calls) ──
+  const LIVE_STATUSES = new Set(["in_progress", "ringing", "initiated"]);
+  const total = calls.length;
+  const completedCount = calls.filter((c: any) => c.status === "completed").length;
+  const liveCount = calls.filter((c: any) => LIVE_STATUSES.has(c.status)).length;
+  const answeredPct = total ? Math.round((completedCount / total) * 100) : 0;
+  const durCalls = calls.filter((c: any) => c.duration_seconds);
+  const avgDur = durCalls.length
+    ? Math.round(durCalls.reduce((s: number, c: any) => s + (c.duration_seconds || 0), 0) / durCalls.length)
+    : 0;
+  const totalCost = calls.reduce((s: number, c: any) => s + (c.cost_usd || 0), 0);
+
+  // ── Filtering ──
+  const DAY_MS = 86_400_000;
+  const dateCutoff = (() => {
+    if (dateFilter === "today") { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
+    if (dateFilter === "7d") return Date.now() - 7 * DAY_MS;
+    if (dateFilter === "30d") return Date.now() - 30 * DAY_MS;
+    return 0;
+  })();
+  const filtered = calls.filter((c: any) => {
+    if (dirFilter !== "all" && c.direction !== dirFilter) return false;
+    if (agentFilter !== "all" && c.agent_id !== agentFilter) return false;
+    if (statusFilter !== "all") {
+      if (statusFilter === "live") { if (!LIVE_STATUSES.has(c.status)) return false; }
+      else if (c.status !== statusFilter) return false;
+    }
+    if (dateCutoff && new Date(toUTC(c.created_at)).getTime() < dateCutoff) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const name = (c.extra_data?.caller_name || "").toLowerCase();
+      if (!String(c.phone_number).toLowerCase().includes(q) && !name.includes(q)) return false;
+    }
+    return true;
+  });
+  const filtersActive = !!search.trim() || statusFilter !== "all" || dirFilter !== "all" || agentFilter !== "all" || dateFilter !== "all";
+
+  const resetFilters = () => {
+    setSearch(""); setStatusFilter("all"); setDirFilter("all"); setAgentFilter("all"); setDateFilter("all");
+  };
+
+  const exportCsv = () => {
+    if (filtered.length === 0) { toast.error("No calls to export"); return; }
+    const headers = ["Phone", "Name", "Direction", "Status", "Sentiment", "Duration (s)", "Cost (USD)", "Date"];
+    const esc = (v: any) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = filtered.map((c: any) => [
+      c.phone_number,
+      c.extra_data?.caller_name || "",
+      c.direction,
+      c.status,
+      sentimentLabel(c.sentiment_score) || "",
+      c.duration_seconds ?? "",
+      c.cost_usd != null ? c.cost_usd.toFixed(4) : "",
+      new Date(toUTC(c.created_at)).toLocaleString("en-GB", { timeZone: IST }),
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(esc).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `calls-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Reset to page 1 whenever a filter changes
+  useEffect(() => { setPage(1); }, [search, statusFilter, dirFilter, agentFilter, dateFilter]);
+
+  // Pagination (over filtered)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
-  const pagedCalls = calls.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pagedCalls = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const detailOpen = !!detail || detailLoading;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Calls</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Monitor and review all call sessions</p>
-        </div>
+      <div className="flex items-center justify-end gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulk(true)}
@@ -405,21 +472,79 @@ export default function CallsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* ── Call list ── */}
-        <div className={`lg:col-span-2 bg-white rounded-xl border border-neutral-200 shadow-sm flex-col ${detailOpen ? "hidden lg:flex" : "flex"}`}>
-          <div className="px-4 py-3 border-b border-neutral-200 text-xs font-semibold text-neutral-500 uppercase tracking-wide">
-            Call Logs ({calls.length})
+      {/* ── KPI strip + filters (hidden on mobile while a call detail is open) ── */}
+      <div className={`space-y-3 ${detailOpen ? "hidden lg:block" : "block"}`}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+          <KpiCard icon={<Phone className="w-4 h-4" />} label="Total Calls" value={String(total)}
+            onClick={resetFilters} active={!filtersActive} />
+          <KpiCard icon={<CheckCircle2 className="w-4 h-4" />} label="Answered" value={`${answeredPct}%`} sub={`${completedCount} of ${total}`} accent="text-emerald-600"
+            onClick={() => setStatusFilter(s => s === "completed" ? "all" : "completed")} active={statusFilter === "completed"} />
+          <KpiCard icon={<Clock className="w-4 h-4" />} label="Avg Duration" value={fmtDuration(avgDur)} />
+          <KpiCard icon={<DollarSign className="w-4 h-4" />} label="Total Cost" value={`$${totalCost.toFixed(2)}`} accent="text-amber-600" />
+          <KpiCard icon={<Activity className="w-4 h-4" />} label="Live Now" value={String(liveCount)} accent={liveCount ? "text-brand-600" : undefined} pulse={liveCount > 0}
+            onClick={() => setStatusFilter(s => s === "live" ? "all" : "live")} active={statusFilter === "live"} />
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search number or name…"
+              className="w-full bg-white border border-neutral-200 rounded-lg pl-9 pr-3 h-9 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10 transition-all"
+            />
           </div>
-          <div className="divide-y divide-neutral-100 overflow-y-auto lg:max-h-[60vh]">
-            {calls.length === 0 && (
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-9 bg-white border border-neutral-200 rounded-lg px-2.5 text-sm text-neutral-700 focus:outline-none focus:border-brand-500">
+            <option value="all">All statuses</option>
+            <option value="completed">Completed</option>
+            <option value="live">Live</option>
+            <option value="not_answered">No Answer</option>
+            <option value="voicemail">Voicemail</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <select value={dirFilter} onChange={e => setDirFilter(e.target.value)} className="h-9 bg-white border border-neutral-200 rounded-lg px-2.5 text-sm text-neutral-700 focus:outline-none focus:border-brand-500">
+            <option value="all">All directions</option>
+            <option value="outbound">Outbound</option>
+            <option value="inbound">Inbound</option>
+          </select>
+          <select value={agentFilter} onChange={e => setAgentFilter(e.target.value)} className="h-9 bg-white border border-neutral-200 rounded-lg px-2.5 text-sm text-neutral-700 focus:outline-none focus:border-brand-500 max-w-[10rem]">
+            <option value="all">All agents</option>
+            {agents.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <select value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="h-9 bg-white border border-neutral-200 rounded-lg px-2.5 text-sm text-neutral-700 focus:outline-none focus:border-brand-500">
+            <option value="all">All time</option>
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
+          <button
+            onClick={exportCsv}
+            title="Export filtered calls to CSV"
+            className="inline-flex items-center justify-center gap-1.5 h-9 px-3 bg-white hover:bg-neutral-50 text-neutral-700 text-sm font-medium border border-neutral-200 hover:border-neutral-300 rounded-lg transition-colors whitespace-nowrap"
+          >
+            <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Call logs (full width) ── */}
+      <div className="bg-white rounded-xl border border-neutral-200 shadow-sm flex flex-col">
+          <div className="px-4 py-3 border-b border-neutral-200 text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+            Call Logs ({filtered.length}{filtersActive ? ` of ${calls.length}` : ""})
+          </div>
+          <div className="divide-y divide-neutral-100 overflow-y-auto max-h-[64vh]">
+            {filtered.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 gap-4">
                 <div className="w-14 h-14 bg-neutral-100 rounded-2xl flex items-center justify-center">
-                  <Phone className="w-7 h-7 text-neutral-400" />
+                  {filtersActive ? <Search className="w-7 h-7 text-neutral-400" /> : <Phone className="w-7 h-7 text-neutral-400" />}
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-medium text-neutral-500">No calls yet</p>
-                  <p className="text-xs text-neutral-400 mt-1">Dial a number above to place your first call.</p>
+                  <p className="text-sm font-medium text-neutral-500">{filtersActive ? "No matching calls" : "No calls yet"}</p>
+                  <p className="text-xs text-neutral-400 mt-1">
+                    {filtersActive ? "Try clearing or changing your filters." : "Dial a number above to place your first call."}
+                  </p>
                 </div>
               </div>
             )}
@@ -441,8 +566,13 @@ export default function CallsPage() {
                           : <ArrowDownLeft className="w-3.5 h-3.5 text-green-400" />}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-neutral-900 truncate font-mono">{call.phone_number}</p>
-                        <p className="text-xs text-neutral-500 mt-0.5">
+                        {call.extra_data?.caller_name ? (
+                          <p className="text-sm font-medium text-neutral-900 truncate">{call.extra_data.caller_name}</p>
+                        ) : (
+                          <p className="text-sm font-medium text-neutral-900 truncate font-mono">{call.phone_number}</p>
+                        )}
+                        <p className="text-xs text-neutral-500 mt-0.5 truncate">
+                          {call.extra_data?.caller_name ? <span className="font-mono">{call.phone_number} · </span> : null}
                           {new Date(toUTC(call.created_at)).toLocaleDateString("en-GB", { timeZone: IST, day: "2-digit", month: "short" })}
                           {" · "}{new Date(toUTC(call.created_at)).toLocaleTimeString("en-GB", { timeZone: IST, hour: "2-digit", minute: "2-digit", hour12: true })}
                           {call.duration_seconds ? ` · ${fmtDuration(call.duration_seconds)}` : ""}
@@ -451,6 +581,7 @@ export default function CallsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      {call.sentiment_score != null && <SentimentDot score={call.sentiment_score} />}
                       <StatusBadge status={call.status} />
                       <ChevronRight className="w-3.5 h-3.5 text-neutral-400" />
                     </div>
@@ -484,17 +615,17 @@ export default function CallsPage() {
           )}
         </div>
 
-        {/* ── Detail panel ── */}
-        <div className={`lg:col-span-3 bg-white rounded-xl border border-neutral-200 shadow-sm flex-col min-h-[400px] lg:min-h-[75vh] ${detailOpen ? "flex" : "hidden lg:flex"}`}>
-          {/* Mobile back button */}
-          {detailOpen && (
+      {/* ── Detail popup (centered modal) ── */}
+      {detailOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-4">
+          <div className="absolute inset-0 bg-neutral-900/40 backdrop-blur-[1px] animate-fade-in" onClick={closeDetail} />
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl border border-neutral-200 shadow-modal flex flex-col max-h-[90vh] animate-scale-in overflow-hidden">
             <button
               onClick={closeDetail}
-              className="lg:hidden flex items-center gap-1.5 px-4 py-3 border-b border-neutral-200 text-sm font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 transition-colors"
+              className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-800 bg-white/80 hover:bg-neutral-100 shadow-xs transition-colors"
             >
-              <ChevronLeft className="w-4 h-4" /> Back to call logs
+              <X className="w-4 h-4" />
             </button>
-          )}
 
           {detailLoading && (
             <div className="flex items-center justify-center flex-1 py-20">
@@ -510,7 +641,7 @@ export default function CallsPage() {
           )}
 
           {!detailLoading && detail && (
-            <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Header */}
               <div className="px-3 sm:px-5 py-4 border-b border-neutral-200 flex-shrink-0">
                 <div className="flex flex-col gap-3 sm:gap-4">
@@ -603,7 +734,7 @@ export default function CallsPage() {
 
               {/* Tabs */}
               <div className="flex border-b border-neutral-200 flex-shrink-0 overflow-x-auto">
-                {(["overview", "transcript", "data"] as const).map(tab => (
+                {(["overview", "data"] as const).map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -613,7 +744,7 @@ export default function CallsPage() {
                         : "border-transparent text-neutral-500 hover:text-neutral-700"
                     }`}
                   >
-                    {tab === "overview" ? "Overview" : tab === "transcript" ? "Transcript" : "Extracted Data"}
+                    {tab === "overview" ? "Overview" : "Extracted Data"}
                   </button>
                 ))}
               </div>
@@ -701,81 +832,6 @@ export default function CallsPage() {
                         </div>
                       </Section>
                     )}
-                  </div>
-                )}
-
-                {/* ── TRANSCRIPT TAB ── */}
-                {activeTab === "transcript" && (
-                  <div className="space-y-2 overflow-x-hidden">
-                    {detail.turns.length === 0 && (
-                      <p className="text-neutral-500 text-xs sm:text-sm text-center py-10">No transcript available</p>
-                    )}
-                    {detail.turns.map((turn: any, idx: number) => (
-                      <div key={turn.id}>
-                        {/* Transfer divider */}
-                        {turn.from_transfer && (idx === 0 || !detail.turns[idx - 1].from_transfer) && (
-                          <div className="flex items-center gap-2 my-3">
-                            <div className="flex-1 border-t border-orange-500/40" />
-                            <span className="text-xs text-orange-400 font-medium px-2 py-0.5 rounded-full bg-orange-500/10 border border-orange-500/30 whitespace-nowrap">
-                              Call Transferred
-                            </span>
-                            <div className="flex-1 border-t border-orange-500/40" />
-                          </div>
-                        )}
-                        <div
-                          className={`rounded-lg p-2 sm:p-3 ${
-                            turn.from_transfer
-                              ? turn.role === "user"
-                                ? "bg-neutral-100 sm:ml-6 border border-orange-500/10"
-                                : "bg-orange-500/10 border border-orange-500/20 sm:mr-6"
-                              : turn.role === "user"
-                              ? "bg-neutral-100 sm:ml-6"
-                              : "bg-brand-500/10 border border-brand-500/20 sm:mr-6"
-                          }`}
-                        >
-                          <div className="flex flex-wrap items-center gap-1 mb-1">
-                            <span className={`text-xs font-semibold whitespace-nowrap ${
-                              turn.from_transfer
-                                ? turn.role === "user" ? "text-neutral-500" : "text-orange-400"
-                                : turn.role === "user" ? "text-neutral-500" : "text-brand-400"
-                            }`}>
-                              {turn.from_transfer
-                                ? turn.role === "user" ? "Caller" : "Human Agent"
-                                : turn.role === "user" ? "Caller" : "Agent"}
-                            </span>
-                            {turn.sentiment && (
-                              <span className="text-xs text-neutral-400">· {turn.sentiment}</span>
-                            )}
-                            {turn.created_at && (
-                              <span className="text-xs text-neutral-400 ml-auto sm:ml-0">{fmtTime(turn.created_at)}</span>
-                            )}
-                            {turn.latency_ms && (
-                              <span className="text-xs text-neutral-400 flex items-center gap-0.5 whitespace-nowrap">
-                                <Clock className="w-3 h-3" />{turn.latency_ms}ms
-                              </span>
-                            )}
-                            {turn.from_prediction_cache && (
-                              <span className="text-xs text-green-400 flex items-center gap-0.5 whitespace-nowrap">
-                                <Zap className="w-3 h-3" />cached
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs sm:text-sm text-neutral-700 break-words">{turn.transcript || "(audio only)"}</p>
-                          {turn.eval_score != null && (
-                            <div className="mt-1.5 flex items-center gap-1 flex-wrap">
-                              <Activity className="w-3 h-3 text-neutral-500 flex-shrink-0" />
-                              <span className={`text-xs ${
-                                turn.eval_score >= 7 ? "text-green-400" :
-                                turn.eval_score >= 5 ? "text-yellow-400" : "text-red-400"
-                              }`}>score: {turn.eval_score.toFixed(1)}</span>
-                              {turn.eval_feedback && (
-                                <span className="text-xs text-neutral-400 break-words"> — {turn.eval_feedback}</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 )}
 
@@ -910,8 +966,9 @@ export default function CallsPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Dial modal */}
       {showDial && (
@@ -969,8 +1026,11 @@ export default function CallsPage() {
         <BulkCallModal
           agents={agents}
           onClose={() => setShowBulk(false)}
-          onLaunched={(count: number) => {
-            toast.success(`Campaign started — ${count} calls queued`);
+          onLaunched={(count: number, suppressed: number) => {
+            toast.success(
+              `Campaign started — ${count} calls queued` +
+              (suppressed ? ` · ${suppressed} skipped (Do-Not-Call)` : "")
+            );
             setShowBulk(false);
             setTimeout(() => getCalls().then(setCalls).catch(() => {}), 3000);
           }}
@@ -981,6 +1041,41 @@ export default function CallsPage() {
 }
 
 // ── Reusable sub-components ───────────────────────────────────────────────────
+
+function KpiCard({ icon, label, value, sub, accent, pulse, onClick, active }: {
+  icon: React.ReactNode; label: string; value: string; sub?: string; accent?: string; pulse?: boolean;
+  onClick?: () => void; active?: boolean;
+}) {
+  const clickable = !!onClick;
+  return (
+    <div
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick!(); } } : undefined}
+      className={`bg-white rounded-xl border shadow-xs px-3.5 py-3 min-w-0 transition-all ${
+        clickable ? "cursor-pointer hover:border-brand-300 hover:shadow-sm" : ""
+      } ${active ? "border-brand-400 ring-2 ring-brand-500/15" : "border-neutral-200"}`}
+    >
+      <div className="flex items-center gap-1.5 text-neutral-400 mb-1">
+        <span className={pulse ? "text-brand-500 animate-pulse" : ""}>{icon}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide truncate">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className={`text-lg font-semibold ${accent || "text-neutral-900"}`}>{value}</span>
+        {sub && <span className="text-[11px] text-neutral-400 truncate">{sub}</span>}
+      </div>
+    </div>
+  );
+}
+
+function SentimentDot({ score }: { score: number }) {
+  const label = score >= 7 ? "Positive" : score >= 4 ? "Neutral" : "Negative";
+  const color = score >= 7 ? "bg-emerald-400" : score >= 4 ? "bg-amber-400" : "bg-red-400";
+  return (
+    <span title={`Sentiment: ${label} · ${(score * 10).toFixed(0)}%`} className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />
+  );
+}
 
 function StatChip({ icon, label, value, valueClass }: { icon: React.ReactNode; label: string; value: string; valueClass?: string }) {
   return (
@@ -1020,7 +1115,7 @@ function InfoRow({ label, value, mono, valueClass }: { label: string; value: str
 function BulkCallModal({ agents, onClose, onLaunched }: {
   agents: any[];
   onClose: () => void;
-  onLaunched: (count: number) => void;
+  onLaunched: (count: number, suppressed: number) => void;
 }) {
   const [tab, setTab] = useState<"file" | "paste">("file");
   const [agentId, setAgentId] = useState(agents[0]?.id || "");
@@ -1030,6 +1125,7 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
   const [loading, setLoading] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [consent, setConsent] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1056,12 +1152,15 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
   const handleStart = async () => {
     if (!agentId) { toast.error("Select an agent"); return; }
     if (contacts.length === 0) { toast.error("No contacts loaded"); return; }
+    if (!consent) { toast.error("Please confirm you have consent to call these contacts"); return; }
     setLoading(true);
     try {
-      await bulkCall({ agent_id: agentId, contacts, calls_per_second: callsPerSecond });
-      onLaunched(contacts.length);
-    } catch {
-      toast.error("Failed to start campaign");
+      const res = await bulkCall({
+        agent_id: agentId, contacts, calls_per_second: callsPerSecond, consent_attested: consent,
+      });
+      onLaunched(res?.queued ?? contacts.length, res?.suppressed ?? 0);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Failed to start campaign", { duration: 6000 });
     }
     setLoading(false);
   };
@@ -1169,13 +1268,28 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
               </div>
             </div>
           )}
+
+          {/* Consent attestation — required before launching a campaign */}
+          <label className="flex items-start gap-2.5 cursor-pointer bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 w-4 h-4 accent-amber-600 rounded"
+              checked={consent}
+              onChange={e => setConsent(e.target.checked)}
+            />
+            <span className="text-xs text-amber-800 leading-relaxed">
+              I confirm I have <span className="font-semibold">consent or an existing business relationship</span> to call
+              these contacts, and that this campaign complies with TRAI/DLT and applicable telecom regulations.
+              Numbers on your Do-Not-Call list are skipped automatically.
+            </span>
+          </label>
         </div>
 
         <div className="px-6 py-4 border-t border-neutral-200 flex justify-end gap-3 flex-shrink-0">
           <button onClick={onClose} className="px-4 py-2 text-sm text-neutral-500 hover:text-neutral-900">Cancel</button>
           <button
             onClick={handleStart}
-            disabled={loading || contacts.length === 0 || !agentId}
+            disabled={loading || contacts.length === 0 || !agentId || !consent}
             className="px-5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2"
           >
             <Users className="w-4 h-4" />

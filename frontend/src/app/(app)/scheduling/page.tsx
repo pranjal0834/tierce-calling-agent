@@ -255,12 +255,8 @@ export default function SchedulingPage() {
   return (
     <div className="space-y-6">
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Call Scheduling</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Schedule outbound calls for a future date and time</p>
-        </div>
+      {/* ── Page actions ── */}
+      <div className="flex items-center justify-end gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBulk(true)}

@@ -186,15 +186,11 @@ export default function BillingPage() {
   return (
     <div className="space-y-6">
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Billing</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Manage your credits, plans, and transaction history</p>
-        </div>
+      {/* Page actions */}
+      <div className="flex items-center justify-end gap-3">
         <button
           onClick={refresh}
-          className="text-sm text-neutral-500 hover:text-neutral-900 flex items-center gap-1.5 transition-colors mt-1 shrink-0"
+          className="text-sm text-neutral-500 hover:text-neutral-900 flex items-center gap-1.5 transition-colors shrink-0"
         >
           <RefreshCw className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Refresh</span>
         </button>

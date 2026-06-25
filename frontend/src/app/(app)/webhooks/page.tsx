@@ -576,14 +576,8 @@ export default function WebhooksPage() {
   return (
     <div className="space-y-6">
 
-      {/* Page header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-        <div className="min-w-0">
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Webhooks</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">
-            Automatically notify your systems when calls happen — connect to CRMs, Zapier, Google Sheets, and more.
-          </p>
-        </div>
+      {/* Page actions */}
+      <div className="flex justify-end">
         <button
           onClick={() => setShowAdd(true)}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors shrink-0 w-full sm:w-auto"

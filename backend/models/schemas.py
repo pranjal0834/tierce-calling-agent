@@ -192,12 +192,14 @@ class BulkCallRequest(BaseModel):
     agent_id: str
     contacts: list[BulkContactItem]
     calls_per_second: float = 1.0   # rate of initiating new calls (Twilio default limit)
+    consent_attested: bool = False  # user confirmed they hold consent for this list
 
 
 class BulkCallResponse(BaseModel):
     queued: int
     agent_id: str
     agent_name: str
+    suppressed: int = 0   # contacts removed because they were on the DNC list
 
 
 class CallOut(BaseModel):

@@ -763,17 +763,8 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div className="flex items-start gap-3 sm:gap-4 min-w-0">
-          <div className="w-10 h-10 bg-brand-500/20 border border-brand-500/30 rounded-xl flex items-center justify-center shrink-0">
-            <BarChart3 className="w-5 h-5 text-brand-500" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Analytics</h1>
-            <p className="text-sm text-neutral-500 mt-0.5">Performance metrics, sentiment trends, and agent quality scores</p>
-          </div>
-        </div>
+      {/* Page actions */}
+      <div className="flex justify-end">
         <DateRangeFilter range={range} onChange={setRange} />
       </div>
 

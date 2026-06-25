@@ -4,6 +4,7 @@ Supports Indian numbers and 70+ other countries.
 Platform-managed: uses Tierce's own Plivo account (PLIVO_AUTH_ID / PLIVO_AUTH_TOKEN in env).
 """
 import asyncio
+import time
 from typing import Optional
 
 import structlog
@@ -12,6 +13,29 @@ import plivo
 from backend.config import settings
 
 log = structlog.get_logger()
+
+# Major Indian STD (area) codes → city. Plivo has no "list available cities" API,
+# so to auto-detect which cities currently have inventory we probe each code's
+# total_count and surface whatever has > 0. This list is the detection net — add
+# codes here to widen coverage; the live counts come straight from Plivo.
+_IN_STD_CODES: dict[str, str] = {
+    "11": "Delhi", "22": "Mumbai", "33": "Kolkata", "44": "Chennai", "40": "Hyderabad",
+    "80": "Bengaluru", "20": "Pune", "79": "Ahmedabad", "141": "Jaipur", "522": "Lucknow",
+    "712": "Nagpur", "755": "Bhopal", "731": "Indore", "422": "Coimbatore", "484": "Kochi",
+    "471": "Thiruvananthapuram", "821": "Mysuru", "832": "Goa", "172": "Chandigarh",
+    "120": "Noida", "124": "Gurugram", "161": "Ludhiana", "183": "Amritsar", "261": "Surat",
+    "265": "Vadodara", "281": "Rajkot", "361": "Guwahati", "612": "Patna", "651": "Ranchi",
+    "657": "Jamshedpur", "674": "Bhubaneswar", "671": "Cuttack", "562": "Agra", "512": "Kanpur",
+    "542": "Varanasi", "452": "Madurai", "431": "Tiruchirappalli", "413": "Puducherry",
+    "866": "Vijayawada", "891": "Visakhapatnam", "836": "Hubballi", "744": "Kota", "751": "Gwalior",
+}
+
+# Per-country STD-code detection sets.
+_STD_CODES: dict[str, dict[str, str]] = {"IN": _IN_STD_CODES}
+
+# Short-lived cache of detected cities so we don't re-probe Plivo on every modal open.
+_CITIES_CACHE: dict[str, tuple[float, list]] = {}
+_CITIES_TTL = 1800  # seconds (30 min) — reflects Plivo add/remove within this window
 
 
 class PlivoHandler:
@@ -94,11 +118,33 @@ class PlivoHandler:
         return objects, error
 
     def search_available(self, area_code: str = "", country: str = "US",
-                         limit: int = 15) -> list[dict]:
-        """Search Plivo for available phone numbers. Tries local → mobile → tollfree."""
-        clean_area = area_code.lstrip("+").strip()
+                         limit: int = 20, offset: int = 0, contains: str = "") -> dict:
+        """Search Plivo for available phone numbers — ONE page at a time.
 
-        # Country-specific preferred type order
+        A country can list tens of thousands of numbers (India local alone is
+        ~15k) and Plivo caps each request at 20, so we never fetch them all at
+        once. We return a single page plus the REAL `total` and a `has_more`
+        flag; the dashboard loads further pages on demand by passing `offset`.
+
+        `area_code` is a leading STD/area prefix; `contains` is a vanity digit
+        sequence to find anywhere in the number (Plivo wildcard `*<digits>*`).
+        Returns: {numbers, total, offset, has_more, number_type}
+        """
+        clean_area = area_code.lstrip("+").strip()
+        digits = "".join(c for c in (contains or "") if c.isdigit())
+        # Build the Plivo `pattern`: bare digits must be wrapped in wildcards to
+        # mean "contains"; an area code alone is a prefix match.
+        if digits:
+            pattern = (f"{clean_area}*" if clean_area else "*") + digits + "*"
+        elif clean_area:
+            pattern = clean_area
+        else:
+            pattern = ""
+        limit = max(1, min(int(limit or 20), 20))      # Plivo's hard per-request cap
+        start = max(0, int(offset or 0))
+
+        # Country-specific preferred type order; we paginate the first type that
+        # actually has inventory so `offset` stays stable across pages.
         _TYPE_PREF: dict[str, list[str]] = {
             "IN": ["local", "mobile"],
             "US": ["local", "tollfree"],
@@ -114,48 +160,65 @@ class PlivoHandler:
             d = obj if isinstance(obj, dict) else obj.__dict__
             return d.get(key, default)
 
+        def _meta(resp):
+            d = resp.__dict__ if hasattr(resp, "__dict__") else (resp if isinstance(resp, dict) else {})
+            m = d.get("meta") or {}
+            # Plivo's new SDK returns meta as a ResponseObject, not a dict.
+            if not isinstance(m, dict) and hasattr(m, "__dict__"):
+                m = m.__dict__
+            return m if isinstance(m, dict) else {}
+
         last_error = ""
         for num_type in type_order:
             try:
-                kwargs: dict = {"type": num_type, "limit": limit}
-                if clean_area:
-                    kwargs["pattern"] = clean_area
-
+                kwargs: dict = {"type": num_type, "limit": limit, "offset": start}
+                if pattern:
+                    kwargs["pattern"] = pattern
                 response = self.client.numbers.search(country_iso=country, **kwargs)
                 objects, error = self._plivo_objects(response)
-
-                log.info("Plivo number search", country=country, type=num_type,
-                         area_code=clean_area or None, found=len(objects), plivo_error=error or None)
-
-                if objects:
-                    return [
-                        {
-                            "phone_number": "+" + str(_n(n, "number")).lstrip("+"),
-                            "friendly_name": "+" + str(_n(n, "number")).lstrip("+"),
-                            "locality": _n(n, "city") or "",
-                            "region": _n(n, "region") or "",
-                            "iso_country": country,
-                            "number_type": num_type,
-                            "capabilities": {
-                                "voice": _n(n, "voice_enabled") or True,
-                                "sms": _n(n, "sms_enabled") or False,
-                                "mms": _n(n, "mms_enabled") or False,
-                            },
-                            "monthly_rate_usd": float(_n(n, "monthly_rental_rate") or 1.0),
-                            "restriction_text": _n(n, "restriction_text") or "",
-                        }
-                        for n in objects
-                    ]
-
-                if error:
-                    last_error = error
-
+                meta = _meta(response)
+                total = int(meta.get("total_count") or 0)
             except Exception as exc:
                 last_error = str(exc)
                 log.warning("Plivo search attempt failed", country=country,
-                            type=num_type, error=last_error)
+                            type=num_type, offset=start, error=last_error)
+                continue
 
-        # All types exhausted — no numbers found
+            if error:
+                last_error = error
+
+            # This type has inventory → return this page of it.
+            if total > 0 or objects:
+                numbers = [
+                    {
+                        "phone_number": "+" + str(_n(n, "number")).lstrip("+"),
+                        "friendly_name": "+" + str(_n(n, "number")).lstrip("+"),
+                        "locality": _n(n, "city") or "",
+                        "region": _n(n, "region") or "",
+                        "iso_country": country,
+                        "number_type": num_type,
+                        "capabilities": {
+                            "voice": _n(n, "voice_enabled") or True,
+                            "sms": _n(n, "sms_enabled") or False,
+                            "mms": _n(n, "mms_enabled") or False,
+                        },
+                        "monthly_rate_usd": float(_n(n, "monthly_rental_rate") or 1.0),
+                        "restriction_text": _n(n, "restriction_text") or "",
+                    }
+                    for n in objects
+                ]
+                has_more = bool(meta.get("next")) or (start + len(numbers) < total)
+                log.info("Plivo number search", country=country, type=num_type,
+                         offset=start, returned=len(numbers), total=total)
+                return {
+                    "numbers": numbers,
+                    "total": total or len(numbers),
+                    "offset": start,
+                    "has_more": has_more,
+                    "number_type": num_type,
+                }
+
+        # No inventory in any type
         _account_restricted = (
             "unable to offer" in last_error.lower() or
             "not in coverage" in last_error.lower()
@@ -168,10 +231,84 @@ class PlivoHandler:
             )
         if last_error:
             raise ValueError(f"Plivo: no numbers available for {country} — {last_error}")
-        return []
+        return {"numbers": [], "total": 0, "offset": start, "has_more": False, "number_type": ""}
+
+    async def available_cities(self, country: str = "IN", force: bool = False) -> list[dict]:
+        """Auto-detect which cities currently have Plivo inventory.
+
+        Probes every STD code in the detection set CONCURRENTLY and returns those
+        with a live count > 0, e.g. [{"code": "22", "city": "Mumbai", "count": 7796}].
+        Cached for `_CITIES_TTL` so it auto-reflects Plivo adding/removing numbers
+        without re-probing on every request.
+        """
+        key = country.upper()
+        codes = _STD_CODES.get(key)
+        if not codes:
+            return []
+
+        now = time.time()
+        cached = _CITIES_CACHE.get(key)
+        if cached and not force and (now - cached[0] < _CITIES_TTL):
+            return cached[1]
+
+        loop = asyncio.get_event_loop()
+
+        def _count(code: str) -> int:
+            try:
+                r = self.client.numbers.search(country_iso=country, type="local", limit=1, offset=0, pattern=code)
+                d = r.__dict__ if hasattr(r, "__dict__") else (r if isinstance(r, dict) else {})
+                m = d.get("meta") or {}
+                if not isinstance(m, dict) and hasattr(m, "__dict__"):
+                    m = m.__dict__
+                return int((m or {}).get("total_count") or 0)
+            except Exception:
+                return 0
+
+        counts = await asyncio.gather(*[loop.run_in_executor(None, _count, c) for c in codes])
+        cities = [
+            {"code": code, "city": city, "count": cnt}
+            for (code, city), cnt in zip(codes.items(), counts) if cnt > 0
+        ]
+        cities.sort(key=lambda c: -c["count"])
+        _CITIES_CACHE[key] = (now, cities)
+        log.info("Plivo available cities detected", country=key,
+                 cities=[c["code"] for c in cities])
+        return cities
+
+    def _ensure_inbound_app(self) -> str | None:
+        """Ensure a shared 'Vaaniq Inbound' Plivo Application points at our inbound webhook
+        and return its app_id. Plivo routes incoming calls to a number via its assigned
+        Application's answer_url (one app serves all numbers; our handler routes by the
+        dialed `To`). URLs are refreshed each call so a rotated BASE_URL is picked up."""
+        answer_url = f"{settings.BASE_URL}/telephony/plivo/inbound"
+        hangup_url = f"{settings.BASE_URL}/telephony/plivo/status-callback"
+        try:
+            existing = self.client.applications.list(app_name="Vaaniq_Inbound", limit=1)
+            objs = getattr(existing, "objects", None) or []
+            if objs:
+                app_id = objs[0].__dict__.get("app_id")
+                self.client.applications.update(
+                    app_id, answer_url=answer_url, answer_method="POST",
+                    hangup_url=hangup_url, hangup_method="POST")
+                return app_id
+            created = self.client.applications.create(
+                "Vaaniq_Inbound", answer_url=answer_url, answer_method="POST",
+                hangup_url=hangup_url, hangup_method="POST")
+            cd = getattr(created, "__dict__", {}) or {}
+            return cd.get("app_id") or getattr(created, "app_id", None)
+        except Exception as exc:
+            log.warning("Could not ensure Plivo inbound application", error=str(exc))
+            return None
 
     def provision(self, phone_number: str, bundle_sid: str | None = None) -> dict:
-        """Buy a Plivo number and wire it to our inbound webhook."""
+        """Buy a Plivo number and wire it to our inbound webhook.
+
+        `bundle_sid` is Plivo's **compliance_application_id** (an ACCEPTED
+        `operation_type=buy_number` application). Per Plivo's Buy-a-Number REST API the
+        compliance app is passed as a TOP-LEVEL `compliance_application_id`; if omitted
+        Plivo auto-selects your most recent applicable accepted application. The typed
+        SDK `numbers.buy()` doesn't expose this field, so we call the request layer.
+        """
         if settings.MOCK_PHONE_NUMBERS:
             log.info("MOCK: skipping Plivo number purchase", phone_number=phone_number)
             return {
@@ -181,28 +318,28 @@ class PlivoHandler:
                 "capabilities": {"voice": True, "sms": True, "mms": False},
             }
 
-        inbound_url = f"{settings.BASE_URL}/telephony/plivo/inbound"
         number_path = phone_number.lstrip("+")
 
         try:
-            buy_kwargs: dict = {"number": number_path, "app_id": None}
+            params: dict = {}
             if bundle_sid:
-                buy_kwargs["regulatory_bundle_id"] = bundle_sid
-            self.client.numbers.buy(**buy_kwargs)
+                params["compliance_application_id"] = bundle_sid
+            # POST /Account/{id}/PhoneNumber/{number}/ — same call the SDK's buy() makes,
+            # but lets us pass compliance_application_id (empty params => Plivo auto-selects).
+            self.client.request('POST', ('PhoneNumber', number_path), params)
         except Exception as exc:
             raise RuntimeError(f"Plivo provision failed: {exc}") from exc
 
-        try:
-            self.client.numbers.update(
-                number=number_path,
-                app_id=None,
-                answer_url=inbound_url,
-                answer_method="POST",
-                hangup_url=f"{settings.BASE_URL}/telephony/plivo/status-callback",
-                hangup_method="POST",
-            )
-        except Exception as exc:
-            log.warning("Could not set Plivo answer URL", number=phone_number, error=str(exc))
+        # Route inbound calls to us: Plivo dispatches incoming calls via an Application
+        # (answer_url), NOT via answer_url on the number. Point the number at our shared
+        # "Vaaniq_Inbound" app.
+        app_id = self._ensure_inbound_app()
+        if app_id:
+            try:
+                self.client.numbers.update(number=number_path, app_id=app_id)
+            except Exception as exc:
+                log.warning("Could not assign inbound app to Plivo number",
+                            number=phone_number, error=str(exc))
 
         return {
             "provider_sid": phone_number,

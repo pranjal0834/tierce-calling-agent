@@ -2,10 +2,10 @@
 import { useEffect, useState } from "react";
 import {
   Phone, Bot, Brain, Zap, TrendingUp, Activity,
-  AlertCircle, ArrowRight, CreditCard, ArrowUpRight,
+  AlertCircle, ArrowRight, ArrowUpRight,
 } from "lucide-react";
 import Link from "next/link";
-import { getAgents, getCalls, getBillingBalance } from "@/lib/api";
+import { getAgents, getCalls } from "@/lib/api";
 import toast from "react-hot-toast";
 
 const STATUS_MAP: Record<string, { label: string; dot: string; text: string; bg: string }> = {
@@ -45,16 +45,14 @@ function StatCard({ label, value, icon: Icon, iconColor, iconBg, trend }: {
 export default function Dashboard() {
   const [agents, setAgents] = useState<any[]>([]);
   const [calls,  setCalls]  = useState<any[]>([]);
-  const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getAgents(), getCalls(), getBillingBalance()])
-      .then(([a, c, bal]) => {
+    Promise.all([getAgents(), getCalls()])
+      .then(([a, c]) => {
         setAgents(a);
         setCalls(c);
-        setBalance(bal.credits_balance);
       })
       .catch((err: any) => {
         const status = err?.response?.status;
@@ -81,45 +79,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Real-time overview of your voice agent platform</p>
-        </div>
-
-        {/* Balance chip */}
-        <Link
-          href="/billing"
-          className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl border transition-all duration-150 shadow-xs hover:shadow-sm flex-shrink-0 ${
-            balance === null   ? "bg-white border-neutral-200"
-            : balance <= 0    ? "bg-red-50 border-red-200 hover:border-red-300"
-            : balance <= 5    ? "bg-amber-50 border-amber-200 hover:border-amber-300"
-            : "bg-brand-50 border-brand-200 hover:border-brand-300"
-          }`}
-        >
-          <CreditCard className={`w-4 h-4 ${
-            balance === null ? "text-neutral-400"
-            : balance <= 0  ? "text-red-500"
-            : balance <= 5  ? "text-amber-500"
-            : "text-brand-500"
-          }`} />
-          <div>
-            <p className={`text-sm font-semibold leading-tight ${
-              balance === null ? "text-neutral-500"
-              : balance <= 0  ? "text-red-600"
-              : balance <= 5  ? "text-amber-600"
-              : "text-neutral-900"
-            }`}>
-              {balance === null ? "—" : `${balance.toFixed(1)} min`}
-            </p>
-            <p className="text-[10px] text-neutral-400 leading-tight">
-              {balance !== null && balance <= 0 ? "Top up now" : "Credits"}
-            </p>
-          </div>
-        </Link>
-      </div>
-
       {/* API error */}
       {apiError && (
         <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">

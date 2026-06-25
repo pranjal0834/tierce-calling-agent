@@ -95,21 +95,17 @@ export default function KnowledgePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Knowledge Base</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Add documents your agents can reference during live calls</p>
-        </div>
-        {!selected && (
+      {/* Page actions */}
+      {!selected && (
+        <div className="flex items-center justify-end gap-3 flex-wrap">
           <button
             onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-1.5 h-9 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" /> New Knowledge Base
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── KB LIST ── */}
       {!selected && (

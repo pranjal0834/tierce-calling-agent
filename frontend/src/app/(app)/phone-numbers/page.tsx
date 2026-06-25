@@ -3,19 +3,21 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Phone, Plus, RefreshCw, Search, Bot,
   CheckCircle, X, Mic, MessageSquare, AlertTriangle,
-  Settings2, Globe, Eye, EyeOff, ShieldCheck, ShieldAlert,
-  Zap, ArrowRight, Lock, ChevronDown, ChevronRight,
+  Settings2, Globe, ShieldCheck, ShieldAlert,
+  Zap, ArrowRight, Lock, ChevronDown, ChevronRight, Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
-  getPhoneNumbers, searchAvailableNumbers, provisionNumber,
+  getPhoneNumbers, searchAvailableNumbers, getAvailableCities, provisionNumber,
   releasePhoneNumber, getAgents,
   getTelephonyConfig, saveTelephonyConfig,
   getKycBundles, submitKyc, refreshKycStatus,
+  getKycDocTypes, uploadKycDoc, listKycDocs, deleteKycDoc, finalizeKyc,
   getBillingBalance, createNumberPaymentOrder,
 } from "@/lib/api";
 import CapBadge from "@/components/phone-numbers/CapBadge";
 import NumberRow from "@/components/phone-numbers/NumberRow";
+import NumberWalletCard from "@/components/phone-numbers/NumberWalletCard";
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -151,12 +153,7 @@ const PLIVO_COUNTRIES = [
 // ── Telephony Provider Card ────────────────────────────────────────────────────
 
 interface TelephonyConfigState {
-  provider: "twilio" | "plivo" | "exotel";
-  exotel_api_key: string;
-  exotel_api_token: string;
-  exotel_account_sid: string;
-  exotel_virtual_number: string;
-  exotel_subdomain: string;
+  provider: "twilio" | "plivo";
 }
 
 function TelephonyProviderCard({ config, onChange }: {
@@ -164,7 +161,6 @@ function TelephonyProviderCard({ config, onChange }: {
   onChange: (c: TelephonyConfigState) => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const [showToken, setShowToken] = useState(false);
   const [local, setLocal] = useState<TelephonyConfigState>(config);
 
   useEffect(() => { setLocal(config); }, [config]);
@@ -202,7 +198,7 @@ function TelephonyProviderCard({ config, onChange }: {
 
       {/* Provider toggle */}
       <div className="flex gap-2 mb-5">
-        {(["twilio", "plivo", "exotel"] as const).map(p => (
+        {(["twilio", "plivo"] as const).map(p => (
           <button
             key={p}
             onClick={() => set({ provider: p })}
@@ -212,7 +208,7 @@ function TelephonyProviderCard({ config, onChange }: {
                 : "bg-white border-neutral-300 text-neutral-500 hover:text-neutral-900 hover:border-neutral-400"
             }`}
           >
-            {p === "twilio" ? "Twilio" : p === "plivo" ? "Plivo" : "Exotel"}
+            {p === "twilio" ? "Twilio" : "Plivo"}
           </button>
         ))}
       </div>
@@ -228,7 +224,7 @@ function TelephonyProviderCard({ config, onChange }: {
             </div>
           </div>
         </div>
-      ) : local.provider === "plivo" ? (
+      ) : (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
           <div className="flex items-start gap-3">
             <Globe className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
@@ -236,74 +232,6 @@ function TelephonyProviderCard({ config, onChange }: {
               <p className="text-neutral-900 font-medium">Using Plivo (India)</p>
               <p>Platform-managed account — no credentials needed. Best for Indian numbers (+91).</p>
               <p>For US, UK, AU and other international numbers, switch to <span className="text-neutral-800 font-medium">Twilio</span>.</p>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-            <p className="text-xs text-amber-700">
-              Exotel supports Indian numbers (₹). You need an{" "}
-              <span className="font-medium text-amber-800">Exotel account</span> and a virtual number.
-              Calls and SMS are billed directly by Exotel at their standard rates.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-neutral-500 mb-1.5">API Key</label>
-              <input
-                value={local.exotel_api_key}
-                onChange={e => set({ exotel_api_key: e.target.value })}
-                placeholder="your_api_key"
-                className="w-full bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-500 mb-1.5">API Token</label>
-              <div className="relative">
-                <input
-                  type={showToken ? "text" : "password"}
-                  value={local.exotel_api_token}
-                  onChange={e => set({ exotel_api_token: e.target.value })}
-                  placeholder="••••••••"
-                  className="w-full bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 pr-9 text-sm focus:outline-none focus:border-brand-500 font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(v => !v)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
-                >
-                  {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-500 mb-1.5">Account SID</label>
-              <input
-                value={local.exotel_account_sid}
-                onChange={e => set({ exotel_account_sid: e.target.value })}
-                placeholder="your_account_sid"
-                className="w-full bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-neutral-500 mb-1.5">Virtual Number (caller ID)</label>
-              <input
-                value={local.exotel_virtual_number}
-                onChange={e => set({ exotel_virtual_number: e.target.value })}
-                placeholder="+911234567890"
-                className="w-full bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-neutral-500 mb-1.5">API Subdomain</label>
-              <input
-                value={local.exotel_subdomain}
-                onChange={e => set({ exotel_subdomain: e.target.value })}
-                placeholder="api.exotel.in"
-                className="w-full bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 font-mono"
-              />
             </div>
           </div>
         </div>
@@ -329,7 +257,7 @@ function TelephonyProviderCard({ config, onChange }: {
 
 function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
   agents: Agent[];
-  provider: "twilio" | "plivo" | "exotel";
+  provider: "twilio" | "plivo";
   onClose: () => void;
   onBought: () => void;
   onNeedKyc?: (country: string) => void;
@@ -338,24 +266,72 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
   const defaultCountry = provider === "plivo" ? "IN" : "US";
 
   const [areaCode, setAreaCode] = useState("");
+  const [contains, setContains] = useState("");
   const [country, setCountry] = useState(defaultCountry);
   const [results, setResults] = useState<AvailableNumber[]>([]);
   const [searching, setSearching] = useState(false);
   const [buying, setBuying] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState(agents[0]?.id || "");
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [priceInr, setPriceInr] = useState(250);   // flat platform price per number / month
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [cities, setCities] = useState<{ code: string; city: string; count: number }[]>([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
 
-  async function search() {
+  const PAGE = 20;
+
+  // Auto-detect which cities currently have provider inventory (Plivo only).
+  // Re-runs on country change; the backend caches so it stays fresh as Plivo
+  // adds/removes numbers without re-probing on every open.
+  useEffect(() => {
+    if (provider !== "plivo") { setCities([]); return; }
+    let cancelled = false;
+    setCitiesLoading(true);
+    getAvailableCities(country)
+      .then(d => { if (!cancelled) setCities(d.cities || []); })
+      .catch(() => { if (!cancelled) setCities([]); })
+      .finally(() => { if (!cancelled) setCitiesLoading(false); });
+    return () => { cancelled = true; };
+  }, [provider, country]);
+
+  async function search(codeOverride?: string) {
+    const ac = (codeOverride ?? areaCode).trim();
+    const cont = contains.trim();
     setSearching(true);
     setResults([]);
+    setTotal(0);
+    setHasMore(false);
     try {
-      const data = await searchAvailableNumbers(areaCode.trim(), country);
+      const data = await searchAvailableNumbers(ac, country, PAGE, 0, cont);
       setResults(data.numbers || []);
+      setTotal(data.total ?? (data.numbers?.length || 0));
+      setHasMore(!!data.has_more);
+      if (data.number_price_inr) setPriceInr(data.number_price_inr);
       if (!data.numbers?.length) toast("No numbers found — try a different area code", { icon: "ℹ️" });
     } catch (e: any) {
       const msg = e?.response?.data?.detail || "Search failed — check your provider credentials";
       toast.error(msg, { duration: 6000 });
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const data = await searchAvailableNumbers(areaCode.trim(), country, PAGE, results.length, contains.trim());
+      setResults(prev => {
+        const seen = new Set(prev.map(p => p.phone_number));
+        const fresh = (data.numbers || []).filter((n: AvailableNumber) => !seen.has(n.phone_number));
+        return [...prev, ...fresh];
+      });
+      if (data.total) setTotal(data.total);
+      setHasMore(!!data.has_more);
+    } catch {
+      toast.error("Could not load more numbers");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -439,9 +415,7 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
   }
 
   const providerLabel = provider === "plivo" ? "Plivo" : "Twilio";
-  const costNote = provider === "plivo"
-    ? "First month's rental paid via Razorpay at purchase. Indian numbers ≈ ₹260/mo, others vary."
-    : "First month's rental paid via Razorpay at purchase. Twilio rates apply (~₹85–460/mo depending on country).";
+  const costNote = `Flat ₹${priceInr}/month per number, billed separately from your call credits. First month is paid via Razorpay at purchase; renewals are drawn from your number wallet.`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -471,7 +445,7 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
           </div>
 
           {/* Search controls */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {countries.length > 1 ? (
               <select
                 value={country}
@@ -492,11 +466,22 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
               value={areaCode}
               onChange={e => setAreaCode(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
-              placeholder={country === "US" ? "Area code (e.g. 415)" : country === "IN" ? "STD code (e.g. 80)" : "Area code (optional)"}
-              className="flex-1 bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+              placeholder={country === "US" ? "Area code (415)" : country === "IN" ? "STD code (80)" : "Area code"}
+              className={`${provider === "plivo" ? "w-28 sm:w-36" : "flex-1"} bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500`}
             />
+            {provider === "plivo" && (
+              <input
+                value={contains}
+                onChange={e => setContains(e.target.value.replace(/[^0-9]/g, ""))}
+                onKeyDown={e => e.key === "Enter" && search()}
+                inputMode="numeric"
+                placeholder="Contains digits (e.g. 555)"
+                title="Find numbers containing these digits anywhere"
+                className="flex-1 min-w-[9rem] bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
+              />
+            )}
             <button
-              onClick={search}
+              onClick={() => search()}
               disabled={searching}
               className="px-4 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
             >
@@ -504,6 +489,42 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
               Search
             </button>
           </div>
+
+          {/* Available-city hint — auto-detected from live Plivo inventory */}
+          {provider === "plivo" && (citiesLoading || cities.length > 0) && (
+            <p className="text-xs text-neutral-400 -mt-1">
+              {citiesLoading ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Detecting available cities…
+                </span>
+              ) : (
+                <>
+                  Numbers available in:{" "}
+                  {cities.map((c, i) => (
+                    <span key={c.code}>
+                      {i > 0 && <span className="mx-1">·</span>}
+                      <button
+                        type="button"
+                        title={`${c.count.toLocaleString()} numbers`}
+                        onClick={() => { setAreaCode(c.code); search(c.code); }}
+                        className="text-brand-600 hover:text-brand-700 font-medium hover:underline"
+                      >
+                        {c.code} {c.city}
+                      </button>
+                    </span>
+                  ))}
+                  <span className="mx-1">·</span>
+                  <button
+                    type="button"
+                    onClick={() => { setAreaCode(""); search(""); }}
+                    className="text-neutral-500 hover:text-neutral-700 hover:underline"
+                  >
+                    all
+                  </button>
+                </>
+              )}
+            </p>
+          )}
 
           {/* Agent assignment */}
           {agents.length > 0 && (
@@ -522,11 +543,12 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
 
           {/* Results */}
           {results.length > 0 && (
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              <p className="text-xs text-neutral-500">{results.length} numbers available</p>
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              <p className="text-xs text-neutral-500">
+                Showing {results.length}{total > results.length ? ` of ${total.toLocaleString()}` : ""} available
+              </p>
               {results.map(n => {
-                const rateUsd = n.monthly_rate_usd ?? 1.0;
-                const rateInr = Math.round(rateUsd * 83);
+                const rateInr = priceInr;
                 return (
                   <div key={n.phone_number}
                     className="flex items-center justify-between bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3">
@@ -556,6 +578,17 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
                   </div>
                 );
               })}
+              {hasMore && (
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="w-full mt-1 py-2 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {loadingMore
+                    ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Loading…</>
+                    : <>Load more numbers</>}
+                </button>
+              )}
             </div>
           )}
 
@@ -765,27 +798,136 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
 
   function set(patch: Partial<typeof form>) { setForm(p => ({ ...p, ...patch })); }
 
+  const [phase, setPhase] = useState<"details" | "documents">(existing?.business_name ? "documents" : "details");
+  const [bundle, setBundle] = useState<KycBundle | null>(existing);
+  const [docTypes, setDocTypes] = useState<{ id: string; label: string; required: boolean }[]>([]);
+  const [docs, setDocs] = useState<{ id: string; doc_type: string; file_name: string }[]>([]);
+  const [uploadingType, setUploadingType] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+
+  useEffect(() => {
+    if (phase !== "documents") return;
+    getKycDocTypes(country).then((d: any) => setDocTypes(d.doc_types || [])).catch(() => {});
+    if (bundle?.id) listKycDocs(bundle.id).then(setDocs).catch(() => {});
+  }, [phase, bundle?.id, country]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
       const result = await submitKyc({ country, ...form });
-      if (result.status === "approved") {
-        toast.success(`KYC approved — you can now buy ${countryName} numbers`);
-      } else {
-        toast.success("KYC submitted — Plivo will review within 1–2 business days");
-      }
+      setBundle(result);
       onSubmitted(result);
-      onClose();
+      setPhase("documents");
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "KYC submission failed");
+      toast.error(err?.response?.data?.detail || "Failed to save details");
     } finally {
       setSaving(false);
     }
   }
 
+  async function handleUpload(docType: string, file: File) {
+    if (!bundle?.id) return;
+    setUploadingType(docType);
+    try {
+      await uploadKycDoc(bundle.id, docType, file);
+      setDocs(await listKycDocs(bundle.id));
+      if (bundle.status === "submitted" || bundle.status === "rejected") setBundle({ ...bundle, status: "pending" });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Upload failed");
+    } finally {
+      setUploadingType(null);
+    }
+  }
+
+  async function handleDeleteDoc(docId: string) {
+    if (!bundle?.id) return;
+    await deleteKycDoc(bundle.id, docId).catch(() => {});
+    setDocs(await listKycDocs(bundle.id));
+  }
+
+  async function handleFinalize() {
+    if (!bundle?.id) return;
+    setFinalizing(true);
+    try {
+      const res = await finalizeKyc(bundle.id);
+      setBundle(res); onSubmitted(res);
+      toast.success("Submitted for review — we'll notify you once it's approved");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Could not submit");
+    } finally {
+      setFinalizing(false);
+    }
+  }
+
   const inp = "w-full bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500";
   const lbl = "block text-xs text-neutral-500 mb-1.5";
+
+  const uploadedTypes = new Set(docs.map(d => d.doc_type));
+  const requiredMissing = docTypes.filter(t => t.required && !uploadedTypes.has(t.id));
+
+  if (phase === "documents") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between p-5 border-b border-neutral-200 shrink-0">
+            <div>
+              <h2 className="text-base font-semibold text-neutral-900">KYC documents — {countryName}</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">Upload the required documents, then submit for review.</p>
+            </div>
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900"><X className="w-5 h-5" /></button>
+          </div>
+          <div className="p-5 space-y-3 overflow-y-auto flex-1">
+            {bundle?.status === "submitted" && (
+              <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                <ShieldCheck className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700">Submitted for review — we&apos;ll verify your documents and notify you once approved.</p>
+              </div>
+            )}
+            {bundle?.status === "rejected" && (
+              <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <ShieldAlert className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700">Rejected: {bundle.error_message || "Please re-check your documents."} Re-upload and submit again.</p>
+              </div>
+            )}
+            {docTypes.map(t => {
+              const doc = docs.find(d => d.doc_type === t.id);
+              return (
+                <div key={t.id} className="flex items-center justify-between gap-3 border border-neutral-200 rounded-xl px-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm text-neutral-800 font-medium">{t.label}{t.required && <span className="text-red-500 ml-0.5">*</span>}</p>
+                    {doc ? <p className="text-[11px] text-emerald-600 truncate">✓ {doc.file_name}</p>
+                         : <p className="text-[11px] text-neutral-400">PDF, JPG or PNG · up to 10 MB</p>}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <label className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50">
+                      {uploadingType === t.id ? "Uploading…" : doc ? "Replace" : "Upload"}
+                      <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(t.id, f); e.currentTarget.value = ""; }} />
+                    </label>
+                    {doc && <button onClick={() => handleDeleteDoc(doc.id)} className="text-neutral-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between items-center gap-3 p-5 border-t border-neutral-200 shrink-0">
+            <button onClick={() => setPhase("details")} className="text-sm text-neutral-500 hover:text-neutral-900">← Edit details</button>
+            {bundle?.status === "submitted" ? (
+              <button onClick={onClose} className="px-5 py-2.5 bg-neutral-900 text-white text-sm font-medium rounded-xl">Close</button>
+            ) : (
+              <button onClick={handleFinalize} disabled={finalizing || requiredMissing.length > 0}
+                title={requiredMissing.length ? `Missing: ${requiredMissing.map(t => t.label).join(", ")}` : ""}
+                className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl">
+                {finalizing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                Submit for review
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -907,8 +1049,8 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
             </button>
             <button type="submit" disabled={saving}
               className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
-              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-              Submit KYC
+              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              Save &amp; continue
             </button>
           </div>
         </form>
@@ -971,11 +1113,6 @@ function TrialBanner() {
 
 const DEFAULT_CONFIG: TelephonyConfigState = {
   provider: "twilio",
-  exotel_api_key: "",
-  exotel_api_token: "",
-  exotel_account_sid: "",
-  exotel_virtual_number: "",
-  exotel_subdomain: "api.exotel.in",
 };
 
 export default function PhoneNumbersPage() {
@@ -1033,12 +1170,8 @@ export default function PhoneNumbersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Phone Numbers</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Buy dedicated numbers for inbound calls and branded outbound caller ID</p>
-        </div>
+      {/* Page actions */}
+      <div className="flex items-center justify-end gap-4 flex-wrap">
         {isTrial ? (
           <a
             href="/billing"
@@ -1087,7 +1220,7 @@ export default function PhoneNumbersPage() {
           </div>
           <p className="text-sm font-semibold text-neutral-900 mb-1">Simple Billing</p>
           <p className="text-xs text-neutral-500 leading-relaxed">
-            Pay the first month's rental directly via Razorpay when you buy. Renewals are handled monthly from your account.
+            Flat ₹250/month per number — billed separately from your call credits. Pay the first month via Razorpay at purchase; renewals come from your number wallet.
           </p>
         </div>
       </div>
@@ -1102,16 +1235,14 @@ export default function PhoneNumbersPage() {
       </div>
 
       {/* KYC */}
-      {providerConfig.provider !== "exotel" && (
-        <KycStatusBanner
-          bundles={kycBundles}
-          onOpenForm={(country: string) => setKycCountry(country)}
-          onBundleUpdated={(b: KycBundle) => setKycBundles((prev: KycBundle[]) => {
-            const without = prev.filter((x: KycBundle) => x.country !== b.country);
-            return [...without, b];
-          })}
-        />
-      )}
+      <KycStatusBanner
+        bundles={kycBundles}
+        onOpenForm={(country: string) => setKycCountry(country)}
+        onBundleUpdated={(b: KycBundle) => setKycBundles((prev: KycBundle[]) => {
+          const without = prev.filter((x: KycBundle) => x.country !== b.country);
+          return [...without, b];
+        })}
+      />
 
       {/* Step 2 — Numbers */}
       <div>
@@ -1154,6 +1285,11 @@ export default function PhoneNumbersPage() {
           </div>
         </div>
 
+        {/* Number wallet — funds renewals */}
+        <div className="mt-4">
+          <NumberWalletCard />
+        </div>
+
         {/* Numbers list */}
         {loading ? (
           <div className="flex items-center justify-center py-20 gap-2">
@@ -1168,29 +1304,25 @@ export default function PhoneNumbersPage() {
             <div className="text-center">
               <p className="text-sm font-medium text-neutral-700">No phone numbers yet</p>
               <p className="text-xs text-neutral-400 mt-1">
-                {providerConfig.provider === "exotel"
-                  ? "Exotel numbers are managed in your Exotel dashboard — enter your credentials above to get started"
-                  : "Search for an available number above and buy it with one click"}
+                Search for an available number above and buy it with one click
               </p>
             </div>
-            {providerConfig.provider !== "exotel" && (
-              isTrial ? (
-                <a
-                  href="/billing"
-                  className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors"
-                >
-                  <Zap className="w-4 h-4" />
-                  Upgrade to buy a number
-                </a>
-              ) : (
-                <button
-                  onClick={() => setShowBuy(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Buy your first number
-                </button>
-              )
+            {isTrial ? (
+              <a
+                href="/billing"
+                className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                <Zap className="w-4 h-4" />
+                Upgrade to buy a number
+              </a>
+            ) : (
+              <button
+                onClick={() => setShowBuy(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Buy your first number
+              </button>
             )}
           </div>
         ) : (
@@ -1202,6 +1334,7 @@ export default function PhoneNumbersPage() {
                 agents={agents}
                 onUpdate={handleUpdate}
                 onRelease={handleRelease}
+                onRenewed={load}
               />
             ))}
           </div>

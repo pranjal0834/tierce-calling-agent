@@ -9,7 +9,7 @@ import httpx
 
 from backend.auth.dependencies import require_workspace, get_current_user
 from backend.db.database import get_db, AsyncSessionLocal
-from backend.db.models import Agent, Call, Contact, CallTurn, User, Workspace
+from backend.db.models import Agent, Call, Contact, CallTurn, PhoneNumber, User, Workspace
 from backend.models.schemas import InitiateCallRequest, CallOut, TurnOut, BulkCallRequest, BulkCallResponse
 from backend.telephony.twilio_handler import TwilioHandler
 from backend.config import settings
@@ -38,7 +38,23 @@ async def initiate_call(
             detail="Insufficient balance. Please top up your account to make calls.",
         )
 
+    if await _workspace_calling_blocked(db, workspace.id):
+        raise HTTPException(
+            status_code=403,
+            detail="Your phone number rental has expired. Renew your number to resume making calls.",
+        )
+
     phone = normalize_phone(payload.phone_number)
+
+    # Compliance: calling window (quiet hours) + DNC suppression.
+    from backend.core import compliance
+    if not compliance.within_calling_window(workspace):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Outside allowed calling hours ({compliance.calling_window_label(workspace)}).",
+        )
+    if await compliance.is_dnc(db, workspace.id, phone):
+        raise HTTPException(status_code=403, detail="This number is on your Do-Not-Call list.")
 
     # Reject if a *recent* active call to this number is already in flight.
     # Only consider calls started in the last 30 min — older "active" rows are
@@ -113,9 +129,49 @@ async def _dial(phone_number: str, ws_url: str, call_id: str, workspace_id: str 
                 await fresh_db.commit()
 
 
+async def _workspace_caller_id(workspace_id: str | None, provider: str) -> str | None:
+    """The workspace's own purchased number for this provider, used as the outbound
+    caller ID so EVERY agent in the workspace dials out from the workspace's bought
+    number. Excludes suspended (rental-lapsed) numbers. Returns None (→ provider's env
+    default) if the workspace owns no usable number yet."""
+    if not workspace_id:
+        return None
+    from sqlalchemy import select as _sel, desc as _desc
+    from backend.db.models import PhoneNumber
+    async with AsyncSessionLocal() as num_db:
+        pn = (await num_db.execute(
+            _sel(PhoneNumber).where(
+                PhoneNumber.workspace_id == workspace_id,
+                PhoneNumber.is_active == True,
+                PhoneNumber.is_suspended == False,
+                PhoneNumber.provider == provider,
+            ).order_by(_desc(PhoneNumber.purchased_at)).limit(1)
+        )).scalar_one_or_none()
+    return pn.phone_number if pn else None
+
+
+async def _workspace_calling_blocked(db: AsyncSession, workspace_id: str) -> bool:
+    """True when the workspace owns phone number(s) but ALL of them are suspended
+    (rental lapsed) — so it can't make calls until a number is renewed. A workspace
+    that never bought a number is NOT blocked (it dials out via the platform default)."""
+    from sqlalchemy import select as _sel
+    nums = (await db.execute(
+        select(PhoneNumber).where(
+            PhoneNumber.workspace_id == workspace_id,
+            PhoneNumber.is_active == True,
+        )
+    )).scalars().all()
+    if not nums:
+        return False
+    return all(getattr(n, "is_suspended", False) for n in nums)
+
+
 async def _make_provider_call(phone_number: str, ws_url: str, call_id: str,
                                workspace_id: str | None = None) -> str | None:
-    """Dispatch the call through Twilio or Exotel based on workspace TelephonyConfig."""
+    """Dispatch the call through the workspace's telephony provider, using the
+    workspace's own purchased number as the caller ID (shared by all agents)."""
+    provider = "twilio"
+    cfg = None
     if workspace_id:
         from sqlalchemy import select as _sel
         from backend.db.models import TelephonyConfig
@@ -124,23 +180,20 @@ async def _make_provider_call(phone_number: str, ws_url: str, call_id: str,
                 _sel(TelephonyConfig).where(TelephonyConfig.workspace_id == workspace_id)
             )
             cfg = result.scalar_one_or_none()
-        if cfg and cfg.provider == "plivo":
-            from backend.telephony.plivo_handler import PlivoHandler
-            return await PlivoHandler().make_call(to=phone_number, websocket_url=ws_url, call_id=call_id)
-        if cfg and cfg.provider == "exotel":
-            from backend.telephony.exotel_handler import ExotelHandler
-            raw = cfg.config or {}
-            handler = ExotelHandler(
-                api_key=raw.get("api_key", ""),
-                api_token=raw.get("api_token", ""),
-                account_sid=raw.get("account_sid", ""),
-                virtual_number=raw.get("virtual_number", ""),
-                subdomain=raw.get("subdomain", "api.exotel.in"),
-            )
-            return await handler.make_call(to=phone_number, websocket_url=ws_url, call_id=call_id)
+        if cfg:
+            provider = cfg.provider
+
+    # Caller ID = the workspace's own bought number for this provider (else env default).
+    caller_id = await _workspace_caller_id(workspace_id, provider)
+
+    if provider == "plivo":
+        from backend.telephony.plivo_handler import PlivoHandler
+        return await PlivoHandler().make_call(to=phone_number, websocket_url=ws_url,
+                                              call_id=call_id, caller_id=caller_id)
 
     handler = TwilioHandler()
-    return await handler.make_call(to=phone_number, websocket_url=ws_url, call_id=call_id)
+    return await handler.make_call(to=phone_number, websocket_url=ws_url,
+                                   call_id=call_id, caller_id=caller_id)
 
 
 # ── Bulk calling ─────────────────────────────────────────────────────────────
@@ -151,6 +204,7 @@ async def bulk_call(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
+    user: User = Depends(get_current_user),
 ):
     agent = await db.get(Agent, payload.agent_id)
     if not agent or not agent.is_active or agent.workspace_id != workspace.id:
@@ -162,22 +216,68 @@ async def bulk_call(
             detail="Insufficient balance. Please top up your account to make calls.",
         )
 
-    base_ws = settings.BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
-    contacts_data = [c.model_dump() for c in payload.contacts]
+    if await _workspace_calling_blocked(db, workspace.id):
+        raise HTTPException(
+            status_code=403,
+            detail="Your phone number rental has expired. Renew your number to resume making calls.",
+        )
 
-    background_tasks.add_task(
-        _dial_bulk_background,
-        contacts=contacts_data,
-        agent_id=payload.agent_id,
-        workspace_id=workspace.id,
-        base_ws=base_ws,
-        calls_per_second=payload.calls_per_second,
-    )
+    from backend.core import compliance
+    from backend.db.models import ConsentAttestation
+
+    # Consent attestation is mandatory before launching a campaign.
+    if not payload.consent_attested:
+        raise HTTPException(
+            status_code=400,
+            detail="You must confirm you have consent to call these contacts before starting a campaign.",
+        )
+
+    # Calling window (quiet hours).
+    if not compliance.within_calling_window(workspace):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Outside allowed calling hours ({compliance.calling_window_label(workspace)}).",
+        )
+
+    # Abuse guard — block new campaigns when the opt-out rate is too high.
+    stats = await compliance.compliance_stats(db, workspace.id, days=30)
+    if stats["blocked_from_campaigns"]:
+        raise HTTPException(
+            status_code=429,
+            detail=(f"Campaigns paused: your opt-out rate ({stats['opt_out_rate']}%) exceeds the "
+                    f"{compliance.OPT_OUT_BLOCK_PCT}% safety limit. Clean your list and try again."),
+        )
+
+    # Scrub the DNC / suppression list before dialing.
+    contacts_data = [c.model_dump() for c in payload.contacts]
+    phones = {normalize_phone(c.get("phone_number", "")) for c in contacts_data}
+    dnc = await compliance.dnc_subset(db, workspace.id, phones)
+    kept = [c for c in contacts_data if normalize_phone(c.get("phone_number", "")) not in dnc]
+    suppressed = len(contacts_data) - len(kept)
+
+    # Record the consent attestation for the audit trail.
+    db.add(ConsentAttestation(
+        workspace_id=workspace.id, user_id=getattr(user, "id", None),
+        agent_id=payload.agent_id, contact_count=len(kept),
+    ))
+    await db.commit()
+
+    base_ws = settings.BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
+    if kept:
+        background_tasks.add_task(
+            _dial_bulk_background,
+            contacts=kept,
+            agent_id=payload.agent_id,
+            workspace_id=workspace.id,
+            base_ws=base_ws,
+            calls_per_second=payload.calls_per_second,
+        )
 
     return BulkCallResponse(
-        queued=len(contacts_data),
+        queued=len(kept),
         agent_id=payload.agent_id,
         agent_name=agent.name,
+        suppressed=suppressed,
     )
 
 
@@ -438,8 +538,6 @@ async def hangup_call(
                 if cfg and cfg.provider == "plivo":
                     from backend.telephony.plivo_handler import PlivoHandler
                     await PlivoHandler().end_call(telephony_sid)
-                elif cfg and cfg.provider == "exotel":
-                    pass  # Exotel doesn't support mid-call termination via API
                 else:
                     handler = TwilioHandler()
                     await handler.end_call(telephony_sid)

@@ -253,13 +253,6 @@ console.log(call.id); // call ID for tracking`;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Developers</h1>
-        <p className="text-sm text-neutral-500 mt-0.5">
-          Use the Vaaniq API to automate calls, integrate with your CRM, or build your own workflows. All endpoints accept API key authentication.
-        </p>
-      </div>
 
       {/* Base URL */}
       <div className="bg-white border border-neutral-200 shadow-sm rounded-xl p-4 sm:p-5">

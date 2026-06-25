@@ -8,7 +8,7 @@ Phone number management API.
   PATCH  /api/phone-numbers/{id}          — update agent routing
   DELETE /api/phone-numbers/{id}          — release number
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -31,12 +31,7 @@ router = APIRouter()
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class TelephonyConfigRequest(BaseModel):
-    provider: str               # "twilio" | "exotel"
-    exotel_api_key: str = ""
-    exotel_api_token: str = ""
-    exotel_account_sid: str = ""
-    exotel_virtual_number: str = ""
-    exotel_subdomain: str = "api.exotel.in"
+    provider: str               # "twilio" | "plivo"
 
 
 class NumberOrderRequest(BaseModel):
@@ -67,7 +62,16 @@ async def _serialize(pn: PhoneNumber, db: AsyncSession) -> dict:
         agent = await db.get(Agent, pn.agent_id)
         agent_name = agent.name if agent else None
     monthly_cost_usd = getattr(pn, "monthly_cost_usd", 1.0) or 1.0
-    monthly_cost_inr = round(monthly_cost_usd * USD_TO_INR, 0)
+    # Flat platform price (₹250) — what the customer is actually billed, regardless
+    # of Plivo's per-number USD rate. Billed from the number wallet, not call credits.
+    monthly_cost_inr = round(float(settings.NUMBER_PRICE_INR), 0)
+    # Renewal lifecycle: due date = (last_billed_at or purchased_at) + cycle days.
+    cycle = int(settings.NUMBER_RENEWAL_CYCLE_DAYS)
+    anchor = pn.last_billed_at or pn.purchased_at
+    next_renewal = (anchor + timedelta(days=cycle)) if anchor else None
+    days_until = None
+    if next_renewal:
+        days_until = (next_renewal - datetime.utcnow()).days
     return {
         "id": pn.id,
         "phone_number": pn.phone_number,
@@ -80,8 +84,11 @@ async def _serialize(pn: PhoneNumber, db: AsyncSession) -> dict:
         "agent_id": pn.agent_id,
         "agent_name": agent_name,
         "is_active": pn.is_active,
+        "is_suspended": getattr(pn, "is_suspended", False),
         "auto_renew": getattr(pn, "auto_renew", True),
         "purchased_at": pn.purchased_at.isoformat() if pn.purchased_at else None,
+        "next_renewal_at": next_renewal.isoformat() if next_renewal else None,
+        "days_until_renewal": days_until,
     }
 
 
@@ -104,18 +111,7 @@ async def get_telephony_config(
     _user: User = Depends(get_current_user),
 ):
     cfg = await _get_telephony_config(workspace.id, db)
-    if not cfg:
-        return {"provider": "twilio", "exotel_api_key": "", "exotel_api_token": "",
-                "exotel_account_sid": "", "exotel_virtual_number": "", "exotel_subdomain": "api.exotel.in"}
-    raw = cfg.config or {}
-    return {
-        "provider": cfg.provider,
-        "exotel_api_key": raw.get("api_key", ""),
-        "exotel_api_token": raw.get("api_token", ""),
-        "exotel_account_sid": raw.get("account_sid", ""),
-        "exotel_virtual_number": raw.get("virtual_number", ""),
-        "exotel_subdomain": raw.get("subdomain", "api.exotel.in"),
-    }
+    return {"provider": cfg.provider if cfg else "twilio"}
 
 
 @router.put("/config")
@@ -130,16 +126,7 @@ async def save_telephony_config(
         cfg = TelephonyConfig(workspace_id=workspace.id)
         db.add(cfg)
     cfg.provider = body.provider
-    if body.provider == "exotel":
-        cfg.config = {
-            "api_key": body.exotel_api_key,
-            "api_token": body.exotel_api_token,
-            "account_sid": body.exotel_account_sid,
-            "virtual_number": body.exotel_virtual_number,
-            "subdomain": body.exotel_subdomain or "api.exotel.in",
-        }
-    else:
-        cfg.config = {}
+    cfg.config = {}
     await db.commit()
     log.info("Telephony config saved", workspace_id=workspace.id, provider=body.provider)
     return {"ok": True, "provider": cfg.provider}
@@ -149,6 +136,9 @@ async def save_telephony_config(
 async def search_available(
     area_code: str = Query(default="", description="Area code e.g. 415"),
     country: str = Query(default="US", description="ISO country code e.g. US, GB, IN"),
+    limit: int = Query(default=20, description="Page size (Plivo caps at 20)"),
+    offset: int = Query(default=0, description="Pagination offset for 'load more'"),
+    contains: str = Query(default="", description="Vanity digit sequence to find in the number e.g. 555"),
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     _user: User = Depends(get_current_user),
@@ -156,17 +146,46 @@ async def search_available(
     cfg = await _get_telephony_config(workspace.id, db)
     provider = cfg.provider if cfg else "twilio"
     try:
+        price_inr = round(float(settings.NUMBER_PRICE_INR), 0)
         if provider == "plivo":
             handler = PlivoHandler()
-            numbers = handler.search_available(area_code=area_code, country=country)
+            page = handler.search_available(area_code=area_code, country=country,
+                                            limit=limit, offset=offset, contains=contains)
+            return {"provider": provider, "number_price_inr": price_inr, **page}
         else:
             manager = PhoneNumberManager()
             numbers = manager.search_available(area_code=area_code, country=country)
-        return {"numbers": numbers, "provider": provider}
+            return {"provider": provider, "number_price_inr": price_inr,
+                    "numbers": numbers, "total": len(numbers),
+                    "offset": 0, "has_more": False}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Provider search failed: {exc}")
+
+
+@router.get("/cities")
+async def list_available_cities(
+    country: str = Query(default="IN", description="ISO country code"),
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+    _user: User = Depends(get_current_user),
+):
+    """Auto-detected list of cities that currently have provider inventory.
+
+    Only meaningful for Plivo (which has city-level DID pools). Returns
+    [{code, city, count}] so the dashboard can show live, accurate STD-code hints.
+    """
+    cfg = await _get_telephony_config(workspace.id, db)
+    provider = cfg.provider if cfg else "twilio"
+    if provider != "plivo":
+        return {"country": country, "cities": []}
+    try:
+        cities = await PlivoHandler().available_cities(country=country)
+        return {"country": country, "cities": cities}
+    except Exception as exc:
+        log.warning("City detection failed", country=country, error=str(exc))
+        return {"country": country, "cities": []}
 
 
 @router.get("")
@@ -208,15 +227,18 @@ async def create_number_order(
     if workspace.plan == "free":
         raise HTTPException(status_code=403, detail="upgrade_required")
 
-    # Mock mode — return a fake order so the frontend skips straight to provisioning
-    if settings.MOCK_PHONE_NUMBERS:
-        return {"order_id": "MOCK_ORDER", "amount": 0, "currency": "INR",
-                "key": "MOCK", "amount_inr": 0, "mock": True}
-
+    # Use Razorpay whenever it's configured — including TEST keys (rzp_test_…) — so the
+    # real payment flow can be exercised even while Plivo provisioning stays mocked
+    # (MOCK_PHONE_NUMBERS only governs the actual Plivo buy, not the payment). Only when
+    # Razorpay isn't configured at all do we return a fake order to skip checkout.
     if not settings.RAZORPAY_KEY_ID:
+        if settings.MOCK_PHONE_NUMBERS:
+            return {"order_id": "MOCK_ORDER", "amount": 0, "currency": "INR",
+                    "key": "MOCK", "amount_inr": 0, "mock": True}
         raise HTTPException(status_code=501, detail="Razorpay not configured")
 
-    amount_inr = round(body.monthly_cost_usd * USD_TO_INR, 2)
+    # Flat platform price (₹250) — paid via Razorpay, separate from call credits.
+    amount_inr = round(float(settings.NUMBER_PRICE_INR), 2)
     try:
         import razorpay  # type: ignore
         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
@@ -246,18 +268,19 @@ async def provision_number(
     if workspace.plan == "free":
         raise HTTPException(status_code=403, detail="upgrade_required")
 
-    # Skip payment verification in mock mode
-    if not settings.MOCK_PHONE_NUMBERS:
-        if body.razorpay_order_id and body.razorpay_payment_id and body.razorpay_signature:
-            if settings.RAZORPAY_KEY_SECRET:
-                import hmac as _hmac, hashlib as _hashlib
-                generated = _hmac.new(
-                    settings.RAZORPAY_KEY_SECRET.encode(),
-                    f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode(),
-                    _hashlib.sha256,
-                ).hexdigest()
-                if generated != body.razorpay_signature:
-                    raise HTTPException(status_code=400, detail="Invalid payment signature")
+    # Verify the Razorpay signature whenever a payment was made (works for test keys
+    # too). Independent of MOCK_PHONE_NUMBERS so the payment is validated even when the
+    # Plivo buy is mocked.
+    if body.razorpay_order_id and body.razorpay_payment_id and body.razorpay_signature:
+        if settings.RAZORPAY_KEY_SECRET:
+            import hmac as _hmac, hashlib as _hashlib
+            generated = _hmac.new(
+                settings.RAZORPAY_KEY_SECRET.encode(),
+                f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode(),
+                _hashlib.sha256,
+            ).hexdigest()
+            if generated != body.razorpay_signature:
+                raise HTTPException(status_code=400, detail="Invalid payment signature")
 
     # Validate agent ownership
     if body.agent_id:
@@ -279,10 +302,12 @@ async def provision_number(
     cfg = await _get_telephony_config(workspace.id, db)
     provider = cfg.provider if cfg else "twilio"
 
-    # KYC check — required for regulated countries regardless of provider
+    # KYC check — required for regulated countries regardless of provider, but ONLY
+    # for real purchases. In mock mode no real DID is bought, so there's no regulatory
+    # requirement (lets the payment flow be tested without a KYC bundle).
     bundle_sid: str | None = None
     number_country = _country_from_number(body.phone_number)
-    if number_country in _KYC_REQUIRED_COUNTRIES:
+    if number_country in _KYC_REQUIRED_COUNTRIES and not settings.MOCK_PHONE_NUMBERS:
         result = await db.execute(
             select(RegulatoryBundle).where(
                 RegulatoryBundle.workspace_id == workspace.id,
@@ -311,7 +336,9 @@ async def provision_number(
         log.error("Provision failed", phone_number=body.phone_number, error=str(exc))
         raise HTTPException(status_code=400, detail=f"Provider error: {exc}")
 
-    monthly_cost = body.monthly_cost_usd or provisioned.get("monthly_rate_usd", 1.0) or 1.0
+    # Store the USD-equivalent of the flat ₹250 platform price so internal
+    # USD accounting stays coherent; the customer is always billed ₹250.
+    monthly_cost = round(float(settings.NUMBER_PRICE_INR) / USD_TO_INR, 4)
     pn = PhoneNumber(
         workspace_id=workspace.id,
         phone_number=provisioned["phone_number"],
@@ -330,7 +357,26 @@ async def provision_number(
     await db.refresh(pn)
     log.info("Phone number provisioned", phone_number=pn.phone_number,
              workspace_id=workspace.id, provider=provider, monthly_cost_usd=monthly_cost)
+
+    # Purchase confirmation email (best-effort, non-blocking).
+    import asyncio as _asyncio
+    _asyncio.create_task(_email_number_purchased(_user.email, pn.phone_number, pn.purchased_at))
+
     return await _serialize(pn, db)
+
+
+async def _email_number_purchased(to_email: str, phone: str, purchased_at: datetime):
+    """Send the 'number purchased' confirmation. Swallows errors (SMTP optional)."""
+    try:
+        from backend.notifications.email import send_email
+        from backend.notifications import templates
+        cycle = int(settings.NUMBER_RENEWAL_CYCLE_DAYS)
+        renewal = (purchased_at + timedelta(days=cycle)).strftime("%d %b %Y")
+        subject, html = templates.number_purchased(
+            phone, float(settings.NUMBER_PRICE_INR), renewal, settings.FRONTEND_URL)
+        await send_email(to_email, subject, html)
+    except Exception as exc:
+        log.warning("Number purchase email failed", to=to_email, error=str(exc))
 
 
 @router.patch("/{number_id}")
@@ -381,3 +427,94 @@ async def release_number(
     pn.is_active = False
     await db.commit()
     return {"message": "Number released"}
+
+
+# ── Renewal ───────────────────────────────────────────────────────────────────
+
+class RenewRequest(BaseModel):
+    razorpay_order_id: str | None = None
+    razorpay_payment_id: str | None = None
+    razorpay_signature: str | None = None
+
+
+@router.post("/{number_id}/renew/order")
+async def create_renewal_order(
+    number_id: str,
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+    _user: User = Depends(get_current_user),
+):
+    """Create a Razorpay order to renew an existing number for another cycle (₹250)."""
+    pn = await db.get(PhoneNumber, number_id)
+    if not pn or pn.workspace_id != workspace.id or not pn.is_active:
+        raise HTTPException(status_code=404, detail="Phone number not found")
+
+    if not settings.RAZORPAY_KEY_ID:
+        if settings.MOCK_PHONE_NUMBERS:
+            return {"order_id": "MOCK_ORDER", "amount": 0, "currency": "INR",
+                    "key": "MOCK", "amount_inr": 0, "mock": True}
+        raise HTTPException(status_code=501, detail="Razorpay not configured")
+
+    amount_inr = round(float(settings.NUMBER_PRICE_INR), 2)
+    try:
+        import razorpay  # type: ignore
+        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+        order = client.order.create({
+            "amount": int(amount_inr * 100),
+            "currency": "INR",
+            "notes": {"workspace_id": workspace.id, "phone_number": pn.phone_number,
+                      "purpose": "number_renewal"},
+        })
+        return {"order_id": order["id"], "amount": order["amount"], "currency": "INR",
+                "key": settings.RAZORPAY_KEY_ID, "amount_inr": amount_inr}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create order: {exc}")
+
+
+@router.post("/{number_id}/renew")
+async def renew_number(
+    number_id: str,
+    body: RenewRequest,
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+    _user: User = Depends(get_current_user),
+):
+    """Renew a number for another cycle: verify payment, extend, and lift any suspension."""
+    pn = await db.get(PhoneNumber, number_id)
+    if not pn or pn.workspace_id != workspace.id or not pn.is_active:
+        raise HTTPException(status_code=404, detail="Phone number not found")
+
+    # Verify the Razorpay signature when a payment was made (test keys included).
+    if body.razorpay_order_id and body.razorpay_payment_id and body.razorpay_signature:
+        if settings.RAZORPAY_KEY_SECRET:
+            import hmac as _hmac, hashlib as _hashlib
+            generated = _hmac.new(
+                settings.RAZORPAY_KEY_SECRET.encode(),
+                f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode(),
+                _hashlib.sha256,
+            ).hexdigest()
+            if generated != body.razorpay_signature:
+                raise HTTPException(status_code=400, detail="Invalid payment signature")
+
+    pn.last_billed_at = datetime.utcnow()
+    pn.is_suspended = False
+    pn.renewal_reminder_sent_at = None
+    await db.commit()
+    await db.refresh(pn)
+    log.info("Number renewed", phone_number=pn.phone_number, workspace_id=workspace.id)
+
+    import asyncio as _asyncio
+    cycle = int(settings.NUMBER_RENEWAL_CYCLE_DAYS)
+    nxt = (pn.last_billed_at + timedelta(days=cycle)).strftime("%d %b %Y")
+    _asyncio.create_task(_email_number_renewed(_user.email, pn.phone_number, nxt))
+    return await _serialize(pn, db)
+
+
+async def _email_number_renewed(to_email: str, phone: str, renewal_date: str):
+    try:
+        from backend.notifications.email import send_email
+        from backend.notifications import templates
+        subject, html = templates.number_renewed(phone, renewal_date, settings.FRONTEND_URL)
+        await send_email(to_email, subject, html)
+    except Exception as exc:
+        log.warning("Number renewed email failed", to=to_email, error=str(exc))

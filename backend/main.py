@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import settings
 from backend.db.database import create_tables, get_db, AsyncSessionLocal
 from backend.api import agents, calls, analytics, memory, telephony, tools as tools_api
-from backend.api import exotel_telephony as exotel_telephony_api
 from backend.api import plivo_telephony as plivo_telephony_api
 from backend.api import scheduling as scheduling_api
 from backend.api import admin as admin_api
@@ -25,6 +24,7 @@ from backend.api import kyc as kyc_api
 from backend.api import knowledge as knowledge_api
 from backend.api import templates as templates_api
 from backend.api import whatsapp as whatsapp_api
+from backend.api import compliance as compliance_api
 from backend.auth import router as auth_router
 from backend.billing import router as billing_router
 from backend.notifications import router as notifications_router
@@ -97,6 +97,24 @@ async def _repair_null_jsonb():
             pass
         try:
             await db.execute(text(
+                "ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE"
+            ))
+        except Exception:
+            pass
+        try:
+            await db.execute(text(
+                "ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS renewal_reminder_sent_at TIMESTAMP"
+            ))
+        except Exception:
+            pass
+        try:
+            await db.execute(text(
+                "ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS number_wallet_low_email_at TIMESTAMP"
+            ))
+        except Exception:
+            pass
+        try:
+            await db.execute(text(
                 "ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE"
             ))
         except Exception:
@@ -149,6 +167,18 @@ async def _repair_null_jsonb():
             ))
         except Exception:
             pass
+        # Compliance — calling-window (quiet-hours) settings on workspaces
+        for _col, _ddl in [
+            ("calling_window_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("calling_start_hour", "INTEGER DEFAULT 9"),
+            ("calling_end_hour", "INTEGER DEFAULT 21"),
+            ("calling_timezone", "VARCHAR(64) DEFAULT 'Asia/Kolkata'"),
+        ]:
+            try:
+                await db.execute(text(f"ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS {_col} {_ddl}"))
+            except Exception:
+                pass
+
         # Regulatory bundles table (KYC)
         try:
             await db.execute(text("""
@@ -232,63 +262,168 @@ async def _number_billing_poller():
             await _bill_due_numbers()
         except Exception as exc:
             log.error("Number billing poller error", error=str(exc))
+        try:
+            await _check_low_number_wallets()
+        except Exception as exc:
+            log.error("Low number-wallet check error", error=str(exc))
         await asyncio.sleep(3600 * 6)  # check every 6 hours
 
 
+async def _ws_owner_email(db, workspace_id: str) -> str | None:
+    """The workspace owner's email (falls back to any member)."""
+    from sqlalchemy import select as _sel
+    from backend.db.models import User as _U
+    users = (await db.execute(_sel(_U).where(_U.workspace_id == workspace_id))).scalars().all()
+    if not users:
+        return None
+    owner = next((u for u in users if (u.role or "") == "owner"), None)
+    return (owner or users[0]).email
+
+
+async def _send_number_email(to_email: str | None, rendered):
+    """rendered = (subject, html). Best-effort send."""
+    if not to_email:
+        return
+    try:
+        from backend.notifications.email import send_email
+        await send_email(to_email, rendered[0], rendered[1])
+    except Exception as exc:
+        log.warning("Number lifecycle email failed", to=to_email, error=str(exc))
+
+
 async def _bill_due_numbers():
+    """Per number: send renewal reminders inside the reminder window, auto-renew from
+    the number wallet when due, and suspend (block calls) when the rental lapses
+    without renewal. Suspended numbers are restored on a successful renewal."""
     from datetime import datetime as _dt, timedelta as _td
+    from math import ceil as _ceil
     from sqlalchemy import select as _sel
     from backend.db.models import PhoneNumber as _PN
     from backend.billing.credits import deduct_credits_for_number
+    from backend.notifications import templates
 
-    cutoff = _dt.utcnow() - _td(days=30)
+    cycle = int(settings.NUMBER_RENEWAL_CYCLE_DAYS)
+    remind_days = int(settings.NUMBER_RENEWAL_REMINDER_DAYS)
+    price = float(settings.NUMBER_PRICE_INR)
+    furl = settings.FRONTEND_URL or ""
+    now = _dt.utcnow()
+
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            _sel(_PN).where(
-                _PN.is_active == True,
-                (_PN.last_billed_at == None) | (_PN.last_billed_at <= cutoff),
-            )
-        )
-        due = result.scalars().all()
+        active = (await db.execute(_sel(_PN).where(_PN.is_active == True))).scalars().all()
+        ids = [p.id for p in active]
 
-    for pn in due:
+    for pid in ids:
         async with AsyncSessionLocal() as db:
-            fresh = await db.get(_PN, pn.id)
-            if not fresh or not fresh.is_active:
+            pn = await db.get(_PN, pid)
+            if not pn or not pn.is_active:
                 continue
-            monthly_cost = getattr(fresh, "monthly_cost_usd", 1.0) or 1.0
-            auto_renew = getattr(fresh, "auto_renew", True)
+            anchor = pn.last_billed_at or pn.purchased_at or now
+            due = anchor + _td(days=cycle)
+            remind_start = due - _td(days=remind_days)
+            auto_renew = getattr(pn, "auto_renew", True)
+            email = await _ws_owner_email(db, pn.workspace_id)
 
-            if auto_renew:
-                try:
-                    from backend.billing.credits import deduct_credits_for_number_renewal
-                    new_bal = await deduct_credits_for_number_renewal(
-                        db=db,
-                        workspace_id=fresh.workspace_id,
-                        phone_number=fresh.phone_number,
-                        monthly_cost_usd=monthly_cost,
-                    )
-                    fresh.last_billed_at = _dt.utcnow()
+            # ── Overdue → renew or suspend ──
+            if now >= due:
+                renewed = False
+                if auto_renew:
+                    try:
+                        await deduct_credits_for_number(
+                            db=db, workspace_id=pn.workspace_id, phone_number=pn.phone_number)
+                        renewed = True
+                    except ValueError:
+                        renewed = False
+                if renewed:
+                    was_suspended = pn.is_suspended
+                    ws_id_renewed = pn.workspace_id
+                    pn.last_billed_at = now
+                    pn.is_suspended = False
+                    pn.renewal_reminder_sent_at = None
                     await db.commit()
-                    log.info("Number auto-renewed successfully",
-                             phone_number=fresh.phone_number,
-                             workspace_id=fresh.workspace_id,
-                             monthly_cost_usd=monthly_cost,
-                             new_credits_balance=new_bal)
-                except ValueError as exc:
-                    # Insufficient balance — log and skip (don't release number)
+                    log.info("Number auto-renewed", phone_number=pn.phone_number,
+                             workspace_id=pn.workspace_id)
+                    if was_suspended:
+                        nxt = (now + _td(days=cycle)).strftime("%d %b %Y")
+                        await _send_number_email(email, templates.number_renewed(pn.phone_number, nxt, furl))
+                    # Immediate: this deduction may have tipped the wallet under the next
+                    # cycle's cost → notify right away rather than waiting for the sweep.
+                    await _notify_if_wallet_low(ws_id_renewed)
+                else:
+                    # Could not renew (auto-renew off, or wallet empty) → block it.
+                    if not pn.is_suspended:
+                        pn.is_suspended = True
+                        await db.commit()
+                        log.warning("Number blocked — rental lapsed without renewal",
+                                    phone_number=pn.phone_number, workspace_id=pn.workspace_id)
+                        await _send_number_email(email, templates.number_blocked(pn.phone_number, price, furl))
+                continue
+
+            # ── In reminder window → remind (at most once/day), if not already blocked ──
+            if now >= remind_start and not pn.is_suspended:
+                last = pn.renewal_reminder_sent_at
+                if last is None or (now - last) >= _td(hours=20):
+                    days_left = max(1, _ceil((due - now).total_seconds() / 86400))
+                    pn.renewal_reminder_sent_at = now
                     await db.commit()
-                    log.warning("Number auto-renewal failed — insufficient balance",
-                                phone_number=fresh.phone_number,
-                                workspace_id=fresh.workspace_id,
-                                reason=str(exc))
-            else:
-                fresh.last_billed_at = _dt.utcnow()
+                    log.info("Number renewal reminder sent", phone_number=pn.phone_number,
+                             days_left=days_left, workspace_id=pn.workspace_id)
+                    await _send_number_email(
+                        email,
+                        templates.number_renewal_reminder(
+                            pn.phone_number, days_left, due.strftime("%d %b %Y"), price, furl))
+
+
+async def _notify_if_wallet_low(workspace_id: str):
+    """For ONE workspace: if its number wallet can't cover the next auto-renewal of all
+    its auto-renewing numbers, email the owner (throttled once/3 days). Resets the throttle
+    when the wallet recovers. Safe to call inline right after a wallet deduction."""
+    from datetime import datetime as _dt, timedelta as _td
+    from sqlalchemy import select as _sel, func as _func
+    from backend.db.models import PhoneNumber as _PN, Workspace as _WS
+    from backend.notifications import templates
+
+    price = float(settings.NUMBER_PRICE_INR)
+    furl = settings.FRONTEND_URL or ""
+    now = _dt.utcnow()
+    throttle = _td(days=3)
+
+    async with AsyncSessionLocal() as db:
+        count = (await db.execute(_sel(_func.count()).select_from(_PN).where(
+            _PN.workspace_id == workspace_id, _PN.is_active == True,
+            _PN.auto_renew == True))).scalar() or 0
+        if count <= 0:
+            return
+        ws = await db.get(_WS, workspace_id)
+        if not ws:
+            return
+        required = price * int(count)
+        balance = getattr(ws, "number_balance_inr", 0.0) or 0.0
+        if balance < required:
+            last = ws.number_wallet_low_email_at
+            if last is None or (now - last) >= throttle:
+                ws.number_wallet_low_email_at = now
                 await db.commit()
-                log.info("Number renewal due — auto-renew disabled, manual renewal required",
-                         phone_number=fresh.phone_number,
-                         workspace_id=fresh.workspace_id,
-                         monthly_cost_usd=monthly_cost)
+                email = await _ws_owner_email(db, workspace_id)
+                log.info("Low number-wallet email", workspace_id=workspace_id,
+                         balance=balance, required=required, count=int(count))
+                await _send_number_email(
+                    email, templates.number_wallet_low(balance, required, int(count), price, furl))
+        elif ws.number_wallet_low_email_at is not None:
+            ws.number_wallet_low_email_at = None
+            await db.commit()
+
+
+async def _check_low_number_wallets():
+    """Periodic sweep: run the low-wallet check for every workspace with auto-renew numbers
+    (catch-all in case a balance is low without a fresh deduction)."""
+    from sqlalchemy import select as _sel
+    from backend.db.models import PhoneNumber as _PN
+
+    async with AsyncSessionLocal() as db:
+        nums = (await db.execute(_sel(_PN.workspace_id).where(
+            _PN.is_active == True, _PN.auto_renew == True))).scalars().all()
+    for ws_id in set(nums):
+        await _notify_if_wallet_low(ws_id)
 
 
 async def _schedule_poller():
@@ -442,12 +577,12 @@ app.include_router(billing_router.router, prefix="/billing", tags=["Billing"])
 app.include_router(admin_api.router,    prefix="/api/admin",  tags=["Admin"])
 app.include_router(webhooks_api.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(phone_numbers_api.router, prefix="/api/phone-numbers", tags=["PhoneNumbers"])
+app.include_router(compliance_api.router, prefix="/api/compliance", tags=["Compliance"])
 app.include_router(kyc_api.router, prefix="/api/kyc", tags=["KYC"])
 app.include_router(knowledge_api.router, prefix="/api/knowledge", tags=["Knowledge"])
 app.include_router(templates_api.router, prefix="/api/templates", tags=["Templates"])
 app.include_router(whatsapp_api.router, prefix="/api/whatsapp", tags=["WhatsApp"])
 app.include_router(notifications_router.router)
-app.include_router(exotel_telephony_api.router, prefix="/telephony/exotel", tags=["ExotelTelephony"])
 app.include_router(plivo_telephony_api.router, prefix="/telephony/plivo", tags=["PlivoTelephony"])
 
 # Voice-preview samples for the agent Voice picker (one short WAV per Gemini voice).

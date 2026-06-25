@@ -29,9 +29,17 @@ _DEFAULTS = {
     # When true, "Buy Now" simulates a successful payment and credits minutes
     # WITHOUT calling Razorpay. For local testing only — turn OFF in production.
     "BILLING_TEST_MODE": False,
-    # USD→INR conversion rate (used for number-rental pricing + admin revenue calc).
+    # USD→INR conversion rate (used for admin revenue calc + USD cost display).
     # Update this when the exchange rate moves materially.
     "USD_TO_INR": 95.61,
+    # Flat monthly price (INR) we charge a customer for ANY phone number rental.
+    # This is a fixed platform price (not Plivo's per-number USD rate) and is billed
+    # from the separate number wallet — never from call-minute credits.
+    "NUMBER_PRICE_INR": 250.0,
+    # Number rental lifecycle: rental lasts CYCLE_DAYS; renewal reminders start
+    # REMINDER_DAYS before the due date; past due → number is suspended until renewed.
+    "NUMBER_RENEWAL_CYCLE_DAYS": 30,
+    "NUMBER_RENEWAL_REMINDER_DAYS": 5,
     # Free-trial credits given on signup
     "FREE_TRIAL_MINUTES": 20.0,
     "ACCESS_TOKEN_EXPIRE_MINUTES": 60 * 24 * 7,  # 7 days

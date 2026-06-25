@@ -105,10 +105,12 @@ async def deduct_credits_for_number(
     db: AsyncSession,
     workspace_id: str,
     phone_number: str,
-    monthly_cost_usd: float,
+    monthly_cost_usd: float = 0.0,
 ) -> float:
-    """Deduct one month's number rental from the INR number wallet. Raises ValueError if insufficient."""
-    amount_inr = round(monthly_cost_usd * USD_TO_INR, 2)
+    """Deduct one month's number rental from the INR number wallet (NOT call-minute
+    credits). Charges the flat platform price settings.NUMBER_PRICE_INR (₹250),
+    independent of Plivo's per-number USD rate. Raises ValueError if insufficient."""
+    amount_inr = round(float(settings.NUMBER_PRICE_INR), 2)
     workspace = await db.get(Workspace, workspace_id)
     if not workspace:
         raise ValueError(f"Workspace {workspace_id} not found")

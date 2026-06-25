@@ -44,7 +44,8 @@ async def plivo_inbound(
     async with AsyncSessionLocal() as db:
         to_norm = normalize_phone(To) if To else To
 
-        # Find agent via PhoneNumber record
+        # Inbound is served ONLY on a number the workspace has purchased. A workspace
+        # with no purchased number is outbound-only and cannot receive inbound calls.
         pn_result = await db.execute(
             select(PhoneNumber).where(
                 PhoneNumber.phone_number == to_norm,
@@ -55,24 +56,47 @@ async def plivo_inbound(
         workspace_id = None
         agent_id = None
 
-        if phone_record and phone_record.agent_id:
-            agent = await db.get(Agent, phone_record.agent_id)
-            if agent and agent.is_active:
-                workspace_id = phone_record.workspace_id
-                agent_id = agent.id
+        # Suspended (rental lapsed) → number can't receive calls until renewed.
+        if phone_record and getattr(phone_record, "is_suspended", False):
+            log.warning("Plivo inbound rejected — number suspended (rental lapsed)", to=To)
+            return PlainTextResponse(
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                "<Response><Speak>This number is temporarily inactive. "
+                "Please try again later.</Speak></Response>",
+                media_type="application/xml",
+            )
 
-        # Fallback: INBOUND_AGENT_ID
-        if not agent_id and settings.INBOUND_AGENT_ID:
-            agent = await db.get(Agent, settings.INBOUND_AGENT_ID)
+        if phone_record:
+            workspace_id = phone_record.workspace_id
+            agent = None
+            if phone_record.agent_id:
+                agent = await db.get(Agent, phone_record.agent_id)
+                if agent and not agent.is_active:
+                    agent = None
+            if not agent:
+                # Workspace's default answerer: its first active agent.
+                res = await db.execute(
+                    select(Agent).where(
+                        Agent.workspace_id == phone_record.workspace_id,
+                        Agent.is_active == True,
+                    ).limit(1)
+                )
+                agent = res.scalar_one_or_none()
             if agent:
+                agent_id = agent.id
+        elif (settings.INBOUND_AGENT_ID and to_norm and settings.PLIVO_PHONE_NUMBER
+              and to_norm == normalize_phone(settings.PLIVO_PHONE_NUMBER)):
+            # Platform's own demo number (env) → configured demo agent.
+            agent = await db.get(Agent, settings.INBOUND_AGENT_ID)
+            if agent and agent.is_active:
                 workspace_id = agent.workspace_id
                 agent_id = agent.id
 
         if not agent_id:
-            log.warning("Plivo inbound: no agent found", to=To)
+            log.warning("Plivo inbound rejected — number not purchased by any workspace", to=To)
             return PlainTextResponse(
                 '<?xml version="1.0" encoding="UTF-8"?>'
-                "<Response><Speak>Sorry, this number is not configured.</Speak></Response>",
+                "<Response><Speak>This number is not in service.</Speak></Response>",
                 media_type="application/xml",
             )
 

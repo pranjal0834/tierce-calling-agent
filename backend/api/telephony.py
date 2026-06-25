@@ -255,10 +255,11 @@ async def twilio_inbound(request: Request, db: AsyncSession = Depends(get_db)):
     log.info("Inbound call received", call_sid=call_sid, from_number=from_number,
              to_number=to_number)
 
-    # Pick agent by priority:
-    #   1. PhoneNumber record matching the To number → use its assigned agent + workspace
-    #   2. INBOUND_AGENT_ID env var fallback
-    #   3. First active agent in workspace
+    # Inbound is served ONLY on a number the workspace has purchased. A workspace
+    # with no purchased number is outbound-only and cannot receive inbound calls.
+    #   1. PhoneNumber matching the To number → assigned agent, else workspace's first active agent
+    #   2. Platform's own env number → INBOUND_AGENT_ID (demo line only)
+    #   3. Otherwise → not in service
     agent: Agent | None = None
     workspace_id_override: str | None = None
 
@@ -270,25 +271,37 @@ async def twilio_inbound(request: Request, db: AsyncSession = Depends(get_db)):
     )
     phone_record = pn_result.scalar_one_or_none()
 
-    if phone_record and phone_record.agent_id:
-        agent = await db.get(Agent, phone_record.agent_id)
-        workspace_id_override = phone_record.workspace_id
-        if agent and not agent.is_active:
-            agent = None
+    # Suspended (rental lapsed) → number can't receive calls until renewed.
+    if phone_record and getattr(phone_record, "is_suspended", False):
+        log.warning("Twilio inbound rejected — number suspended (rental lapsed)", to=to_number)
+        return Response(
+            content="<Response><Say>This number is temporarily inactive. Please try again later.</Say><Hangup/></Response>",
+            media_type="application/xml",
+        )
 
-    if not agent and settings.INBOUND_AGENT_ID:
+    if phone_record:
+        workspace_id_override = phone_record.workspace_id
+        if phone_record.agent_id:
+            agent = await db.get(Agent, phone_record.agent_id)
+            if agent and not agent.is_active:
+                agent = None
+        if not agent:
+            result = await db.execute(
+                select(Agent).where(
+                    Agent.workspace_id == phone_record.workspace_id,
+                    Agent.is_active == True,
+                ).limit(1)
+            )
+            agent = result.scalar_one_or_none()
+    elif (settings.INBOUND_AGENT_ID and to_number and settings.TWILIO_PHONE_NUMBER
+          and normalize_phone(to_number) == normalize_phone(settings.TWILIO_PHONE_NUMBER)):
+        # Platform's own demo number (env) → configured demo agent.
         agent = await db.get(Agent, settings.INBOUND_AGENT_ID)
         if agent and not agent.is_active:
             agent = None
 
     if not agent:
-        result = await db.execute(
-            select(Agent).where(Agent.is_active == True).limit(1)
-        )
-        agent = result.scalar_one_or_none()
-
-    if not agent:
-        twiml = "<Response><Say>Sorry, no agents are available right now. Please try again later.</Say></Response>"
+        twiml = "<Response><Say>This number is not in service.</Say><Hangup/></Response>"
         return Response(content=twiml, media_type="application/xml")
 
     effective_workspace_id = workspace_id_override or agent.workspace_id

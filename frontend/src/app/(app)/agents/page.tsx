@@ -42,12 +42,8 @@ export default function AgentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Agents</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Configure and manage your voice AI agents</p>
-        </div>
+      {/* Page actions */}
+      <div className="flex items-center justify-end gap-3 flex-wrap">
         <button
           onClick={openCreate}
           className="inline-flex items-center gap-1.5 h-9 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors shadow-xs"

@@ -818,11 +818,14 @@ class OpenAIRealtimeHandler:
         if not self.stream_sid:
             return
         if getattr(self, "_is_plivo", False):
+            # Plivo's playAudio spec requires contentType EXACTLY "audio/x-mulaw" (no
+            # ";rate=" suffix) and sampleRate as a STRING — malformed frames are silently
+            # dropped, so this exact shape is what makes the caller actually hear the agent.
             await self.telephony_ws.send_json({
                 "event": "playAudio",
                 "media": {
-                    "contentType": "audio/x-mulaw;rate=8000",
-                    "sampleRate": 8000,
+                    "contentType": "audio/x-mulaw",
+                    "sampleRate": "8000",
                     "payload": audio_b64,
                 },
             })

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Sparkles, Import, Eye, X, BookOpen, Bot, Check, ArrowRight } from "lucide-react";
+import { Search, Sparkles, Import, Eye, X, Bot, Check, ArrowRight, Target, CalendarCheck, Headphones, Wallet, GraduationCap, Star, Mic } from "lucide-react";
 import { getTemplates, importTemplate } from "@/lib/api";
 import toast from "react-hot-toast";
 
@@ -30,6 +30,20 @@ const CATEGORIES = [
   "HR & Education",
   "Feedback"
 ];
+
+// Category accents stay fully on-brand: every category uses the brand teal, and
+// the icon alone distinguishes them (no off-palette pops).
+// Class strings are written in full (Tailwind can't see dynamically-built names).
+const TEAL = { avatar: "from-brand-400 to-brand-600", pill: "bg-brand-50 text-brand-700 border-brand-100" };
+const CATEGORY_THEME: Record<string, { icon: any; avatar: string; pill: string }> = {
+  "Sales & Leads":          { icon: Target,        ...TEAL },
+  "Appointments":           { icon: CalendarCheck, ...TEAL },
+  "Support & Service":      { icon: Headphones,    ...TEAL },
+  "Collections & Finance":  { icon: Wallet,        ...TEAL },
+  "HR & Education":         { icon: GraduationCap, ...TEAL },
+  "Feedback":               { icon: Star,          ...TEAL },
+};
+const DEFAULT_THEME = { icon: Bot, ...TEAL };
 
 export default function TemplatesPage() {
   const router = useRouter();
@@ -101,12 +115,6 @@ export default function TemplatesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-[20px] sm:text-[22px] font-semibold text-neutral-900 tracking-tight">Agent Templates</h1>
-        <p className="text-sm text-neutral-500 mt-0.5">Jumpstart your setup with professionally preconfigured voice agents</p>
-      </div>
-
       {/* Filters & Search */}
       <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
         {/* Search */}
@@ -169,20 +177,26 @@ export default function TemplatesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((tpl) => (
+          {filtered.map((tpl) => {
+            const theme = CATEGORY_THEME[tpl.category] ?? DEFAULT_THEME;
+            const Icon = theme.icon;
+            return (
             <div
               key={tpl.id}
-              className="group bg-white border border-neutral-200 hover:border-brand-300 rounded-2xl p-5 flex flex-col justify-between shadow-card hover:shadow-hover transition-all duration-200"
+              className="group relative bg-white border border-neutral-200 hover:border-brand-300 rounded-2xl p-5 flex flex-col justify-between shadow-card hover:shadow-hover transition-all duration-200 overflow-hidden"
             >
+              {/* Category accent bar */}
+              <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${theme.avatar}`} />
+
               <div className="space-y-3">
-                {/* Meta details */}
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-brand-50 text-brand-700 border border-brand-100">
-                    {tpl.category}
-                  </span>
+                {/* Top row: category icon avatar + difficulty / duration */}
+                <div className="flex items-start justify-between">
+                  <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${theme.avatar} flex items-center justify-center text-white shadow-xs`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                      tpl.difficulty === "Beginner" 
+                      tpl.difficulty === "Beginner"
                         ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                         : "bg-amber-50 text-amber-700 border border-amber-100"
                     }`}>
@@ -199,18 +213,33 @@ export default function TemplatesPage() {
                   {tpl.name}
                 </h3>
 
+                {/* Category pill + voice badge */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${theme.pill}`}>
+                    {tpl.category}
+                  </span>
+                  {tpl.voice_id && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-neutral-500 bg-neutral-50 border border-neutral-200 px-1.5 py-0.5 rounded-md">
+                      <Mic className="w-3 h-3 text-neutral-400" /> {tpl.voice_id}
+                    </span>
+                  )}
+                </div>
+
                 {/* Description */}
                 <p className="text-xs text-neutral-500 line-clamp-2 leading-relaxed">
                   {tpl.description}
                 </p>
 
-                {/* Tags */}
+                {/* Tags (cap at 3) */}
                 <div className="flex flex-wrap gap-1 pt-1">
-                  {tpl.tags.map((tag) => (
+                  {tpl.tags.slice(0, 3).map((tag) => (
                     <span key={tag} className="text-[10px] text-neutral-400 bg-neutral-50 border border-neutral-200 px-1.5 py-0.5 rounded">
                       #{tag}
                     </span>
                   ))}
+                  {tpl.tags.length > 3 && (
+                    <span className="text-[10px] text-neutral-400 px-1 py-0.5">+{tpl.tags.length - 3}</span>
+                  )}
                 </div>
               </div>
 
@@ -230,19 +259,28 @@ export default function TemplatesPage() {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* ─── Preview Modal ─── */}
-      {previewTemplate && (
+      {previewTemplate && (() => {
+        const theme = CATEGORY_THEME[previewTemplate.category] ?? DEFAULT_THEME;
+        const Icon = theme.icon;
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 backdrop-blur-[2px] p-4">
           <div className="bg-white border border-neutral-200 w-full max-w-2xl rounded-2xl shadow-modal flex flex-col max-h-[85vh] animate-scale-in">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
-              <div>
-                <h3 className="font-semibold text-neutral-900 text-base">{previewTemplate.name}</h3>
-                <p className="text-xs text-neutral-400 mt-0.5">{previewTemplate.category} Template</p>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${theme.avatar} flex items-center justify-center text-white shadow-xs flex-shrink-0`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-neutral-900 text-base">{previewTemplate.name}</h3>
+                  <p className="text-xs text-neutral-400 mt-0.5">{previewTemplate.category} Template</p>
+                </div>
               </div>
               <button
                 onClick={() => setPreviewTemplate(null)}
@@ -307,7 +345,8 @@ export default function TemplatesPage() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ─── Import / Customize Modal ─── */}
       {importingTemplate && (

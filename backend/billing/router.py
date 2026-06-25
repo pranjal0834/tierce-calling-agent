@@ -13,14 +13,38 @@ from pydantic import BaseModel
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.dependencies import require_workspace
+from backend.auth.dependencies import require_workspace, get_current_user
 from backend.billing.credits import (
     PACKS_INR, PAYG_RATE_INR, USD_TO_INR,
-    add_credits,
+    add_credits, add_number_credits,
 )
 from backend.config import settings
 from backend.db.database import get_db, AsyncSessionLocal
-from backend.db.models import CreditTransaction, Workspace
+from backend.db.models import CreditTransaction, User, Workspace
+
+
+async def _email_credits_purchased(to_email: str, pack: dict, new_balance: float):
+    """Send the call-credits purchase receipt. Best-effort (SMTP optional)."""
+    try:
+        from backend.notifications.email import send_email
+        from backend.notifications import templates
+        subject, html = templates.credits_purchased(
+            pack["label"], pack["minutes"], pack["price_inr"], new_balance, settings.FRONTEND_URL)
+        await send_email(to_email, subject, html)
+    except Exception as exc:
+        log.warning("Credits purchase email failed", to=to_email, error=str(exc))
+
+
+async def _email_wallet_topup(to_email: str, amount_inr: float, new_balance: float):
+    """Send the number-wallet top-up receipt. Best-effort (SMTP optional)."""
+    try:
+        from backend.notifications.email import send_email
+        from backend.notifications import templates
+        subject, html = templates.number_wallet_topup(
+            amount_inr, new_balance, float(settings.NUMBER_PRICE_INR), settings.FRONTEND_URL)
+        await send_email(to_email, subject, html)
+    except Exception as exc:
+        log.warning("Wallet top-up email failed", to=to_email, error=str(exc))
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -39,6 +63,21 @@ class RazorpayVerifyRequest(BaseModel):
     pack_id: str
 
 
+class NumberWalletOrderRequest(BaseModel):
+    amount_inr: float
+
+
+class NumberWalletTopupRequest(BaseModel):
+    amount_inr: float
+    razorpay_order_id: str | None = None
+    razorpay_payment_id: str | None = None
+    razorpay_signature: str | None = None
+
+
+# Allowed top-up amounts (INR) — keeps the amount server-controlled.
+_WALLET_TOPUP_AMOUNTS = {250.0, 500.0, 1000.0, 2500.0, 5000.0}
+
+
 # ── Packs (public) ────────────────────────────────────────────────────────────
 
 @router.get("/packs")
@@ -48,8 +87,10 @@ async def get_packs():
             "payg": {"rate_per_min": PAYG_RATE_INR, "currency": "INR"},
             "packs": PACKS_INR,
         },
-        # Frontend uses this to switch "Buy Now" to a simulated purchase
-        "test_mode": bool(settings.BILLING_TEST_MODE),
+        # Frontend uses this to switch "Buy Now" to a simulated purchase. The simulate
+        # path is only used when Razorpay is NOT configured — once test/live keys are set,
+        # purchases always go through the Razorpay checkout (test keys = no real money).
+        "test_mode": bool(settings.BILLING_TEST_MODE) and not settings.RAZORPAY_KEY_ID,
     }
 
 
@@ -63,10 +104,11 @@ async def test_purchase(
 ):
     """
     Simulate a successful purchase and credit minutes — no Razorpay involved.
-    Only available when BILLING_TEST_MODE is enabled.
+    Only available when BILLING_TEST_MODE is enabled AND Razorpay is not configured
+    (once Razorpay keys exist, all purchases must go through the real checkout).
     """
-    if not settings.BILLING_TEST_MODE:
-        raise HTTPException(status_code=403, detail="Test billing mode is disabled")
+    if not settings.BILLING_TEST_MODE or settings.RAZORPAY_KEY_ID:
+        raise HTTPException(status_code=403, detail="Test billing mode is disabled — use Razorpay checkout")
 
     pack = PACKS_INR.get(payload.pack_id)
     if not pack:
@@ -98,10 +140,41 @@ async def test_purchase(
 
 @router.get("/balance")
 async def get_balance(
+    db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
 ):
+    from sqlalchemy import func
+    from backend.db.models import PhoneNumber
+    num_count = (await db.execute(
+        select(func.count()).select_from(PhoneNumber).where(
+            PhoneNumber.workspace_id == workspace.id,
+            PhoneNumber.is_active == True,
+        )
+    )).scalar() or 0
+
+    # Call-credit usage: total minutes ever added vs. consumed → % used.
+    added = (await db.execute(
+        select(func.coalesce(func.sum(CreditTransaction.minutes), 0.0)).where(
+            CreditTransaction.workspace_id == workspace.id,
+            CreditTransaction.minutes > 0,
+        )
+    )).scalar() or 0.0
+    used = -((await db.execute(
+        select(func.coalesce(func.sum(CreditTransaction.minutes), 0.0)).where(
+            CreditTransaction.workspace_id == workspace.id,
+            CreditTransaction.minutes < 0,
+        )
+    )).scalar() or 0.0)
+    credits_used_pct = round(min(100.0, max(0.0, (used / added * 100.0))) , 0) if added > 0 else 0
+
     return {
         "credits_balance": workspace.credits_balance,
+        "credits_total_minutes": round(float(added), 1),
+        "credits_used_minutes": round(float(used), 1),
+        "credits_used_pct": int(credits_used_pct),
+        "number_balance_inr": getattr(workspace, "number_balance_inr", 0.0) or 0.0,
+        "number_price_inr": float(settings.NUMBER_PRICE_INR),
+        "phone_number_count": int(num_count),
         "plan": workspace.plan,
         "usd_to_inr": USD_TO_INR,
     }
@@ -170,11 +243,74 @@ async def create_razorpay_order(
     }
 
 
+# ── Number wallet (top up → pays via Razorpay, funds renewals) ─────────────────
+
+@router.post("/number-wallet/order")
+async def create_number_wallet_order(
+    payload: NumberWalletOrderRequest,
+    workspace: Workspace = Depends(require_workspace),
+):
+    """Create a Razorpay order to top up the number wallet by the chosen amount."""
+    amount = round(float(payload.amount_inr), 2)
+    if amount not in _WALLET_TOPUP_AMOUNTS:
+        raise HTTPException(status_code=400, detail="Invalid top-up amount")
+
+    # No Razorpay configured: mock order (so mock/dev can fund the wallet too).
+    if not settings.RAZORPAY_KEY_ID:
+        if settings.MOCK_PHONE_NUMBERS:
+            return {"order_id": "MOCK_ORDER", "amount": 0, "currency": "INR",
+                    "key_id": "MOCK", "amount_inr": amount, "mock": True}
+        raise HTTPException(status_code=501, detail="Razorpay not configured")
+
+    from backend.billing.razorpay_client import create_order
+    order = await create_order(
+        int(amount * 100), f"{workspace.id[:8]}-numwallet",
+        notes={"workspace_id": workspace.id, "purpose": "number_wallet_topup", "amount_inr": amount},
+    )
+    return {"order_id": order["id"], "amount": order["amount"], "currency": "INR",
+            "key_id": settings.RAZORPAY_KEY_ID, "amount_inr": amount}
+
+
+@router.post("/number-wallet/topup")
+async def topup_number_wallet(
+    payload: NumberWalletTopupRequest,
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+    user: User = Depends(get_current_user),
+):
+    """Verify the Razorpay payment and credit the number wallet by amount_inr."""
+    amount = round(float(payload.amount_inr), 2)
+    if amount not in _WALLET_TOPUP_AMOUNTS:
+        raise HTTPException(status_code=400, detail="Invalid top-up amount")
+
+    # Verify signature whenever a real payment was made (test keys included).
+    if payload.razorpay_order_id and payload.razorpay_payment_id and payload.razorpay_signature:
+        if settings.RAZORPAY_KEY_SECRET:
+            from backend.billing.razorpay_client import verify_signature
+            if not verify_signature(payload.razorpay_order_id, payload.razorpay_payment_id,
+                                    payload.razorpay_signature):
+                raise HTTPException(status_code=400, detail="Invalid payment signature")
+
+    new_bal = await add_number_credits(
+        db=db, workspace_id=workspace.id, amount_inr=amount,
+        payment_provider="razorpay", payment_id=payload.razorpay_payment_id,
+    )
+    await db.commit()
+    log.info("Number wallet topped up", workspace_id=workspace.id, amount_inr=amount, new_balance=new_bal)
+
+    # Top-up receipt email (best-effort, non-blocking).
+    import asyncio as _asyncio
+    _asyncio.create_task(_email_wallet_topup(user.email, amount, new_bal))
+
+    return {"number_balance_inr": new_bal, "added_inr": amount}
+
+
 @router.post("/razorpay/verify")
 async def verify_razorpay_payment(
     payload: RazorpayVerifyRequest,
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
+    user: User = Depends(get_current_user),
 ):
     if not settings.RAZORPAY_KEY_SECRET:
         raise HTTPException(status_code=501, detail="Razorpay not configured")
@@ -239,6 +375,10 @@ async def verify_razorpay_payment(
              pack=payload.pack_id,
              minutes=pack["minutes"],
              new_balance=new_balance)
+
+    # Purchase receipt email (best-effort, non-blocking).
+    import asyncio as _asyncio
+    _asyncio.create_task(_email_credits_purchased(user.email, pack, new_balance))
 
     return {"status": "ok", "minutes_added": pack["minutes"], "balance": new_balance}
 

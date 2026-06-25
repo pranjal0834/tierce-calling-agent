@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     String, Text, Integer, Float, Boolean, DateTime,
-    ForeignKey, JSON, UniqueConstraint, Index
+    ForeignKey, JSON, UniqueConstraint, Index, LargeBinary
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -24,11 +24,19 @@ class Workspace(Base):
     plan: Mapped[str] = mapped_column(String(50), default="free")
     credits_balance: Mapped[float] = mapped_column(Float, default=0.0)   # call minutes remaining
     number_balance_inr: Mapped[float] = mapped_column(Float, default=0.0)  # number rental wallet (INR)
+    # Last time we emailed this workspace that its number wallet is low (throttles the reminder).
+    number_wallet_low_email_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # WhatsApp: per-workspace API key for the customer's OWN (official) WhatsApp account.
     # The platform relays through settings.WHATSAPP_API_URL using THIS key, so each
     # customer sends from their own number. Empty = WhatsApp not connected.
     whatsapp_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Compliance — calling window (quiet hours). When enabled, outbound calls are
+    # blocked outside [start_hour, end_hour) local time in calling_timezone.
+    calling_window_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    calling_start_hour: Mapped[int] = mapped_column(Integer, default=9)
+    calling_end_hour: Mapped[int] = mapped_column(Integer, default=21)
+    calling_timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     users: Mapped[list["User"]] = relationship("User", back_populates="workspace")
@@ -110,7 +118,7 @@ class TelephonyConfig(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), unique=True, nullable=False)
-    provider: Mapped[str] = mapped_column(String(20), default="twilio")   # twilio | exotel
+    provider: Mapped[str] = mapped_column(String(20), default="twilio")   # twilio | plivo
     config: Mapped[dict] = mapped_column(JSONB, default=dict)             # provider credentials
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -134,6 +142,11 @@ class PhoneNumber(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
     purchased_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Rental lifecycle: a number is suspended when its 30-day rental lapses without
+    # renewal — it then can't place or receive calls until renewed. The reminder
+    # timestamp avoids re-sending the "renew soon" email on every poll.
+    is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
+    renewal_reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "phone_number", name="uq_phone_numbers_workspace_phone"),
@@ -516,4 +529,63 @@ class CreditTransaction(Base):
     __table_args__ = (
         Index("idx_credit_tx_workspace_id", "workspace_id"),
         Index("idx_credit_tx_created_at", "created_at"),
+    )
+
+
+# ─── Compliance: Do-Not-Call list ────────────────────────────────────────────────
+
+class DncEntry(Base):
+    """Do-Not-Call / suppression list. Numbers here are excluded from ALL outbound
+    dialing (single + bulk). Populated manually, via import, or auto on caller opt-out."""
+    __tablename__ = "dnc_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(255))
+    source: Mapped[str] = mapped_column(String(20), default="manual")   # manual | opt_out | import
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "phone_number", name="uq_dnc_ws_phone"),
+        Index("idx_dnc_workspace_id", "workspace_id"),
+    )
+
+
+# ─── KYC document uploads ────────────────────────────────────────────────────────
+
+class KycDocument(Base):
+    """A KYC/compliance document uploaded by a customer for a regulatory bundle."""
+    __tablename__ = "kyc_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    bundle_id: Mapped[str] = mapped_column(String(36), ForeignKey("regulatory_bundles.id"), nullable=False)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    doc_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_kyc_doc_bundle", "bundle_id"),
+    )
+
+
+# ─── Compliance: Consent attestation (audit trail) ───────────────────────────────
+
+class ConsentAttestation(Base):
+    """Audit record that a user attested they hold consent for a bulk calling list."""
+    __tablename__ = "consent_attestations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    workspace_id: Mapped[str] = mapped_column(String(36), ForeignKey("workspaces.id"), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"))
+    agent_id: Mapped[str | None] = mapped_column(String(36))
+    contact_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_consent_workspace_id", "workspace_id"),
     )

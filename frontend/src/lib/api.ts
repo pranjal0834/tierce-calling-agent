@@ -83,6 +83,19 @@ export const getCallDetail = (id: string) => api.get(`/api/calls/${id}/detail`).
 export const initiateCall = (data: unknown) => api.post("/api/calls/initiate", data).then((r: AxiosResponse) => r.data);
 export const bulkCall = (data: unknown) => api.post("/api/calls/bulk", data).then((r: AxiosResponse) => r.data);
 
+// ── Compliance ────────────────────────────────────────────────────────────────
+export const getDnc = () => api.get("/api/compliance/dnc").then((r: AxiosResponse) => r.data);
+export const addDnc = (numbers: string[], reason?: string) =>
+  api.post("/api/compliance/dnc", { numbers, reason }).then((r: AxiosResponse) => r.data);
+export const removeDnc = (id: string) =>
+  api.delete(`/api/compliance/dnc/${id}`).then((r: AxiosResponse) => r.data);
+export const getComplianceSettings = () =>
+  api.get("/api/compliance/settings").then((r: AxiosResponse) => r.data);
+export const saveComplianceSettings = (data: unknown) =>
+  api.put("/api/compliance/settings", data).then((r: AxiosResponse) => r.data);
+export const getComplianceStats = (days = 30) =>
+  api.get("/api/compliance/stats", { params: { days } }).then((r: AxiosResponse) => r.data);
+
 export const getRecordingUrl = (callId: string): string => {
   const token = getToken();
   return `${BASE}/api/calls/${callId}/recording?token=${encodeURIComponent(token || "")}`;
@@ -147,6 +160,11 @@ export const getBillingBalance = () =>
   api.get("/billing/balance").then((r: AxiosResponse) => r.data);
 export const getBillingTransactions = (limit = 50) =>
   api.get("/billing/transactions", { params: { limit } }).then((r: AxiosResponse) => r.data);
+export const createNumberWalletOrder = (amount_inr: number) =>
+  api.post("/billing/number-wallet/order", { amount_inr }).then((r: AxiosResponse) => r.data);
+export const topupNumberWallet = (data: {
+  amount_inr: number; razorpay_order_id?: string; razorpay_payment_id?: string; razorpay_signature?: string;
+}) => api.post("/billing/number-wallet/topup", data).then((r: AxiosResponse) => r.data);
 export const createRazorpayOrder = (pack_id: string) =>
   api.post("/billing/razorpay/order", { pack_id }).then((r: AxiosResponse) => r.data);
 export const verifyRazorpayPayment = (data: unknown) =>
@@ -169,8 +187,10 @@ export const createInvite = (email: string, role = "member") =>
 
 export const getPhoneNumbers = () =>
   api.get("/api/phone-numbers").then((r: AxiosResponse) => r.data);
-export const searchAvailableNumbers = (areaCode: string, country = "US") =>
-  api.get("/api/phone-numbers/available", { params: { area_code: areaCode, country } }).then((r: AxiosResponse) => r.data);
+export const searchAvailableNumbers = (areaCode: string, country = "US", limit = 20, offset = 0, contains = "") =>
+  api.get("/api/phone-numbers/available", { params: { area_code: areaCode, country, limit, offset, contains } }).then((r: AxiosResponse) => r.data);
+export const getAvailableCities = (country = "IN") =>
+  api.get("/api/phone-numbers/cities", { params: { country } }).then((r: AxiosResponse) => r.data);
 export const createNumberPaymentOrder = (data: { phone_number: string; monthly_cost_usd: number }) =>
   api.post("/api/phone-numbers/order", data).then((r: AxiosResponse) => r.data);
 export const provisionNumber = (data: {
@@ -183,6 +203,11 @@ export const updateNumberAutoRenew = (id: string, autoRenew: boolean) =>
   api.patch(`/api/phone-numbers/${id}`, { auto_renew: autoRenew }).then((r: AxiosResponse) => r.data);
 export const releasePhoneNumber = (id: string) =>
   api.delete(`/api/phone-numbers/${id}`);
+export const createRenewalOrder = (id: string) =>
+  api.post(`/api/phone-numbers/${id}/renew/order`).then((r: AxiosResponse) => r.data);
+export const renewPhoneNumber = (id: string, data: {
+  razorpay_order_id?: string; razorpay_payment_id?: string; razorpay_signature?: string;
+} = {}) => api.post(`/api/phone-numbers/${id}/renew`, data).then((r: AxiosResponse) => r.data);
 export const getTelephonyConfig = () =>
   api.get("/api/phone-numbers/config").then((r: AxiosResponse) => r.data);
 export const saveTelephonyConfig = (data: unknown) =>
@@ -217,6 +242,38 @@ export const submitKyc = (data: {
 }) => api.post("/api/kyc", data).then((r: AxiosResponse) => r.data);
 export const refreshKycStatus = (bundleId: string) =>
   api.post(`/api/kyc/${bundleId}/refresh`).then((r: AxiosResponse) => r.data);
+export const getKycDocTypes = (country: string) =>
+  api.get(`/api/kyc/doc-types/${country}`).then((r: AxiosResponse) => r.data);
+export const uploadKycDoc = (bundleId: string, docType: string, file: File) => {
+  const fd = new FormData();
+  fd.append("doc_type", docType);
+  fd.append("file", file);
+  return api.post(`/api/kyc/${bundleId}/documents`, fd).then((r: AxiosResponse) => r.data);
+};
+export const listKycDocs = (bundleId: string) =>
+  api.get(`/api/kyc/${bundleId}/documents`).then((r: AxiosResponse) => r.data);
+export const deleteKycDoc = (bundleId: string, docId: string) =>
+  api.delete(`/api/kyc/${bundleId}/documents/${docId}`).then((r: AxiosResponse) => r.data);
+export const finalizeKyc = (bundleId: string) =>
+  api.post(`/api/kyc/${bundleId}/finalize`).then((r: AxiosResponse) => r.data);
+// admin
+export const adminListKyc = () =>
+  api.get("/api/kyc/admin/list").then((r: AxiosResponse) => r.data);
+export const adminKycPendingCount = () =>
+  api.get("/api/kyc/admin/pending-count").then((r: AxiosResponse) => r.data);
+export const adminApproveKyc = (id: string, plivo_bundle_sid: string) =>
+  api.post(`/api/kyc/admin/${id}/approve`, { plivo_bundle_sid }).then((r: AxiosResponse) => r.data);
+export const adminRejectKyc = (id: string, reason: string) =>
+  api.post(`/api/kyc/admin/${id}/reject`, { reason }).then((r: AxiosResponse) => r.data);
+export const adminDeleteKyc = (id: string) =>
+  api.delete(`/api/kyc/admin/${id}`).then((r: AxiosResponse) => r.data);
+export const downloadKycDocAdmin = async (docId: string, fileName: string) => {
+  const r = await api.get(`/api/kyc/admin/doc/${docId}`, { responseType: "blob" });
+  const url = URL.createObjectURL(r.data as Blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = fileName; a.click();
+  URL.revokeObjectURL(url);
+};
 
 // ── Webhooks ────────────────────────────────────────────────────────────────────
 

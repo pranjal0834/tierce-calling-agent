@@ -252,3 +252,176 @@ def call_summary(phone: str, duration: int, sentiment: float | None,
     <a href="{frontend_url or '#'}/calls" class="btn">View Full Details &rarr;</a>
     """
     return _render(f"Call completed — {phone}", content, frontend_url)
+
+
+# ── Number purchased ──────────────────────────────────────────────────────────
+
+def number_purchased(phone: str, price_inr: float, renewal_date: str,
+                     frontend_url: str = "") -> tuple[str, str]:
+    content = f"""
+    <p class="greeting">Your number is live &#9989;</p>
+    <p class="text">
+      You&rsquo;ve successfully purchased a phone number on {BRAND_NAME}. It&rsquo;s ready
+      to make and receive calls right away.
+    </p>
+
+    <div class="feature-box">
+      <div class="badge">New Number</div>
+      <p class="feature-title">&#128222; {phone}</p>
+      <p class="feature-desc">Flat &#8377;{price_inr:.0f}/month &middot; billed separately from your call credits.</p>
+    </div>
+    <div class="feature-box">
+      <p class="feature-title">Next renewal</p>
+      <p class="feature-desc">{renewal_date}. We&rsquo;ll remind you a few days before so your number never lapses.</p>
+    </div>
+
+    <hr class="divider" />
+    <a href="{frontend_url or '#'}/phone-numbers" class="btn">Manage Number &rarr;</a>
+    """
+    return _render(f"Number purchased — {phone}", content, frontend_url)
+
+
+# ── Renewal reminder ──────────────────────────────────────────────────────────
+
+def number_renewal_reminder(phone: str, days_left: int, renewal_date: str,
+                            price_inr: float, frontend_url: str = "") -> tuple[str, str]:
+    day_word = "day" if days_left == 1 else "days"
+    content = f"""
+    <p class="greeting">&#9203; Your number renews in {days_left} {day_word}</p>
+    <p class="text">
+      Your number <strong>{phone}</strong> is due for renewal on <strong>{renewal_date}</strong>.
+      Renew before then to keep making and receiving calls without interruption.
+    </p>
+
+    <div class="feature-box" style="border-color:#FDE68A;background:#FFFBEB;">
+      <p class="feature-title" style="color:#92400E;">&#8377;{price_inr:.0f} due by {renewal_date}</p>
+      <p class="feature-desc">If the rental isn&rsquo;t renewed by this date, the number is temporarily blocked
+      (no inbound or outbound calls) until you renew it.</p>
+    </div>
+
+    <hr class="divider" />
+    <a href="{frontend_url or '#'}/phone-numbers" class="btn">Renew Now &rarr;</a>
+    """
+    return _render(f"Renew {phone} by {renewal_date}", content, frontend_url)
+
+
+# ── Number blocked (rental lapsed) ────────────────────────────────────────────
+
+def number_blocked(phone: str, price_inr: float, frontend_url: str = "") -> tuple[str, str]:
+    content = f"""
+    <p class="greeting">&#128683; Your number has been blocked</p>
+    <p class="text">
+      The rental for <strong>{phone}</strong> has lapsed, so the number is now
+      <strong>temporarily blocked</strong> &mdash; it can&rsquo;t make or receive calls.
+    </p>
+
+    <div class="feature-box" style="border-color:#FECACA;background:#FEF2F2;">
+      <p class="feature-title" style="color:#991B1B;">Renew to reactivate</p>
+      <p class="feature-desc">Renew for &#8377;{price_inr:.0f} to instantly restore inbound and outbound
+      calling on this number. It will stay reserved for you for a short grace period.</p>
+    </div>
+
+    <hr class="divider" />
+    <a href="{frontend_url or '#'}/phone-numbers" class="btn">Renew &amp; Reactivate &rarr;</a>
+    """
+    return _render(f"Number blocked — renew {phone} to reactivate", content, frontend_url)
+
+
+# ── Credits purchased ─────────────────────────────────────────────────────────
+
+def credits_purchased(pack_label: str, minutes: float, price_inr: float,
+                      new_balance: float, frontend_url: str = "") -> tuple[str, str]:
+    content = f"""
+    <p class="greeting">Payment received &#9989;</p>
+    <p class="text">
+      Thanks for your purchase! Your call credits have been added and are ready to use.
+    </p>
+
+    <div class="feature-box">
+      <div class="badge">{pack_label} Pack</div>
+      <p class="feature-title">&#10133; {minutes:.0f} minutes added</p>
+      <p class="feature-desc">Paid &#8377;{price_inr:.0f} &middot; new balance: <strong>{new_balance:.1f} minutes</strong></p>
+    </div>
+
+    <hr class="divider" />
+    <a href="{frontend_url or '#'}/calls" class="btn">Start Calling &rarr;</a>
+
+    <p class="text" style="font-size:13px;color:#A3A3A0;">
+      This is your receipt for the transaction. Call minutes are deducted as your agents talk.
+    </p>
+    """
+    return _render(f"Payment received — {minutes:.0f} minutes added", content, frontend_url)
+
+
+# ── Number wallet top-up receipt ──────────────────────────────────────────────
+
+def number_wallet_topup(amount_inr: float, new_balance: float, price_inr: float,
+                        frontend_url: str = "") -> tuple[str, str]:
+    renewals = int(new_balance // price_inr) if price_inr > 0 else 0
+    content = f"""
+    <p class="greeting">Wallet topped up &#9989;</p>
+    <p class="text">
+      Your number wallet has been topped up. This balance covers your monthly number
+      renewals automatically &mdash; separate from your call credits.
+    </p>
+
+    <div class="feature-box">
+      <div class="badge">Top-up</div>
+      <p class="feature-title">&#10133; &#8377;{amount_inr:.0f} added</p>
+      <p class="feature-desc">New wallet balance: <strong>&#8377;{new_balance:.0f}</strong>
+      &middot; covers ~{renewals} renewal{"" if renewals == 1 else "s"} at &#8377;{price_inr:.0f} each.</p>
+    </div>
+
+    <hr class="divider" />
+    <a href="{frontend_url or '#'}/phone-numbers" class="btn">View Numbers &rarr;</a>
+
+    <p class="text" style="font-size:13px;color:#A3A3A0;">
+      This is your receipt. Renewals are deducted from this wallet as each number's monthly cycle comes due.
+    </p>
+    """
+    return _render(f"Number wallet topped up — ₹{amount_inr:.0f} added", content, frontend_url)
+
+
+# ── Number wallet low balance ─────────────────────────────────────────────────
+
+def number_wallet_low(balance: float, required: float, count: int, price: float,
+                      frontend_url: str = "") -> tuple[str, str]:
+    num_word = "number" if count == 1 else "numbers"
+    content = f"""
+    <p class="greeting">&#9888;&#65039; Your number wallet is running low</p>
+    <p class="text">
+      Your number wallet has <strong>&#8377;{balance:.0f}</strong>, which won&rsquo;t cover the
+      next auto-renewal of your {count} {num_word}.
+    </p>
+
+    <div class="feature-box" style="border-color:#FDE68A;background:#FFFBEB;">
+      <p class="feature-title" style="color:#92400E;">&#8377;{required:.0f} needed for the next cycle</p>
+      <p class="feature-desc">{count} {num_word} renewing at &#8377;{price:.0f} each. If the wallet can&rsquo;t cover
+      a renewal, that number is temporarily blocked (no inbound or outbound calls) until you top up and renew.</p>
+    </div>
+
+    <hr class="divider" />
+    <a href="{frontend_url or '#'}/phone-numbers" class="btn">Top Up Number Wallet &rarr;</a>
+    """
+    return _render(f"Top up your number wallet — ₹{balance:.0f} left", content, frontend_url)
+
+
+# ── Number renewed ────────────────────────────────────────────────────────────
+
+def number_renewed(phone: str, renewal_date: str, frontend_url: str = "") -> tuple[str, str]:
+    content = f"""
+    <p class="greeting">Renewal confirmed &#9989;</p>
+    <p class="text">
+      Your number <strong>{phone}</strong> has been renewed and is fully active for
+      making and receiving calls.
+    </p>
+
+    <div class="feature-box">
+      <p class="feature-title">Next renewal</p>
+      <p class="feature-desc">{renewal_date}</p>
+    </div>
+
+    <hr class="divider" />
+    <a href="{frontend_url or '#'}/phone-numbers" class="btn">View Number &rarr;</a>
+    """
+    return _render(f"Number renewed — {phone}", content, frontend_url)

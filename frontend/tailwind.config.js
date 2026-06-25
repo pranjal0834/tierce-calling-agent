@@ -81,6 +81,10 @@ module.exports = {
           "0%":   { opacity: "0", transform: "translateX(-8px)" },
           "100%": { opacity: "1", transform: "translateX(0)" },
         },
+        "slide-in-right": {
+          "0%":   { opacity: "0", transform: "translateX(24px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
         "scale-in": {
           "0%":   { opacity: "0", transform: "scale(0.97)" },
           "100%": { opacity: "1", transform: "scale(1)" },
@@ -97,6 +101,7 @@ module.exports = {
       animation: {
         "fade-in":      "fade-in 0.2s ease-out",
         "slide-in-left":"slide-in-left 0.2s ease-out",
+        "slide-in-right":"slide-in-right 0.2s ease-out",
         "scale-in":     "scale-in 0.15s ease-out",
         shimmer:        "shimmer 2s linear infinite",
         pulse:          "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite",

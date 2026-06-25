@@ -298,8 +298,12 @@ class CallLogger:
                         '"caller_interest": "high/medium/low/not_interested", '
                         '"key_points": ["list of up to 5 key points from the call"], '
                         '"next_steps": "what was agreed next, or null", '
+                        '"opt_out": true or false, '
                         '"language_used": "primary language of the conversation"}}\n\n'
                         "RULES:\n"
+                        "- Set opt_out to true ONLY if the caller explicitly asked not to be contacted again — "
+                        "e.g. 'remove me', 'don't call me', 'stop calling', 'unsubscribe', 'take me off your list'. "
+                        "Otherwise set it to false.\n"
                         "- Set appointment_booked to true if the caller expressed a clear intent to book an appointment "
                         "AND the agent acknowledged, agreed, or confirmed it — even if a specific date/time was not set. "
                         "Set it to false only if no appointment was discussed or the caller declined.\n"
@@ -349,8 +353,17 @@ class CallLogger:
         extra["key_points"] = data.get("key_points", [])
         extra["next_steps"] = data.get("next_steps")
         extra["language_used"] = data.get("language_used")
+        extra["opt_out"] = bool(data.get("opt_out"))
         call.extra_data = extra
         flag_modified(call, "extra_data")
+        # Caller asked not to be contacted again → add to the Do-Not-Call list.
+        if extra["opt_out"]:
+            try:
+                from backend.core.compliance import add_to_dnc
+                await add_to_dnc(db, call.workspace_id, call.phone_number,
+                                 reason="Caller opted out during call", source="opt_out")
+            except Exception as exc:
+                log.warning("Could not DNC opted-out caller", call_id=self.call_id, error=str(exc))
         await db.commit()
         log.info("Call data extracted and committed", call_id=self.call_id,
                  summary_len=len(data.get("summary") or ""),
