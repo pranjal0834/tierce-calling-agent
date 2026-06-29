@@ -56,6 +56,7 @@ export interface CostData {
   usd_to_inr: number;
   total_calls: number; total_minutes: number;
   total_cost_usd: number; realtime_cost_usd: number; auxiliary_cost_usd: number;
+  kb_ingestion_usd?: number; grand_total_cost_usd?: number;
   avg_cost_per_call_usd: number; avg_cost_per_min_usd: number;
   revenue_usd: number; gross_margin_usd: number;
   auxiliary_components: { name: string; usd: number; calls: number }[];

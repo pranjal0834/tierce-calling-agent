@@ -62,7 +62,7 @@ async def ingest_document(doc_id: str, *, pdf_bytes: bytes | None = None,
                 return
 
             # 3. Embed
-            vectors = await embed_texts(chunks)
+            vectors, embed_cost = await embed_texts(chunks)
 
             # 4. Replace any existing chunks for this doc, then store
             await db.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id == doc.id))
@@ -78,6 +78,7 @@ async def ingest_document(doc_id: str, *, pdf_bytes: bytes | None = None,
 
             doc.char_count = len(text)
             doc.chunk_count = len(chunks)
+            doc.embedding_cost_usd = round(float(embed_cost or 0), 8)
             doc.status = "ready"
             doc.error_message = None
             await db.commit()

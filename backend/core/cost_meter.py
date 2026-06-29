@@ -113,6 +113,18 @@ def record_tts(call_id: str, component: str, chars) -> None:
     record(call_id, component, usd, chars=_safe_int(chars))
 
 
+def embedding_usd(usage_or_tokens) -> float:
+    """USD for a text-embedding-3-small call (accepts a usage object or a token count)."""
+    try:
+        if hasattr(usage_or_tokens, "total_tokens"):
+            tokens = _safe_int(getattr(usage_or_tokens, "total_tokens", 0))
+        else:
+            tokens = _safe_int(usage_or_tokens)
+    except Exception:
+        tokens = 0
+    return tokens * settings.EMBED_COST_PER_M / 1_000_000
+
+
 def record_embedding(call_id: str, component: str, usage_or_tokens) -> None:
     """Record a text-embedding-3-small call (accepts a usage object or a token count)."""
     try:

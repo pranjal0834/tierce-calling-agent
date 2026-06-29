@@ -141,6 +141,7 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         self._last_agent_text = ""   # agent's previous line — context for caller transcription
         self._user_tr_buf = ""       # native input transcription accumulator (caller)
         self._memory_context = ""    # contact memory graph (re-injected on reconnect)
+        self._availability_context = ""  # real calendar open-slots, pre-fetched + injected
         self._resume_handle = None   # session-resumption token → reconnect WITH context after a 1008
         # Exact billing from Gemini's per-turn usage_metadata (summed across turns).
         self._g_have_usage = False
@@ -190,10 +191,14 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                         # needs memory re-injected; the very first connect greets.
                         if reconnects > 0 and not resuming:
                             await self._send_memory_context()
+                            await self._send_availability_context()
                         elif reconnects == 0:
                             # First connect: have the agent GREET immediately so there's no
                             # dead air while it waits for the caller to speak first.
                             await self._trigger_greeting()
+                            # Pre-fetch the real calendar availability in the background and
+                            # inject it, so the agent offers genuine open slots (not made-up ones).
+                            asyncio.create_task(self._inject_calendar_availability())
                         gem = asyncio.create_task(self._receive_from_gemini())
                         done, _ = await asyncio.wait(
                             {tel, gem}, return_when=asyncio.FIRST_COMPLETED
@@ -385,19 +390,14 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
             "If the audio is unclear or sounds like background noise rather than a direct question or statement, do not respond — wait for the caller to speak clearly."
             "\n\nEND-OF-CALL RULE: When the caller signals they want to end the conversation (says bye, goodbye, that's all, take care, not interested, etc.), "
             "give a brief warm closing (one or two sentences maximum), then stop speaking. Do not ask follow-up questions or extend the conversation."
-            "\n\nCALLBACK RULE: Only schedule a callback when the caller EXPLICITLY and clearly asks to be "
-            "called back later (e.g. 'call me tomorrow', 'call me in an hour'). Do NOT schedule a callback just "
-            "because the caller is hesitant, silent, or you misheard. NEVER invent or assume a time the caller did "
-            "not say, and NEVER default to '2 minutes'. If the caller wants a callback but did not give a time, ASK "
-            "'When would be a good time to call you back?' and use only the time they state. Only once you have an "
-            "explicit time, call schedule_callback with relative_minutes (durations, e.g. 'in an hour' → 60) or "
-            "datetime_iso (specific times). Then give ONE short confirmation in the caller's language and say goodbye."
-            "\n\nAPPOINTMENT RULE: To book, schedule, reschedule, or change an appointment or MEETING, you MUST use "
-            "your calendar tool — NEVER use schedule_callback for this. Step 1: call the calendar tool with "
-            "action='check_availability' for the requested date. Step 2: offer ONLY the returned slots. Step 3: once "
-            "the caller confirms an AVAILABLE slot, call the calendar tool with action='book' and that exact "
-            "datetime_iso, then confirm briefly. schedule_callback only arranges for YOU to phone the caller again — "
-            "it does NOT create a calendar appointment."
+            "\n\nAPPOINTMENT RULE: When the caller wants to book, reschedule, or change a meeting or appointment, use "
+            "your calendar tool. Step 1: call it with action='check_availability' for their date, and offer ONLY the "
+            "slots it returns — never make up times. Step 2: when the caller picks a slot, ask for their email and "
+            "read it back to confirm (spell it out if unclear). Step 3: call action='book' with that datetime_iso and "
+            "caller_email. Do not tell the caller it is booked until the tool actually returns success."
+            "\n\nCALLBACK RULE: schedule_callback is ONLY for when the caller explicitly asks you to phone them back "
+            "at a time they state (e.g. 'call me tomorrow at 5'). Never use it because the caller paused or you "
+            "misheard, never invent a time, and never default to '2 minutes'. Booking an appointment is NOT a callback."
             "\n\nCONVERSATION STYLE RULE: This is a live phone call — speak like a real person, not a script reader. "
             "Keep every reply SHORT: one or two sentences at a time, make a single point, then STOP and let the caller "
             "respond. Do NOT deliver long monologues or list many things at once — share one benefit or ask one "
@@ -472,14 +472,69 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         except Exception as exc:
             log.warning("Gemini memory injection failed", error=str(exc))
 
+    async def _inject_calendar_availability(self):
+        """Pre-fetch REAL open slots from the agent's Google Calendar for the next few days
+        and inject them as background context. Gemini native-audio narrates availability
+        instead of calling the tool, so we feed it the TRUTH — it then offers genuine open
+        slots, and the post-call safety net books the chosen one + emails the confirmation."""
+        try:
+            cfg = self.agent.config or {}
+            tool = next((t for t in (cfg.get("tools") or [])
+                         if t.get("type") == "calendar_booking" and t.get("enabled", True)
+                         and (t.get("config") or {}).get("integration") == "google_calendar"), None)
+            if not tool:
+                return
+            from backend.integrations.google_calendar import check_availability
+            from datetime import datetime, timedelta, timezone as _tz
+            tcfg = tool.get("config") or {}
+            ist = _tz(timedelta(hours=5, minutes=30))
+            today = datetime.now(ist).date()
+            lines = []
+            for i in range(0, 6):  # today + next 5 days
+                d = today + timedelta(days=i)
+                res = await check_availability(tcfg, d.strftime("%Y-%m-%d"))
+                if res and res.startswith("Available slots") and ":" in res:
+                    slotlist = res.split(":", 1)[1].strip().rstrip(".")
+                    if slotlist:
+                        lines.append(f"{d.strftime('%A %d %B')}: {slotlist}")
+            if not lines:
+                return
+            self._availability_context = (
+                "[REAL CALENDAR AVAILABILITY — these are the ACTUAL open appointment slots from the "
+                "live calendar (today is " + today.strftime("%A %d %B %Y") + "). When the caller wants to "
+                "book, offer ONLY these real slots and confirm the one they choose. Do NOT invent other "
+                "times. If they ask for a day or time not listed here, tell them it is not available and "
+                "offer the nearest listed slot. Do not read this list aloud verbatim — speak it naturally.]\n"
+                + "\n".join(lines)
+            )
+            await self._send_availability_context()
+            log.info("Gemini calendar availability injected", days=len(lines), call_id=self.call.id)
+        except Exception as exc:
+            log.debug("calendar availability injection failed", error=str(exc))
+
+    async def _send_availability_context(self):
+        if not self._availability_context or self.session is None:
+            return
+        try:
+            await self.session.send_client_content(
+                turns=types.Content(role="user", parts=[types.Part(text=self._availability_context)]),
+                turn_complete=False,
+            )
+        except Exception as exc:
+            log.debug("send_availability_context failed", error=str(exc))
+
     async def _send_memory_context(self):
         if not self._memory_context or self.session is None:
             return
         try:
             await self.session.send_client_content(
                 turns=types.Content(role="user", parts=[types.Part(text=(
-                    "[Background notes about this caller from previous calls — use them to "
-                    "personalize naturally. Do NOT read them aloud or mention them verbatim.]\n"
+                    "[Background notes about this caller from previous calls — for rapport and "
+                    "personalization ONLY. Do NOT read them aloud or mention them verbatim. These are "
+                    "NOT current facts: never treat a past appointment time, availability, slot, or "
+                    "booking mentioned below as if it were real or already done now. ALWAYS call your "
+                    "calendar tool to check availability and to book fresh, even if an appointment is "
+                    "noted here.]\n"
                     + self._memory_context
                 ))]),
                 turn_complete=False,
@@ -502,7 +557,9 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
                     start = data.get("start", {})
                     self._is_plivo = "streamId" in start
                     self.stream_sid = start.get("streamSid") or start.get("streamId")
-                    self.call_sid = start.get("callSid") or start.get("callUUID")
+                    # Twilio: callSid · Plivo's stream start uses callId (the CallUUID).
+                    self.call_sid = (start.get("callSid") or start.get("callId")
+                                     or start.get("callUUID") or start.get("call_uuid"))
                     log.info("Telephony stream started (gemini)", stream_sid=self.stream_sid,
                              call_sid=self.call_sid, provider="plivo" if self._is_plivo else "twilio")
                     if self.call_sid:
@@ -1020,6 +1077,11 @@ class GeminiLiveHandler(OpenAIRealtimeHandler):
         if not (phone and self.call_sid):
             return "Transfer unavailable at the moment."
         try:
+            if self._is_plivo:
+                from backend.telephony.plivo_handler import PlivoHandler
+                ok = await PlivoHandler().transfer_call(self.call_sid, phone, self.call.id)
+                return ("Transferring you to a human agent now." if ok
+                        else "Transfer unavailable at the moment.")
             from urllib.parse import quote as _quote
             handler = TwilioHandler()
             twiml_url = f"{settings.BASE_URL}/telephony/twilio/transfer-twiml?to={_quote(phone)}&call_id={self.call.id}"

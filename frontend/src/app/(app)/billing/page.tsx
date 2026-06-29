@@ -9,7 +9,12 @@ import toast from "react-hot-toast";
 import {
   getBillingBalance, getBillingPacks, getBillingTransactions,
   createRazorpayOrder, verifyRazorpayPayment, testPurchase,
+  createPaygOrder, verifyPaygPayment,
 } from "@/lib/api";
+
+// Pay-as-you-go bounds (mirror the backend).
+const PAYG_MIN_MINUTES = 10;
+const PAYG_MAX_MINUTES = 5000;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,6 +89,8 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const [testMode, setTestMode] = useState(false);
+  const [paygRate, setPaygRate] = useState(10);
+  const [paygMinutes, setPaygMinutes] = useState(60);
 
   const isTrial = plan === "free";
 
@@ -97,6 +104,7 @@ export default function BillingPage() {
       setBalance(bal.credits_balance);
       setPlan(bal.plan ?? "free");
       setPacks({ inr: pkData.inr.packs });
+      setPaygRate(pkData.inr?.payg?.rate_per_min ?? 10);
       setTestMode(!!pkData.test_mode);
       setTransactions(txs);
     } catch {
@@ -171,6 +179,63 @@ export default function BillingPage() {
   function handleBuy(packId: string, pack: Pack) {
     if (testMode) return handleTestPurchase(packId, pack);
     return handleRazorpay(packId, pack);
+  }
+
+  async function handlePaygBuy() {
+    const minutes = Math.round(paygMinutes);
+    if (!minutes || minutes < PAYG_MIN_MINUTES || minutes > PAYG_MAX_MINUTES) {
+      toast.error(`Enter between ${PAYG_MIN_MINUTES} and ${PAYG_MAX_MINUTES} minutes`);
+      return;
+    }
+    setPurchasing("payg");
+    try {
+      const order = await createPaygOrder(minutes);
+      // Mock/test order (no Razorpay key) — credit directly.
+      if (order.mock) {
+        const result = await verifyPaygPayment({ minutes });
+        setBalance(result.balance);
+        toast.success(`[Test] ${minutes} minutes added!`);
+        await refresh();
+        return;
+      }
+      const ok = await loadRazorpayScript();
+      if (!ok) { toast.error("Could not load Razorpay. Please try again."); return; }
+      await new Promise<void>((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key: order.key_id,
+          amount: order.amount,
+          currency: "INR",
+          name: "Vaaniq Voice AI",
+          description: `Pay-as-you-go — ${minutes} minutes`,
+          order_id: order.order_id,
+          handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+            try {
+              const result = await verifyPaygPayment({
+                minutes,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+              setBalance(result.balance);
+              toast.success(`${minutes} minutes added to your account!`);
+              await refresh();
+              resolve();
+            } catch {
+              reject(new Error("Payment verification failed"));
+            }
+          },
+          modal: { ondismiss: () => reject(new Error("dismissed")) },
+          theme: { color: "#6366f1" },
+        });
+        rzp.open();
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message !== "dismissed") {
+        toast.error(err.message || "Payment failed");
+      }
+    } finally {
+      setPurchasing(null);
+    }
   }
 
   if (loading) {
@@ -258,10 +323,50 @@ export default function BillingPage() {
 
       {/* Packs grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Pay-as-you-go — flexible minutes at the per-minute rate (before the fixed packs) */}
+        <div className="relative flex flex-col rounded-2xl border border-dashed border-neutral-300 bg-white p-4 sm:p-5 shadow-sm">
+          <div className="mb-3">
+            <p className="text-sm font-semibold text-neutral-900">Pay-as-you-go</p>
+            <p className="text-xs text-neutral-500 mt-0.5">Buy exactly what you need</p>
+          </div>
+          <div className="flex items-baseline gap-1 mb-1">
+            <span className="text-[22px] font-semibold text-neutral-900 tracking-tight">₹{paygRate}</span>
+            <span className="text-xs text-neutral-400">/min</span>
+          </div>
+          <div className="mt-2 mb-2">
+            <label className="text-xs text-neutral-500">Minutes</label>
+            <input
+              type="number"
+              min={PAYG_MIN_MINUTES}
+              max={PAYG_MAX_MINUTES}
+              value={paygMinutes}
+              onChange={(e) => setPaygMinutes(Number(e.target.value))}
+              className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm focus:outline-none focus:border-brand-400"
+            />
+            <p className="text-xs text-neutral-400 mt-1">
+              Total: <span className="font-medium text-neutral-600">₹{Math.max(0, Math.round(paygMinutes) * paygRate)}</span>
+            </p>
+          </div>
+          <button
+            onClick={handlePaygBuy}
+            disabled={purchasing === "payg"}
+            className="mt-auto w-full py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-white hover:bg-neutral-50 text-neutral-700 border border-neutral-200 hover:border-neutral-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {purchasing === "payg" ? (
+              <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Processing…</>
+            ) : (
+              <><CheckCircle2 className="w-3.5 h-3.5" /> Buy Minutes</>
+            )}
+          </button>
+        </div>
+
         {Object.entries(currentPacks).map(([packId, pack]) => {
           const price = pack.price_inr;
           const symbol = "₹";
           const perMin = price != null ? (price / pack.minutes).toFixed(2) : null;
+          const savePct = (price != null && paygRate > 0)
+            ? Math.round((1 - (price / pack.minutes) / paygRate) * 100)
+            : 0;
           const isPopular = packId === "growth";
           const isBuying = purchasing === packId;
 
@@ -287,7 +392,14 @@ export default function BillingPage() {
                 <span className="text-[22px] font-semibold text-neutral-900 tracking-tight">{symbol}{price}</span>
               </div>
               {perMin && (
-                <p className="text-xs text-neutral-400 mb-2">{symbol}{perMin}/min</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-xs text-neutral-400">{symbol}{perMin}/min</p>
+                  {savePct >= 1 && (
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                      Save {savePct}%
+                    </span>
+                  )}
+                </div>
               )}
               <div className="flex items-center gap-1 text-xs text-emerald-600 mb-3">
                 <Phone className="w-3 h-3" />

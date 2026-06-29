@@ -79,6 +79,12 @@ async def _repair_null_jsonb():
             pass
         try:
             await db.execute(text(
+                "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS embedding_cost_usd FLOAT DEFAULT 0.0"
+            ))
+        except Exception:
+            pass
+        try:
+            await db.execute(text(
                 "ALTER TABLE call_turns ADD COLUMN IF NOT EXISTS from_transfer BOOLEAN DEFAULT FALSE"
             ))
         except Exception:

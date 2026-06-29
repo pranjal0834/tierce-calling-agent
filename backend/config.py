@@ -35,7 +35,7 @@ _DEFAULTS = {
     # Flat monthly price (INR) we charge a customer for ANY phone number rental.
     # This is a fixed platform price (not Plivo's per-number USD rate) and is billed
     # from the separate number wallet — never from call-minute credits.
-    "NUMBER_PRICE_INR": 250.0,
+    "NUMBER_PRICE_INR": 300.0,
     # Number rental lifecycle: rental lasts CYCLE_DAYS; renewal reminders start
     # REMINDER_DAYS before the due date; past due → number is suspended until renewed.
     "NUMBER_RENEWAL_CYCLE_DAYS": 30,
@@ -59,12 +59,17 @@ _DEFAULTS = {
     # Per-agent override via agent.config["engine"]; this is the global fallback so all
     # calls can be flipped to Gemini for testing regional-language quality.
     "NATIVE_AUDIO_ENGINE": "openai",
-    # Gemini Live pricing (USD per 1M tokens) — gemini-2.5-flash native audio. Estimates;
-    # verify on https://ai.google.dev/gemini-api/docs/pricing before relying on for billing.
-    "GEMINI_AUDIO_IN_COST_PER_M":  3.00,
-    "GEMINI_AUDIO_OUT_COST_PER_M": 12.00,
-    "GEMINI_TEXT_IN_COST_PER_M":   0.50,
-    "GEMINI_TEXT_OUT_COST_PER_M":  2.00,
+    # Gemini Live pricing (USD per 1M tokens) — gemini-2.5-flash native audio.
+    # CALIBRATED 2026-06-29 ×1.131 to match Google's ACTUAL billed cost: our raw-rate
+    # estimate for Jun 17+ was ₹166 vs Google's invoice ₹187.79 (pre-GST) — the ~13% gap
+    # is Google's real effective pricing/FX. Base rates were 3.00/12.00/0.50/2.00.
+    # (Google adds 18% GST on top of these → see GST_PCT for the credit-deducted total.)
+    "GEMINI_AUDIO_IN_COST_PER_M":  3.39,
+    "GEMINI_AUDIO_OUT_COST_PER_M": 13.57,
+    "GEMINI_TEXT_IN_COST_PER_M":   0.57,
+    "GEMINI_TEXT_OUT_COST_PER_M":  2.26,
+    # India GST applied by Google on top of the API cost (for the true credit-deducted total).
+    "GST_PCT": 18.0,
     # Gemini tokenizes audio at ~25 tokens/sec — used to estimate cost (the 1.0.0
     # Live API gives no usage_metadata, so we meter audio seconds and estimate).
     "GEMINI_AUDIO_TOKENS_PER_SEC": 25,

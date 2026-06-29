@@ -65,7 +65,7 @@ async def execute_tool(tool: dict, arguments: dict, **ctx) -> str:
         phone = cfg.get("transfer_to") or cfg.get("phone_number", "")
         return "__TRANSFER__:" + phone
     elif tool_type == "calendar_booking":
-        return await _execute_calendar_booking(tool, arguments)
+        return await _execute_calendar_booking(tool, arguments, ctx.get("call"))
     elif tool_type == "schedule_callback":
         return await _execute_schedule_callback(arguments, ctx.get("call"))
     return f"Unknown tool type: {tool_type}"
@@ -103,12 +103,23 @@ async def _execute_webhook(tool: dict, arguments: dict) -> str:
         return f"Error: {str(exc)}"
 
 
-async def _execute_calendar_booking(tool: dict, arguments: dict) -> str:
+async def _execute_calendar_booking(tool: dict, arguments: dict, call=None) -> str:
     cfg = tool.get("config") or {}
     integration = cfg.get("integration", "calcom")
     api_key = cfg.get("api_key", "")
     timezone = cfg.get("timezone", "Asia/Kolkata")
     action = arguments.get("action", "check_availability")
+
+    result = await _dispatch_calendar(integration, cfg, api_key, timezone, action, arguments)
+    # Record a genuine in-call booking so the post-call safety net never double-books.
+    if action == "book":
+        from backend.features.tools import booking_state
+        if booking_state.booking_succeeded(result):
+            booking_state.mark_booked(getattr(call, "id", None))
+    return result
+
+
+async def _dispatch_calendar(integration, cfg, api_key, timezone, action, arguments) -> str:
 
     if integration == "calcom":
         event_type_id = cfg.get("event_type_id", "")

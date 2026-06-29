@@ -70,7 +70,18 @@ class PlivoHandler:
                 hangup_url=status_callback,
                 hangup_method="POST",
             )
-            return response[1].get("request_uuid", "")
+            # Plivo SDK shapes vary: newer returns a ResponseObject (attrs), older a
+            # (status, dict) tuple. Indexing response[1] on a ResponseObject crashes
+            # ('object has no attribute objects'), so extract request_uuid defensively.
+            if isinstance(response, (list, tuple)) and len(response) >= 2 and isinstance(response[1], dict):
+                return response[1].get("request_uuid", "")
+            if hasattr(response, "request_uuid"):
+                return getattr(response, "request_uuid", "") or ""
+            if isinstance(response, dict):
+                return response.get("request_uuid", "")
+            if hasattr(response, "__dict__"):
+                return response.__dict__.get("request_uuid", "")
+            return ""
 
         call_uuid = await asyncio.get_event_loop().run_in_executor(None, _call)
         log.info("Plivo call initiated", to=to, call_uuid=call_uuid, call_id=call_id)
@@ -96,6 +107,69 @@ class PlivoHandler:
                 pass
 
         await asyncio.get_event_loop().run_in_executor(None, _hangup)
+
+    async def transfer_call(self, call_uuid: str, to_number: str, call_id: str = "") -> bool:
+        """Transfer (redirect) the live caller leg to dial a human. Plivo fetches new XML
+        from our transfer endpoint and connects the caller to `to_number`."""
+        if not (call_uuid and to_number):
+            return False
+        from urllib.parse import quote
+        # Strip whitespace so the aleg_url Plivo fetches is well-formed (a space in the
+        # number breaks the redirect — Plivo then never fetches our transfer XML).
+        to_clean = "".join(to_number.split())
+        xml_url = (f"{settings.BASE_URL}/telephony/plivo/transfer-xml"
+                   f"?to={quote(to_clean)}&call_id={quote(call_id)}")
+        transfer_ws = ""
+        if call_id:
+            ws_base = settings.BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
+            transfer_ws = f"{ws_base}/ws/transfer/{call_id}"
+        def _transfer():
+            r = self.client.calls.transfer(call_uuid, legs="aleg",
+                                           aleg_url=xml_url, aleg_method="GET")
+            # The queued transfer XML only runs once the active <Stream> element ends —
+            # so stop the media stream, which lets the redirect (Dial to the human) fire.
+            try:
+                self.client.calls.delete_all_streams(call_uuid)
+            except Exception as exc:
+                log.warning("Plivo stop-stream after transfer failed",
+                            call_uuid=call_uuid, error=str(exc))
+            # Fork the post-transfer (caller↔human) audio to our transfer WS so it's
+            # transcribed and saved as from_transfer turns (mirrors Twilio's <Start><Stream>).
+            if transfer_ws:
+                try:
+                    self.client.calls.start_stream(
+                        call_uuid, service_url=transfer_ws, bidirectional=False,
+                        content_type="audio/x-mulaw;rate=8000")
+                except Exception as exc:
+                    log.warning("Plivo post-transfer stream start failed",
+                                call_uuid=call_uuid, error=str(exc))
+            return r
+        try:
+            resp = await asyncio.get_event_loop().run_in_executor(None, _transfer)
+            rd = getattr(resp, "__dict__", None)
+            log.info("Plivo call transferred (+stream stopped)", call_uuid=call_uuid, to=to_clean,
+                     response=str(rd if rd else resp)[:300])
+            return True
+        except Exception as exc:
+            log.warning("Plivo transfer failed", call_uuid=call_uuid, error=repr(exc))
+            return False
+
+    async def start_recording(self, call_uuid: str) -> None:
+        """Record a live Plivo call. Plivo records both legs (caller + the audio we play
+        back) and POSTs the final URL to our recording-status callback when it ends."""
+        if settings.MOCK_PHONE_NUMBERS or not call_uuid:
+            return
+        cb = f"{settings.BASE_URL}/telephony/plivo/recording-status"
+        def _rec():
+            try:
+                # time_limit defaults to 60s on Plivo — set the max (4h) so the WHOLE
+                # call is recorded, not just the first minute.
+                self.client.calls.record(call_uuid, file_format="mp3", time_limit=14400,
+                                         callback_url=cb, callback_method="POST")
+                log.info("Plivo recording started", call_uuid=call_uuid)
+            except Exception as exc:
+                log.warning("Plivo start recording failed", call_uuid=call_uuid, error=str(exc))
+        await asyncio.get_event_loop().run_in_executor(None, _rec)
 
     # ── Number management ─────────────────────────────────────────────────────
 

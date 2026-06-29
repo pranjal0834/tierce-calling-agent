@@ -121,7 +121,17 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     db.add(NotificationPreference(user_id=user.id))
     await db.commit()
 
-    log.info("New workspace registered", workspace_id=workspace.id, email=user.email)
+    # Grant the free-trial call minutes so a new (free-plan) workspace can start calling.
+    try:
+        from backend.billing.credits import add_credits
+        await add_credits(db, workspace.id, float(settings.FREE_TRIAL_MINUTES),
+                          tx_type="free_trial", description="Welcome free-trial minutes")
+        await db.commit()
+    except Exception as exc:
+        log.warning("Free-trial credit grant failed", workspace_id=workspace.id, error=str(exc))
+
+    log.info("New workspace registered", workspace_id=workspace.id, email=user.email,
+             trial_minutes=settings.FREE_TRIAL_MINUTES)
 
     # Send welcome email (fire-and-forget)
     subject, html = tmpl.welcome(workspace.name, user.email, settings.FRONTEND_URL or "")

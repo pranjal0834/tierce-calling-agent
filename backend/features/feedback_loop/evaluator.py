@@ -190,4 +190,6 @@ class CallEvaluator:
             # (a fine-tuned text model can't run in the Realtime API).
             from backend.features.feedback_loop.prompt_learner import PromptLearner
             import asyncio
-            asyncio.create_task(PromptLearner(agent_id=agent_id).run())
+            asyncio.create_task(
+                PromptLearner(agent_id=agent_id, trigger_call_id=self.call_id).run()
+            )

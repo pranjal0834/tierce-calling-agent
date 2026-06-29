@@ -363,6 +363,14 @@ async def cost_analytics(
     realtime = total_cost - total_aux
     total_minutes = round(total_seconds / 60.0, 1)
 
+    # One-time KB document-ingestion embedding cost (not tied to any call).
+    from sqlalchemy import func as _func
+    from backend.db.models import KnowledgeDocument
+    kb_ingestion_usd = float((await db.execute(
+        select(_func.coalesce(_func.sum(KnowledgeDocument.embedding_cost_usd), 0.0))
+        .where(KnowledgeDocument.created_at >= since)
+    )).scalar() or 0.0)
+
     # Approximate revenue (USD) from purchases in the same window.
     from backend.billing.credits import USD_TO_INR
     rev_rows = (await db.execute(
@@ -402,10 +410,12 @@ async def cost_analytics(
         "total_cost_usd": round(total_cost, 4),
         "realtime_cost_usd": round(realtime, 4),
         "auxiliary_cost_usd": round(total_aux, 4),
+        "kb_ingestion_usd": round(kb_ingestion_usd, 4),
+        "grand_total_cost_usd": round(total_cost + kb_ingestion_usd, 4),
         "avg_cost_per_call_usd": round(total_cost / total_calls, 4) if total_calls else 0.0,
         "avg_cost_per_min_usd": round(total_cost / total_minutes, 4) if total_minutes else 0.0,
         "revenue_usd": round(revenue_usd, 2),
-        "gross_margin_usd": round(revenue_usd - total_cost, 2),
+        "gross_margin_usd": round(revenue_usd - total_cost - kb_ingestion_usd, 2),
         "auxiliary_components": comp_list,
         "top_workspaces": top_workspaces,
     }

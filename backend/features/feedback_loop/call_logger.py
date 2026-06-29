@@ -294,6 +294,7 @@ class CallLogger:
                         '{{"summary": "2-3 sentence summary of the call", '
                         '"appointment_booked": true or false, '
                         '"appointment_datetime": "ISO datetime string or null", '
+                        '"caller_email": "email address if clearly stated or null", '
                         '"caller_name": "name if mentioned or null", '
                         '"caller_interest": "high/medium/low/not_interested", '
                         '"key_points": ["list of up to 5 key points from the call"], '
@@ -310,6 +311,9 @@ class CallLogger:
                         "- Set appointment_datetime ONLY if a specific date AND time were both clearly stated in the conversation. "
                         "If only a date was mentioned (no time), or only a time (no date), or neither, set appointment_datetime to null. "
                         "Never guess, infer, or default to midnight/00:00. If uncertain, use null.\n"
+                        "- caller_email: if the caller stated an email address (often spoken, e.g. 'name at gmail dot com' "
+                        "or 'name dot surname at gmail dot com'), normalize it to standard form like name@gmail.com "
+                        "(convert spoken 'at'->@, 'dot'->., remove spaces). If no email was clearly given, set it to null.\n"
                         "- TIMEZONE: All times in this conversation are in Indian Standard Time (IST, UTC+05:30). "
                         "Always include the +05:30 offset in appointment_datetime, e.g. '2026-05-15T10:00:00+05:30'.\n"
                         "- RELATIVE DATES: The call took place on {call_date}. "
@@ -348,6 +352,7 @@ class CallLogger:
         extra = dict(call.extra_data or {})
         extra["appointment_booked"] = data.get("appointment_booked", False)
         extra["appointment_datetime"] = data.get("appointment_datetime")
+        extra["caller_email"] = data.get("caller_email")
         extra["caller_name"] = data.get("caller_name")
         extra["caller_interest"] = data.get("caller_interest")
         extra["key_points"] = data.get("key_points", [])
@@ -371,6 +376,14 @@ class CallLogger:
                  language=extra.get("language_used"),
                  interest=extra.get("caller_interest"))
 
+        # SAFETY NET: if an appointment was agreed but the agent never actually fired a
+        # `book` tool call during the call (the model sometimes only narrates it),
+        # book it server-side now so the caller still gets the invite + email.
+        try:
+            await self._auto_book_if_needed(db, call, data, extra)
+        except Exception as exc:
+            log.warning("Post-call auto-book failed", call_id=self.call_id, error=str(exc))
+
         # Safety: also write extracted fields into the old WebSocket session so
         # AssistantManager's final commit cannot overwrite them with stale None values.
         try:
@@ -385,6 +398,75 @@ class CallLogger:
         except Exception as merge_exc:
             log.warning("Could not merge extracted data into main session",
                         call_id=self.call_id, error=str(merge_exc))
+
+    async def _auto_book_if_needed(self, db, call, data, extra):
+        """Deterministic fallback for when the model agreed to an appointment but never
+        actually fired the `book` tool call during the call (native-audio models
+        sometimes only narrate it). Books server-side so the caller still gets the
+        calendar invite + confirmation email. Provider-agnostic: runs for Twilio and
+        Plivo alike (shared post-call path). Idempotent — skips if a real booking fired."""
+        from backend.features.tools import booking_state
+        from backend.features.tools.executor import execute_tool
+        from backend.db.models import Agent
+        from sqlalchemy.orm.attributes import flag_modified
+
+        if not data.get("appointment_booked"):
+            return
+        # The agent genuinely booked in-call (real tool call succeeded) — don't double-book.
+        if booking_state.was_booked(self.call_id) or extra.get("calendar_event_created"):
+            booking_state.pop(self.call_id)
+            log.info("Auto-book skipped — agent already booked in-call", call_id=self.call_id)
+            return
+        dt = data.get("appointment_datetime")
+        if not dt:
+            log.info("Auto-book skipped — appointment agreed but no concrete date+time extracted",
+                     call_id=self.call_id)
+            return
+
+        agent = await db.get(Agent, call.agent_id) if call.agent_id else None
+        tools = ((agent.config or {}).get("tools") if agent else None) or []
+        tool = next(
+            (t for t in tools
+             if t.get("type") == "calendar_booking" and t.get("enabled", True)
+             and (t.get("config") or {}).get("integration") in ("google_calendar", "calcom")),
+            None,
+        )
+        if not tool:
+            log.info("Auto-book skipped — agent has no bookable calendar tool", call_id=self.call_id)
+            return
+
+        # Paid add-on: only when the workspace has WhatsApp enabled + connected (its own
+        # api_key) does the booking also send a WhatsApp confirmation from their number.
+        # Otherwise email stays the only channel. Copy the tool so we don't mutate config.
+        if (agent.config or {}).get("whatsapp_enabled"):
+            from backend.db.models import Workspace
+            ws = await db.get(Workspace, call.workspace_id) if call.workspace_id else None
+            wa_key = getattr(ws, "whatsapp_api_key", None) if ws else None
+            if wa_key:
+                tool = {**tool, "config": {**(tool.get("config") or {}), "whatsapp_api_key": wa_key}}
+
+        args = {
+            "action": "book",
+            "datetime_iso": dt,
+            "caller_name": data.get("caller_name") or "",
+            "caller_email": data.get("caller_email") or "",
+            "caller_phone": call.phone_number or "",
+            # Keep the customer-facing event/email clean — the "auto-booked" status is internal
+            # (logged + stored in extra_data.auto_booked), never shown to the caller.
+            "notes": "",
+        }
+        result = await execute_tool(tool, args)
+        if booking_state.booking_succeeded(result):
+            extra["calendar_event_created"] = True
+            extra["auto_booked"] = True
+            call.extra_data = extra
+            flag_modified(call, "extra_data")
+            await db.commit()
+            log.info("Post-call auto-book SUCCEEDED", call_id=self.call_id, appointment=dt,
+                     emailed=bool(data.get("caller_email")), result=result[:120])
+        else:
+            log.warning("Post-call auto-book did not succeed", call_id=self.call_id, result=result[:160])
+        booking_state.pop(self.call_id)
 
     @property
     def turn_count(self) -> int:

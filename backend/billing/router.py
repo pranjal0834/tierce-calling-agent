@@ -63,6 +63,22 @@ class RazorpayVerifyRequest(BaseModel):
     pack_id: str
 
 
+class PaygOrderRequest(BaseModel):
+    minutes: int
+
+
+class PaygVerifyRequest(BaseModel):
+    minutes: int
+    razorpay_order_id: str | None = None
+    razorpay_payment_id: str | None = None
+    razorpay_signature: str | None = None
+
+
+# Pay-as-you-go: buy any number of minutes within these bounds at PAYG_RATE_INR (₹/min).
+PAYG_MIN_MINUTES = 10
+PAYG_MAX_MINUTES = 5000
+
+
 class NumberWalletOrderRequest(BaseModel):
     amount_inr: float
 
@@ -75,7 +91,7 @@ class NumberWalletTopupRequest(BaseModel):
 
 
 # Allowed top-up amounts (INR) — keeps the amount server-controlled.
-_WALLET_TOPUP_AMOUNTS = {250.0, 500.0, 1000.0, 2500.0, 5000.0}
+_WALLET_TOPUP_AMOUNTS = {300.0, 500.0, 1000.0, 2500.0, 5000.0}
 
 
 # ── Packs (public) ────────────────────────────────────────────────────────────
@@ -241,6 +257,89 @@ async def create_razorpay_order(
         "key_id": settings.RAZORPAY_KEY_ID,
         "pack": pack,
     }
+
+
+# ── Pay-as-you-go (custom minutes at the per-minute rate) ─────────────────────
+
+def _payg_validate(minutes: int) -> int:
+    m = int(minutes or 0)
+    if m < PAYG_MIN_MINUTES or m > PAYG_MAX_MINUTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Choose between {PAYG_MIN_MINUTES} and {PAYG_MAX_MINUTES} minutes.",
+        )
+    return m
+
+
+@router.post("/payg/order")
+async def create_payg_order(
+    payload: PaygOrderRequest,
+    workspace: Workspace = Depends(require_workspace),
+):
+    """Create a Razorpay order for a custom number of minutes at ₹{PAYG_RATE_INR}/min."""
+    minutes = _payg_validate(payload.minutes)
+    amount_inr = round(minutes * PAYG_RATE_INR, 2)
+
+    if not settings.RAZORPAY_KEY_ID:
+        if settings.BILLING_TEST_MODE:
+            return {"order_id": "MOCK_ORDER", "amount": 0, "currency": "INR", "key_id": "MOCK",
+                    "minutes": minutes, "amount_inr": amount_inr, "mock": True}
+        raise HTTPException(status_code=501, detail="Razorpay not configured")
+
+    from backend.billing.razorpay_client import create_order
+    order = await create_order(
+        int(amount_inr * 100), f"{workspace.id[:8]}-payg",
+        notes={"workspace_id": workspace.id, "purpose": "payg", "minutes": minutes},
+    )
+    return {"order_id": order["id"], "amount": order["amount"], "currency": "INR",
+            "key_id": settings.RAZORPAY_KEY_ID, "minutes": minutes, "amount_inr": amount_inr}
+
+
+@router.post("/payg/verify")
+async def verify_payg_payment(
+    payload: PaygVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+    workspace: Workspace = Depends(require_workspace),
+    user: User = Depends(get_current_user),
+):
+    """Credit the purchased minutes after verifying the Razorpay payment (or mock in test)."""
+    minutes = _payg_validate(payload.minutes)
+    amount_inr = round(minutes * PAYG_RATE_INR, 2)
+
+    has_payment = bool(payload.razorpay_order_id and payload.razorpay_payment_id and payload.razorpay_signature)
+    if has_payment:
+        if settings.RAZORPAY_KEY_SECRET:
+            from backend.billing.razorpay_client import verify_signature
+            if not verify_signature(payload.razorpay_order_id, payload.razorpay_payment_id,
+                                    payload.razorpay_signature):
+                raise HTTPException(status_code=400, detail="Invalid payment signature")
+        # Idempotency — webhook may have already credited this payment.
+        existing = await db.execute(
+            select(CreditTransaction).where(CreditTransaction.payment_id == payload.razorpay_payment_id)
+        )
+        if existing.scalar_one_or_none():
+            return {"status": "already_credited", "balance": workspace.credits_balance}
+    elif settings.RAZORPAY_KEY_ID:
+        # Razorpay is configured but no payment proof was sent → reject.
+        raise HTTPException(status_code=400, detail="Payment details required")
+
+    new_balance = await add_credits(
+        db=db, workspace_id=workspace.id, minutes=minutes, tx_type="purchase",
+        description=f"Pay-as-you-go — {minutes} min",
+        payment_provider="razorpay", payment_id=payload.razorpay_payment_id,
+        amount_paid=amount_inr, currency="INR",
+    )
+    # PAYG is a paid purchase → lift the workspace off the free plan (unlocks inbound + numbers).
+    if workspace.plan == "free":
+        workspace.plan = "payg"
+    await db.commit()
+    log.info("PAYG purchase credited", workspace_id=workspace.id, minutes=minutes, new_balance=new_balance)
+
+    import asyncio as _asyncio
+    payg_pack = {"label": "Pay-as-you-go", "minutes": minutes, "price_inr": amount_inr}
+    _asyncio.create_task(_email_credits_purchased(user.email, payg_pack, new_balance))
+
+    return {"status": "ok", "minutes_added": minutes, "balance": new_balance}
 
 
 # ── Number wallet (top up → pays via Razorpay, funds renewals) ─────────────────
@@ -421,7 +520,36 @@ async def razorpay_webhook(request: Request):
     pack_id = notes.get("pack_id")
     amount_paid = round((payment.get("amount", 0)) / 100, 2)
 
-    if not payment_id or not workspace_id or not pack_id:
+    if not payment_id or not workspace_id:
+        return {"received": True}
+
+    # Pay-as-you-go captured payment (custom minutes, no pack_id).
+    if notes.get("purpose") == "payg":
+        try:
+            minutes = _payg_validate(int(notes.get("minutes") or 0))
+        except Exception:
+            return {"received": True}
+        async with AsyncSessionLocal() as db:
+            existing = await db.execute(
+                select(CreditTransaction).where(CreditTransaction.payment_id == payment_id)
+            )
+            if existing.scalar_one_or_none():
+                return {"received": True}
+            await add_credits(
+                db=db, workspace_id=workspace_id, minutes=minutes, tx_type="purchase",
+                description=f"Pay-as-you-go — {minutes} min", payment_provider="razorpay",
+                payment_id=payment_id, amount_paid=amount_paid or round(minutes * PAYG_RATE_INR, 2),
+                currency="INR",
+            )
+            ws = await db.get(Workspace, workspace_id)
+            if ws and ws.plan == "free":
+                ws.plan = "payg"
+            await db.commit()
+        log.info("Razorpay webhook credited (payg)", workspace_id=workspace_id,
+                 minutes=minutes, payment_id=payment_id)
+        return {"received": True}
+
+    if not pack_id:
         return {"received": True}
 
     pack = PACKS_INR.get(pack_id)

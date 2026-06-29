@@ -306,15 +306,25 @@ async def twilio_inbound(request: Request, db: AsyncSession = Depends(get_db)):
 
     effective_workspace_id = workspace_id_override or agent.workspace_id
 
+    workspace = await db.get(Workspace, effective_workspace_id)
+
+    # Inbound calling is a PAID feature — free-plan workspaces can only make outbound
+    # trial calls, not receive inbound.
+    if workspace and workspace.plan == "free":
+        log.info("Inbound call rejected — free plan (inbound is paid-only)",
+                 call_sid=call_sid, workspace_id=effective_workspace_id)
+        twiml = ("<Response><Say>Inbound calling is available on a paid plan. "
+                 "Please upgrade to receive calls.</Say><Hangup/></Response>")
+        return Response(content=twiml, media_type="application/xml")
+
     # Balance gate: don't answer inbound calls for an out-of-credit workspace
     # (matches the outbound HTTP 402 gate). Otherwise inbound usage is uncapped
     # and bills the workspace into the negative.
-    workspace = await db.get(Workspace, effective_workspace_id)
     if not workspace or (workspace.credits_balance or 0.0) <= 0:
         log.info("Inbound call rejected — insufficient credits",
                  call_sid=call_sid, workspace_id=effective_workspace_id)
-        twiml = ("<Response><Say>We are unable to take your call at the moment. "
-                 "Please try again later.</Say><Hangup/></Response>")
+        twiml = ("<Response><Say>Your account balance is low. Please top up your "
+                 "credits to continue.</Say><Hangup/></Response>")
         return Response(content=twiml, media_type="application/xml")
 
     # Upsert contact for the caller scoped to workspace

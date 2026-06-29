@@ -15,11 +15,11 @@ function loadRazorpayScript(): Promise<boolean> {
   });
 }
 
-const PRESETS = [250, 500, 1000, 2500];
+const PRESETS = [300, 500, 1000, 2500];
 
 export default function NumberWalletCard() {
   const [balance, setBalance] = useState<number | null>(null);
-  const [price, setPrice] = useState(250);
+  const [price, setPrice] = useState(300);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<number | null>(null);
 

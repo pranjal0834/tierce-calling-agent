@@ -42,8 +42,10 @@ the current guidance, don't just repeat it. Rules:
 
 
 class PromptLearner:
-    def __init__(self, agent_id: str):
+    def __init__(self, agent_id: str, trigger_call_id: str | None = None):
         self.agent_id = agent_id
+        self.trigger_call_id = trigger_call_id   # call that crossed the threshold → attribute cost here
+        self._cost_usd = 0.0
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     async def run(self):
@@ -91,9 +93,12 @@ class PromptLearner:
                 run.fine_tuned_model = "prompt-guidance"
                 run.completed_at = datetime.utcnow()
                 await db.commit()
+                # Attribute this run's gpt-4.1-mini cost to the triggering call so the
+                # cost dashboard is complete (this runs after the call's live meter closed).
+                await self._attribute_cost(db)
                 log.info("Prompt-learning complete", agent_id=self.agent_id,
                          failures=len(failures), positives=len(positives),
-                         guidance_chars=len(guidance))
+                         guidance_chars=len(guidance), cost_usd=round(self._cost_usd, 6))
             except Exception as exc:
                 log.exception("Prompt-learning error", agent_id=self.agent_id, error=str(exc))
                 try:
@@ -103,6 +108,37 @@ class PromptLearner:
                     await db.commit()
                 except Exception:
                     pass
+
+    async def _attribute_cost(self, db):
+        """Fold this run's gpt-4.1-mini cost into the triggering call's stored cost
+        breakdown (the live per-call meter is already closed by the time this runs)."""
+        if not self.trigger_call_id or self._cost_usd <= 0:
+            return
+        try:
+            from backend.db.models import Call
+            from sqlalchemy.orm.attributes import flag_modified
+            call = await db.get(Call, self.trigger_call_id)
+            if not call:
+                return
+            extra = dict(call.extra_data or {})
+            cb = dict(extra.get("cost_breakdown") or {})
+            aux = dict(cb.get("auxiliary") or {})
+            comp = dict(aux.get("prompt_learning") or {"usd": 0.0, "calls": 0})
+            comp["usd"] = round(float(comp["usd"]) + self._cost_usd, 8)
+            comp["calls"] = int(comp.get("calls", 0)) + 1
+            aux["prompt_learning"] = comp
+            cb["auxiliary"] = aux
+            cb["auxiliary_usd"] = round(float(cb.get("auxiliary_usd") or 0) + self._cost_usd, 8)
+            cb["grand_total_usd"] = round(float(cb.get("grand_total_usd") or 0) + self._cost_usd, 8)
+            extra["cost_breakdown"] = cb
+            call.extra_data = extra
+            call.cost_usd = round(float(call.cost_usd or 0) + self._cost_usd, 8)
+            flag_modified(call, "extra_data")
+            await db.commit()
+            log.info("Prompt-learning cost attributed", call_id=self.trigger_call_id,
+                     usd=round(self._cost_usd, 6))
+        except Exception as exc:
+            log.warning("Could not attribute prompt-learning cost", error=str(exc))
 
     async def _mine(self, db) -> tuple[list[dict], list[dict]]:
         """Return (failures, positives) from this agent's evaluated turns."""
@@ -185,6 +221,16 @@ class PromptLearner:
                 max_tokens=400,
                 temperature=0.3,
             )
+            try:
+                from backend.core.cost_meter import _chat_usd
+                self._cost_usd += _chat_usd(
+                    resp.usage,
+                    settings.LLM_MINI_IN_COST_PER_M,
+                    settings.LLM_MINI_OUT_COST_PER_M,
+                    settings.LLM_MINI_IN_CACHED_COST_PER_M,
+                )
+            except Exception:
+                pass
             return (resp.choices[0].message.content or "").strip()
         except Exception as exc:
             log.warning("Distillation call failed", agent_id=self.agent_id, error=str(exc))

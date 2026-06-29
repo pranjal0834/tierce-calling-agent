@@ -257,6 +257,7 @@ class KnowledgeDocument(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     char_count: Mapped[int] = mapped_column(Integer, default=0)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    embedding_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)  # one-time ingestion embedding cost
     created_by: Mapped[str | None] = mapped_column(String(36))   # User.id who uploaded it
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

@@ -171,6 +171,10 @@ export const verifyRazorpayPayment = (data: unknown) =>
   api.post("/billing/razorpay/verify", data).then((r: AxiosResponse) => r.data);
 export const testPurchase = (pack_id: string) =>
   api.post("/billing/test/purchase", { pack_id }).then((r: AxiosResponse) => r.data);
+export const createPaygOrder = (minutes: number) =>
+  api.post("/billing/payg/order", { minutes }).then((r: AxiosResponse) => r.data);
+export const verifyPaygPayment = (data: unknown) =>
+  api.post("/billing/payg/verify", data).then((r: AxiosResponse) => r.data);
 
 // ── Settings ───────────────────────────────────────────────────────────────────
 

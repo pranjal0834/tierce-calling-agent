@@ -20,6 +20,9 @@ log = structlog.get_logger()
 
 router = APIRouter()
 
+# Free-plan workspaces may only bulk-dial a handful of contacts per campaign.
+FREE_PLAN_BULK_LIMIT = 3
+
 
 @router.post("/initiate", response_model=CallOut, status_code=201)
 async def initiate_call(
@@ -210,6 +213,14 @@ async def bulk_call(
     if not agent or not agent.is_active or agent.workspace_id != workspace.id:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    # Free plan: bulk campaigns are capped to a handful of contacts. Upgrade to call more.
+    if workspace.plan == "free" and len(payload.contacts) > FREE_PLAN_BULK_LIMIT:
+        raise HTTPException(
+            status_code=403,
+            detail=(f"Free plan allows up to {FREE_PLAN_BULK_LIMIT} contacts per bulk campaign. "
+                    f"Upgrade to a paid plan to call more."),
+        )
+
     if (workspace.credits_balance or 0.0) <= 0:
         raise HTTPException(
             status_code=402,
@@ -314,6 +325,13 @@ async def _initiate_single_bulk_call(contact: dict, agent_id: str, workspace_id:
 
     async with AsyncSessionLocal() as db:
         try:
+            # Per-call balance guard: the bulk endpoint only checks credits ONCE up front,
+            # so a long campaign could run the balance negative. Stop dialing once exhausted.
+            ws = await db.get(Workspace, workspace_id)
+            if not ws or (ws.credits_balance or 0.0) <= 0:
+                log.info("Bulk call skipped — workspace out of credits",
+                         phone=phone, workspace_id=workspace_id)
+                return
             result = await db.execute(
                 select(Contact).where(
                     Contact.workspace_id == workspace_id,
@@ -473,14 +491,16 @@ async def get_call_recording(
     if range_header:
         upstream_headers["Range"] = range_header
 
+    # Each provider's recording URL needs its own auth. Twilio: account SID/token.
+    # Plivo (media.plivo.com): auth_id/auth_token. Pick by the URL's host.
+    rec_url = call.recording_url or ""
+    get_kwargs = dict(timeout=60, follow_redirects=True, headers=upstream_headers)
+    if "twilio.com" in rec_url:
+        get_kwargs["auth"] = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    elif "plivo.com" in rec_url:
+        get_kwargs["auth"] = (settings.PLIVO_AUTH_ID, settings.PLIVO_AUTH_TOKEN)
     async with httpx.AsyncClient() as client:
-        twilio_resp = await client.get(
-            call.recording_url,
-            auth=(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN),
-            timeout=60,
-            follow_redirects=True,
-            headers=upstream_headers,
-        )
+        twilio_resp = await client.get(call.recording_url, **get_kwargs)
     if twilio_resp.status_code not in (200, 206):
         raise HTTPException(status_code=502, detail="Recording unavailable from provider")
 

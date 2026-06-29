@@ -120,7 +120,41 @@ async def check_availability(cfg: dict, date_str: str, slot_minutes: int = 30) -
 
 
 def _insert_event_sync(service, calendar_id, body):
-    return service.events().insert(calendarId=calendar_id, body=body, sendUpdates="all").execute()
+    # sendUpdates="none": do NOT let Google email its own invite — the caller gets ONE
+    # branded Vaaniq email that carries the calendar event as an .ics attachment instead.
+    return service.events().insert(calendarId=calendar_id, body=body, sendUpdates="none").execute()
+
+
+def _build_ics(summary: str, description: str, start_dt, end_dt, organizer_email: str,
+               attendee_email: str, attendee_name: str, uid: str, remind_minutes: int = 30) -> str:
+    """Minimal RFC-5545 VEVENT (UTC times + a reminder VALARM) the recipient can add to
+    their calendar straight from the confirmation email."""
+    from datetime import timezone as _utc, datetime as _dt
+
+    def esc(s: str) -> str:
+        return (s or "").replace("\\", "\\\\").replace("\n", "\\n").replace(",", "\\,").replace(";", "\\;")
+
+    def fmt(dt) -> str:
+        return dt.astimezone(_utc.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    now = _dt.now(_utc.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Vaaniq//Voice//EN",
+        "CALSCALE:GREGORIAN", "METHOD:REQUEST", "BEGIN:VEVENT",
+        f"UID:{uid}", f"DTSTAMP:{now}", f"DTSTART:{fmt(start_dt)}", f"DTEND:{fmt(end_dt)}",
+        f"SUMMARY:{esc(summary)}",
+    ]
+    if description:
+        lines.append(f"DESCRIPTION:{esc(description)}")
+    if organizer_email:
+        lines.append(f"ORGANIZER:mailto:{organizer_email}")
+    if attendee_email:
+        lines.append(f"ATTENDEE;CN={esc(attendee_name) or attendee_email};RSVP=TRUE:mailto:{attendee_email}")
+    lines += [
+        "STATUS:CONFIRMED", "BEGIN:VALARM", f"TRIGGER:-PT{int(remind_minutes)}M",
+        "ACTION:DISPLAY", "DESCRIPTION:Reminder", "END:VALARM", "END:VEVENT", "END:VCALENDAR",
+    ]
+    return "\r\n".join(lines) + "\r\n"
 
 
 async def book_appointment(cfg: dict, datetime_iso: str, caller_name: str = "",
@@ -154,30 +188,41 @@ async def book_appointment(cfg: dict, datetime_iso: str, caller_name: str = "",
             body["attendees"] = [{"email": caller_email, "displayName": caller_name or ""}]
         loop = asyncio.get_event_loop()
         service = await loop.run_in_executor(None, _build_service, cfg)
-        await loop.run_in_executor(None, _insert_event_sync, service, calendar_id, body)
+        created = await loop.run_in_executor(None, _insert_event_sync, service, calendar_id, body)
         when = start_dt.strftime("%A, %d %B at %I:%M %p").replace(" 0", " ")
 
         biz = cfg.get("business_name") or "us"
-        # Send a branded confirmation email to the caller (best-effort, non-blocking).
+        # Send ONE branded confirmation email to the caller, carrying the calendar event as an
+        # .ics attachment (so they get the reminder) — Google's own invite is suppressed above.
         if caller_email:
             try:
+                from backend.config import settings
                 from backend.notifications.email import send_email
                 from backend.notifications import templates as tmpl
                 subject, html = tmpl.appointment_confirmation(
                     caller_name, when, cfg.get("business_name", ""), notes,
                 )
-                await send_email(caller_email, subject, html)
+                uid = f"{(created or {}).get('id') or start_dt.strftime('%Y%m%dT%H%M%S')}@vaaniq"
+                ics = _build_ics(
+                    summary=body["summary"], description=body.get("description", ""),
+                    start_dt=start_dt, end_dt=end_dt,
+                    organizer_email=cfg.get("organizer_email") or settings.SMTP_USER or "",
+                    attendee_email=caller_email, attendee_name=caller_name, uid=uid,
+                )
+                await send_email(caller_email, subject, html, ics=ics)
             except Exception as exc:
                 log.warning("Appointment confirmation email failed", error=str(exc))
 
-        # Send a WhatsApp confirmation to the caller's number (best-effort).
-        # Uses the Meta template in production, or free-form text in dev — driven by
-        # the WhatsApp templates module so the wording stays in one place.
-        if caller_phone:
+        # Send a WhatsApp confirmation to the caller's number — ONLY when the workspace
+        # has connected WhatsApp (its OWN api_key, passed in via cfg["whatsapp_api_key"]).
+        # WhatsApp messaging is a paid, opt-in Vaaniq add-on: never fall back to the
+        # platform's system number, or we'd message callers for workspaces that haven't
+        # enabled it. Email above stays the always-on default channel.
+        wa_key = cfg.get("whatsapp_api_key")
+        if caller_phone and wa_key:
             try:
-                from backend.integrations.whatsapp import send_appointment_confirmation, is_configured
-                if is_configured():
-                    await send_appointment_confirmation(caller_phone, caller_name, when, biz)
+                from backend.integrations.whatsapp import send_appointment_confirmation
+                await send_appointment_confirmation(caller_phone, caller_name, when, biz, api_key=wa_key)
             except Exception as exc:
                 log.warning("Appointment confirmation WhatsApp failed", error=str(exc))
 

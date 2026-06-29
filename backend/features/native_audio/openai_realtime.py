@@ -396,7 +396,17 @@ class OpenAIRealtimeHandler:
             "action='check_availability' for the caller's requested date to get the open slots. Step 2: offer ONLY "
             "those returned slots; if the caller's requested time is not among them, say it's unavailable and suggest "
             "the nearest open slots. Step 3: once the caller confirms an AVAILABLE slot, call the calendar tool with "
-            "action='book' and that exact datetime_iso to create the appointment, then confirm it briefly. "
+            "action='book' passing that exact datetime_iso AND caller_email to create the appointment. "
+            "EMAIL IS REQUIRED TO BOOK: before you call action='book', ASK the caller for their email and have them "
+            "SPELL IT OUT slowly, letter by letter, saying any digits and symbols explicitly. Then READ IT BACK letter "
+            "by letter (e.g. 'p, r, a, n, j, a, l, dot, o, z, a, seven, at, g-m-a-i-l, dot, com'), NOT as a whole word, "
+            "and get an explicit yes before booking; if corrected, re-read the whole thing letter by letter again. "
+            "Pass it as caller_email — the calendar invite and the confirmation email are sent to that address, so "
+            "without it the caller gets nothing. "
+            "CRITICAL — you have NOT booked anything until you actually EMIT the action='book' tool call and it returns "
+            "'Appointment booked'. NEVER tell the caller you have booked it or that a confirmation email is coming "
+            "unless that book tool call has actually run AND returned success in THIS turn — actually emit the call, "
+            "never just describe it. Only after the tool replies 'Appointment booked' may you confirm. "
             "Remember: schedule_callback only arranges for YOU to phone the caller again later — it does NOT create a "
             "calendar appointment. Words like 'book', 'reschedule', 'set up a meeting', 'appointment' always mean the "
             "calendar tool, not schedule_callback."
@@ -540,10 +550,11 @@ class OpenAIRealtimeHandler:
 
                 if event == "start":
                     start = data.get("start", {})
-                    # Plivo uses streamId / callUUID; Twilio uses streamSid / callSid
+                    # Plivo uses streamId / callId; Twilio uses streamSid / callSid
                     self._is_plivo = "streamId" in start
                     self.stream_sid = start.get("streamSid") or start.get("streamId")
-                    self.call_sid = start.get("callSid") or start.get("callUUID")
+                    self.call_sid = (start.get("callSid") or start.get("callId")
+                                     or start.get("callUUID") or start.get("call_uuid"))
                     log.info("Telephony stream started", stream_sid=self.stream_sid,
                              call_sid=self.call_sid, provider="plivo" if self._is_plivo else "twilio")
                     if self.call_sid:
@@ -1171,18 +1182,24 @@ class OpenAIRealtimeHandler:
             phone = result.split(":", 1)[1].strip()
             if phone and self.call_sid:
                 try:
-                    from backend.config import settings as _s
-                    from urllib.parse import quote as _quote
-                    handler = TwilioHandler()
-                    twiml_url = f"{_s.BASE_URL}/telephony/twilio/transfer-twiml?to={_quote(phone)}&call_id={self.call.id}"
-                    await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: handler.client.calls(self.call_sid).update(
-                            url=twiml_url,
-                            method="GET",
-                        ),
-                    )
-                    result = "Transferring you to a human agent now."
+                    if getattr(self, "_is_plivo", False):
+                        from backend.telephony.plivo_handler import PlivoHandler
+                        ok = await PlivoHandler().transfer_call(self.call_sid, phone, self.call.id)
+                        result = ("Transferring you to a human agent now." if ok
+                                  else "Transfer unavailable at the moment.")
+                    else:
+                        from backend.config import settings as _s
+                        from urllib.parse import quote as _quote
+                        handler = TwilioHandler()
+                        twiml_url = f"{_s.BASE_URL}/telephony/twilio/transfer-twiml?to={_quote(phone)}&call_id={self.call.id}"
+                        await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: handler.client.calls(self.call_sid).update(
+                                url=twiml_url,
+                                method="GET",
+                            ),
+                        )
+                        result = "Transferring you to a human agent now."
                 except Exception as exc:
                     log.warning("Transfer failed", error=str(exc))
                     result = "Transfer unavailable at the moment."

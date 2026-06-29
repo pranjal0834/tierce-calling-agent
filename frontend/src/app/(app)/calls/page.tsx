@@ -6,7 +6,10 @@ import {
   User, Globe, TrendingUp, CheckCircle2, XCircle, Mic2, ArrowUpRight,
   ArrowDownLeft, Database, Repeat, DollarSign, PhoneOff, Search, Download,
 } from "lucide-react";
-import { getCalls, getAgents, getCallDetail, initiateCall, bulkCall, getRecordingUrl, hangupCall } from "@/lib/api";
+import { getCalls, getAgents, getCallDetail, initiateCall, bulkCall, getRecordingUrl, hangupCall, getBillingBalance } from "@/lib/api";
+
+// Free plan: bulk campaigns are capped to this many contacts (mirrors the backend).
+const FREE_PLAN_BULK_LIMIT = 3;
 import toast from "react-hot-toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -291,10 +294,12 @@ export default function CallsPage() {
   const [dirFilter, setDirFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all"); // all | today | 7d | 30d
+  const [plan, setPlan] = useState<string>("");
 
   useEffect(() => {
     getCalls().then(setCalls).catch((e: unknown) => { console.error("getCalls failed:", e); });
     getAgents().then(setAgents).catch(() => {});
+    getBillingBalance().then((b: any) => setPlan(b?.plan ?? "")).catch(() => {});
   }, []);
 
   // Auto-refresh calls list: every 5s when there's a live call, every 10s otherwise
@@ -1025,6 +1030,7 @@ export default function CallsPage() {
       {showBulk && (
         <BulkCallModal
           agents={agents}
+          plan={plan}
           onClose={() => setShowBulk(false)}
           onLaunched={(count: number, suppressed: number) => {
             toast.success(
@@ -1112,11 +1118,13 @@ function InfoRow({ label, value, mono, valueClass }: { label: string; value: str
 
 // ── Bulk Call Modal ───────────────────────────────────────────────────────────
 
-function BulkCallModal({ agents, onClose, onLaunched }: {
+function BulkCallModal({ agents, plan, onClose, onLaunched }: {
   agents: any[];
+  plan?: string;
   onClose: () => void;
   onLaunched: (count: number, suppressed: number) => void;
 }) {
+  const isFree = plan === "free";
   const [tab, setTab] = useState<"file" | "paste">("file");
   const [agentId, setAgentId] = useState(agents[0]?.id || "");
   const [callsPerSecond, setCallsPerSecond] = useState(1);
@@ -1149,9 +1157,15 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
     if (parsed.length === 0) toast.error("No valid phone numbers found");
   };
 
+  const overFreeLimit = isFree && contacts.length > FREE_PLAN_BULK_LIMIT;
+
   const handleStart = async () => {
     if (!agentId) { toast.error("Select an agent"); return; }
     if (contacts.length === 0) { toast.error("No contacts loaded"); return; }
+    if (overFreeLimit) {
+      toast.error(`Free plan allows up to ${FREE_PLAN_BULK_LIMIT} contacts per campaign. Upgrade to call more.`);
+      return;
+    }
     if (!consent) { toast.error("Please confirm you have consent to call these contacts"); return; }
     setLoading(true);
     try {
@@ -1269,6 +1283,15 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
             </div>
           )}
 
+          {/* Free-plan bulk limit hint */}
+          {isFree && (
+            <div className={`rounded-xl p-3 text-xs leading-relaxed border ${overFreeLimit ? "bg-red-50 border-red-200 text-red-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}>
+              {overFreeLimit
+                ? <>Your free plan allows up to <span className="font-semibold">{FREE_PLAN_BULK_LIMIT} contacts</span> per campaign — you loaded {contacts.length}. <a href="/billing" className="font-semibold underline">Upgrade</a> to call more.</>
+                : <>Free plan: up to <span className="font-semibold">{FREE_PLAN_BULK_LIMIT} contacts</span> per bulk campaign. <a href="/billing" className="font-semibold underline">Upgrade</a> for unlimited.</>}
+            </div>
+          )}
+
           {/* Consent attestation — required before launching a campaign */}
           <label className="flex items-start gap-2.5 cursor-pointer bg-amber-50 border border-amber-200 rounded-xl p-3">
             <input
@@ -1289,7 +1312,7 @@ function BulkCallModal({ agents, onClose, onLaunched }: {
           <button onClick={onClose} className="px-4 py-2 text-sm text-neutral-500 hover:text-neutral-900">Cancel</button>
           <button
             onClick={handleStart}
-            disabled={loading || contacts.length === 0 || !agentId || !consent}
+            disabled={loading || contacts.length === 0 || !agentId || !consent || overFreeLimit}
             className="px-5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2"
           >
             <Users className="w-4 h-4" />

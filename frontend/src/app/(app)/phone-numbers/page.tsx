@@ -274,7 +274,7 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
   const [selectedAgent, setSelectedAgent] = useState(agents[0]?.id || "");
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [priceInr, setPriceInr] = useState(250);   // flat platform price per number / month
+  const [priceInr, setPriceInr] = useState(300);   // flat platform price per number / month
   const [loadingMore, setLoadingMore] = useState(false);
   const [cities, setCities] = useState<{ code: string; city: string; count: number }[]>([]);
   const [citiesLoading, setCitiesLoading] = useState(false);
@@ -1220,7 +1220,7 @@ export default function PhoneNumbersPage() {
           </div>
           <p className="text-sm font-semibold text-neutral-900 mb-1">Simple Billing</p>
           <p className="text-xs text-neutral-500 leading-relaxed">
-            Flat ₹250/month per number — billed separately from your call credits. Pay the first month via Razorpay at purchase; renewals come from your number wallet.
+            Flat ₹300/month per number — billed separately from your call credits. Pay the first month via Razorpay at purchase; renewals come from your number wallet.
           </p>
         </div>
       </div>
