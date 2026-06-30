@@ -6,6 +6,7 @@ import {
   Globe, Zap, ArrowRight, Code2, ShieldCheck, Clock,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   getWebhookEndpoints,
   createWebhookEndpoint,
@@ -58,9 +59,9 @@ const ALL_EVENTS = [
 ];
 
 const EVENT_COLORS: Record<string, string> = {
-  "call.started":   "bg-blue-50 text-blue-600 border-blue-200",
-  "call.completed": "bg-green-50 text-green-600 border-green-200",
-  "call.failed":    "bg-red-50 text-red-600 border-red-200",
+  "call.started":   "bg-info-50 text-info-600 border-blue-200",
+  "call.completed": "bg-success-50 text-success-600 border-green-200",
+  "call.failed":    "bg-error-50 text-error-600 border-red-200",
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -84,7 +85,7 @@ function CopyBtn({ text, size = "sm" }: { text: string; size?: "sm" | "xs" }) {
       className="text-neutral-400 hover:text-neutral-900 transition-colors p-1 rounded"
       title="Copy"
     >
-      {done ? <Check className={`${sz} text-green-500`} /> : <Copy className={sz} />}
+      {done ? <Check className={`${sz} text-success-500`} /> : <Copy className={sz} />}
     </button>
   );
 }
@@ -107,11 +108,11 @@ function DeliveryRow({ d }: { d: Delivery }) {
             <Clock className="w-3 h-3" /> Pending
           </span>
         ) : ok ? (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-600 border border-green-200 font-mono shrink-0">
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success-50 text-success-600 border border-green-200 font-mono shrink-0">
             <CheckCircle2 className="w-3 h-3" /> {d.response_status}
           </span>
         ) : (
-          <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 font-mono shrink-0">
+          <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-error-50 text-error-600 border border-red-200 font-mono shrink-0">
             <XCircle className="w-3 h-3" /> {d.response_status}
           </span>
         )}
@@ -123,7 +124,7 @@ function DeliveryRow({ d }: { d: Delivery }) {
         <span className="flex-1 text-xs text-neutral-400">{fmtDate(d.created_at)}</span>
 
         {d.attempt_count > 1 && (
-          <span className="text-xs text-orange-500 shrink-0">
+          <span className="text-xs text-warning-500 shrink-0">
             {d.attempt_count} attempts
           </span>
         )}
@@ -140,7 +141,7 @@ function DeliveryRow({ d }: { d: Delivery }) {
             {d.next_retry_at && (
               <div>
                 <p className="text-neutral-400 mb-0.5">Next retry</p>
-                <p className="text-orange-500">{fmtDate(d.next_retry_at)}</p>
+                <p className="text-warning-500">{fmtDate(d.next_retry_at)}</p>
               </div>
             )}
           </div>
@@ -209,8 +210,8 @@ function EndpointCard({
       <div className="p-4 sm:p-5">
         <div className="flex items-start gap-3 sm:gap-4">
           {/* Icon */}
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${ep.is_active ? "bg-green-50 border border-green-200" : "bg-neutral-100 border border-neutral-200"}`}>
-            <Globe className={`w-4 h-4 ${ep.is_active ? "text-green-600" : "text-neutral-400"}`} />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${ep.is_active ? "bg-success-50 border border-green-200" : "bg-neutral-100 border border-neutral-200"}`}>
+            <Globe className={`w-4 h-4 ${ep.is_active ? "text-success-600" : "text-neutral-400"}`} />
           </div>
 
           {/* URL + events */}
@@ -237,13 +238,13 @@ function EndpointCard({
               title={ep.is_active ? "Disable endpoint" : "Enable endpoint"}
             >
               {ep.is_active
-                ? <ToggleRight className="w-5 h-5 text-green-500" />
+                ? <ToggleRight className="w-5 h-5 text-success-500" />
                 : <ToggleLeft className="w-5 h-5" />}
             </button>
 
             <button
               onClick={() => onDelete(ep.id)}
-              className="p-2 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+              className="p-2 rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-colors"
               title="Delete endpoint"
             >
               <Trash2 className="w-4 h-4" />
@@ -264,13 +265,13 @@ function EndpointCard({
 
         {/* Secret one-time reveal */}
         {ep.secret && (
-          <div className="mt-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
-            <p className="text-xs text-amber-700 font-semibold mb-1.5 flex items-center gap-1.5">
+          <div className="mt-4 p-3.5 bg-warning-50 border border-amber-200 rounded-xl">
+            <p className="text-xs text-warning-700 font-semibold mb-1.5 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
               Signing Secret — copy now, it won&apos;t be shown again
             </p>
             <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-2">
-              <code className="flex-1 text-xs text-amber-700 font-mono break-all min-w-0">{ep.secret}</code>
+              <code className="flex-1 text-xs text-warning-700 font-mono break-all min-w-0">{ep.secret}</code>
               <CopyBtn text={ep.secret} />
             </div>
             <p className="text-xs text-neutral-500 mt-1.5">Store this in your environment variables and use it to verify incoming requests.</p>
@@ -291,12 +292,12 @@ function EndpointCard({
           {deliveries !== null && (
             <div className="flex items-center gap-2 ml-auto">
               {successCount !== null && successCount > 0 && (
-                <span className="flex items-center gap-1 text-green-600">
+                <span className="flex items-center gap-1 text-success-600">
                   <CheckCircle2 className="w-3 h-3" />{successCount}
                 </span>
               )}
               {failCount !== null && failCount > 0 && (
-                <span className="flex items-center gap-1 text-red-500">
+                <span className="flex items-center gap-1 text-error-500">
                   <XCircle className="w-3 h-3" />{failCount}
                 </span>
               )}
@@ -370,7 +371,7 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
           {/* URL input */}
           <div>
             <label className="text-xs font-medium text-neutral-700 block mb-2">
-              Endpoint URL <span className="text-red-500">*</span>
+              Endpoint URL <span className="text-error-500">*</span>
             </label>
             <input
               value={url}
@@ -416,10 +417,10 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
           </div>
 
           {/* Signing secret note */}
-          <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-            <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2.5 p-3 bg-warning-50 border border-amber-200 rounded-xl">
+            <ShieldCheck className="w-4 h-4 text-warning-600 shrink-0 mt-0.5" />
             <p className="text-xs text-neutral-600">
-              A <span className="text-amber-700 font-medium">signing secret</span> will be generated and shown once after creation.
+              A <span className="text-warning-700 font-medium">signing secret</span> will be generated and shown once after creation.
               Use it to verify that events came from Vaaniq, not a third party.
             </p>
           </div>
@@ -461,7 +462,7 @@ function HowItWorks() {
       icon: Globe,
       title: "Your server receives it",
       desc: "We POST a signed JSON payload to your URL. Use it to update your CRM, send SMS, log to sheets, etc.",
-      cls: "text-green-600 bg-green-50 border-green-200",
+      cls: "text-success-600 bg-success-50 border-green-200",
     },
   ];
 
@@ -547,6 +548,7 @@ export default function WebhooksPage() {
   const [endpoints, setEndpoints] = useState<WebhookEndpoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; id?: string}>({open: false});
 
   const load = useCallback(async () => {
     try { setEndpoints(await getWebhookEndpoints()); }
@@ -557,12 +559,17 @@ export default function WebhooksPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this endpoint? All delivery history will be removed.")) return;
+    setConfirmDelete({open: true, id});
+  }
+
+  async function doDelete() {
+    if (!confirmDelete.id) return;
     try {
-      await deleteWebhookEndpoint(id);
-      setEndpoints(prev => prev.filter(ep => ep.id !== id));
+      await deleteWebhookEndpoint(confirmDelete.id);
+      setEndpoints(prev => prev.filter(ep => ep.id !== confirmDelete.id));
       toast.success("Endpoint deleted");
     } catch { toast.error("Failed to delete endpoint"); }
+    finally { setConfirmDelete({open: false}); }
   }
 
   async function handleToggle(id: string, active: boolean) {
@@ -644,6 +651,13 @@ export default function WebhooksPage() {
 
       {/* Add modal */}
       {showAdd && <AddModal onClose={() => setShowAdd(false)} onAdded={ep => setEndpoints(prev => [ep, ...prev])} />}
+      <ConfirmModal
+        open={confirmDelete.open}
+        title="Delete Endpoint"
+        message="Delete this endpoint? All delivery history will be removed."
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDelete({open: false})}
+      />
     </div>
   );
 }

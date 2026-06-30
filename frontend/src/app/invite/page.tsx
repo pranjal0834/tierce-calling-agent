@@ -1,22 +1,48 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Zap } from "lucide-react";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import toast from "react-hot-toast";
 import PasswordInput from "@/components/ui/PasswordInput";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const schema = z.object({
+  password: z.string().default(""),
+  confirm_password: z.string().default(""),
+}).superRefine((data, ctx) => {
+  if (data.password && data.password.length < 8) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Password must be at least 8 characters",
+      path: ["password"],
+    });
+  }
+  if (data.password && data.password !== data.confirm_password) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Passwords don't match",
+      path: ["confirm_password"],
+    });
+  }
+});
+
+type FormValues = z.infer<typeof schema>;
 
 function InviteForm() {
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get("token") || "";
 
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [invitedEmail, setInvitedEmail] = useState("");
+  const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm({
+    resolver: zodResolver(schema),
+  });
 
   useEffect(() => {
     if (!token) { toast.error("Invalid invite link"); return; }
@@ -26,13 +52,10 @@ function InviteForm() {
     } catch { /* ignore decode errors */ }
   }, [token]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (password && password !== confirm) { toast.error("Passwords don't match"); return; }
-    if (password && password.length < 8)  { toast.error("Password must be at least 8 characters"); return; }
+  async function onSubmit(data: FormValues) {
     setLoading(true);
     try {
-      const res = await api.post("/auth/accept-invite", null, { params: { token, password } });
+      const res = await api.post("/auth/accept-invite", null, { params: { token, password: data.password } });
       setToken(res.data.access_token);
       setDone(true);
       toast.success("Welcome! Joining workspace…");
@@ -51,7 +74,7 @@ function InviteForm() {
         {/* Logo */}
         <div className="flex items-center gap-2.5 justify-center mb-8">
           <div className="w-9 h-9 bg-brand-500 rounded-[11px] flex items-center justify-center shadow-brand">
-            <Zap className="w-4.5 h-4.5 text-white" />
+            <VaaniqWave className="icon-md text-white" />
           </div>
           <span className="text-2xl font-semibold tracking-tight text-neutral-900">Vaaniq</span>
         </div>
@@ -73,31 +96,33 @@ function InviteForm() {
 
           {done ? (
             <div className="text-center py-4">
-              <p className="text-sm font-medium text-emerald-600">Joining workspace…</p>
+              <p className="text-sm font-medium text-success-600">Joining workspace…</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
                 <label className="label-base">
                   Password
                   <span className="text-neutral-400 font-normal ml-1">(only needed for new accounts)</span>
                 </label>
                 <PasswordInput
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  value={watch("password") || ""}
+                  onChange={e => setValue("password", e.target.value)}
                   autoComplete="new-password"
                   placeholder="Leave blank if you already have an account"
                 />
+                {errors.password && <p className="text-xs text-error-600 mt-1">{errors.password.message}</p>}
               </div>
-              {password && (
+              {watch("password") && (
                 <div>
                   <label className="label-base">Confirm password</label>
                   <PasswordInput
-                    value={confirm}
-                    onChange={e => setConfirm(e.target.value)}
+                    value={watch("confirm_password") || ""}
+                    onChange={e => setValue("confirm_password", e.target.value)}
                     autoComplete="new-password"
                     placeholder="Repeat password"
                   />
+                  {errors.confirm_password && <p className="text-xs text-error-600 mt-1">{errors.confirm_password.message}</p>}
                 </div>
               )}
               <button

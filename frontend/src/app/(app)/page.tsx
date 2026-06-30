@@ -9,13 +9,13 @@ import { getAgents, getCalls } from "@/lib/api";
 import toast from "react-hot-toast";
 
 const STATUS_MAP: Record<string, { label: string; dot: string; text: string; bg: string }> = {
-  completed:    { label: "Completed",    dot: "bg-emerald-400", text: "text-emerald-700", bg: "bg-emerald-50" },
+  completed:    { label: "Completed",    dot: "bg-success-400", text: "text-success-700", bg: "bg-success-50" },
   in_progress:  { label: "Live",         dot: "bg-brand-400 animate-pulse", text: "text-brand-700", bg: "bg-brand-50" },
-  ringing:      { label: "Ringing",      dot: "bg-amber-400 animate-pulse", text: "text-amber-700", bg: "bg-amber-50" },
-  initiated:    { label: "Initiated",    dot: "bg-amber-400", text: "text-amber-700", bg: "bg-amber-50" },
+  ringing:      { label: "Ringing",      dot: "bg-warning-400 animate-pulse", text: "text-warning-700", bg: "bg-warning-50" },
+  initiated:    { label: "Initiated",    dot: "bg-warning-400", text: "text-warning-700", bg: "bg-warning-50" },
   not_answered: { label: "No Answer",    dot: "bg-neutral-400", text: "text-neutral-600", bg: "bg-neutral-100" },
-  failed:       { label: "Failed",       dot: "bg-red-400", text: "text-red-700", bg: "bg-red-50" },
-  voicemail:    { label: "Voicemail",    dot: "bg-orange-400", text: "text-orange-700", bg: "bg-orange-50" },
+  failed:       { label: "Failed",       dot: "bg-error-400", text: "text-error-700", bg: "bg-error-50" },
+  voicemail:    { label: "Voicemail",    dot: "bg-warning-400", text: "text-warning-700", bg: "bg-warning-50" },
   cancelled:    { label: "Cancelled",    dot: "bg-neutral-400", text: "text-neutral-600", bg: "bg-neutral-100" },
 };
 
@@ -35,7 +35,7 @@ function StatCard({ label, value, icon: Icon, iconColor, iconBg, trend }: {
       <div className="flex items-end gap-2">
         <span className="text-2xl font-bold text-neutral-900 leading-none tracking-tight">{value}</span>
         {trend && (
-          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full mb-0.5">{trend}</span>
+          <span className="text-xs font-medium text-success-600 bg-success-50 px-1.5 py-0.5 rounded-full mb-0.5">{trend}</span>
         )}
       </div>
     </div>
@@ -81,11 +81,11 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* API error */}
       {apiError && (
-        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
-          <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+        <div className="flex items-start gap-3 p-4 bg-error-50 border border-error-200 rounded-xl">
+          <AlertCircle className="w-4 h-4 text-error-500 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-red-700">Unable to load data</p>
-            <p className="text-sm text-red-600 mt-0.5">{apiError}</p>
+            <p className="text-sm font-medium text-error-700">Unable to load data</p>
+            <p className="text-sm text-error-600 mt-0.5">{apiError}</p>
           </div>
         </div>
       )}
@@ -93,8 +93,8 @@ export default function Dashboard() {
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Total Agents"  value={agents.length}      icon={Bot}      iconColor="text-brand-500"    iconBg="bg-brand-50"   />
-        <StatCard label="Total Calls"   value={calls.length}       icon={Phone}    iconColor="text-emerald-600"  iconBg="bg-emerald-50" />
-        <StatCard label="Active Now"    value={activeCalls.length} icon={Activity} iconColor="text-amber-600"    iconBg="bg-amber-50"   />
+        <StatCard label="Total Calls"   value={calls.length}       icon={Phone}    iconColor="text-success-600"  iconBg="bg-success-50" />
+        <StatCard label="Active Now"    value={activeCalls.length} icon={Activity} iconColor="text-warning-600"    iconBg="bg-warning-50"   />
         <StatCard label="Native Audio"  value={`${nativeAgents}`}  icon={Zap}      iconColor="text-violet-600"   iconBg="bg-violet-50"  />
       </div>
 
@@ -135,7 +135,7 @@ export default function Dashboard() {
               badge: "Live",
             },
             {
-              icon: TrendingUp, iconCls: "text-emerald-600", bg: "bg-emerald-50",
+              icon: TrendingUp, iconCls: "text-success-600", bg: "bg-success-50",
               title: "Self-Improving Loop",
               desc: "Every 50 calls triggers a fine-tuning run automatically.",
               badge: "Auto",

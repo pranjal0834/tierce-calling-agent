@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { RefreshCw, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
-import { adminGet, UserRow, Pill, DeleteConfirmModal, PageHeading, LoadingBlock, fmt } from "@/components/admin/ui";
+import { adminGet, UserRow, Pill, DeleteConfirmModal, PageHeading, LoadingBlock, ExportButton, fmt } from "@/components/admin/ui";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -48,9 +48,12 @@ export default function AdminUsersPage() {
         title="Users"
         subtitle="All accounts across every workspace"
         action={
-          <button onClick={load} className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </button>
+          <div className="flex gap-2">
+            <ExportButton rows={users as unknown as Record<string, unknown>[]} filename="users" />
+            <button onClick={load} className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
+          </div>
         }
       />
 

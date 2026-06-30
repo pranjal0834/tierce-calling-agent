@@ -6,38 +6,39 @@ import {
 import { getTools, updateTool, deleteTool } from "@/lib/api";
 import toast from "react-hot-toast";
 import { ToolModal } from "./ToolModal";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const TOOL_TYPES = [
   {
     value: "webhook",
     label: "Webhook / HTTP",
     icon: Wrench,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10",
+    color: "text-info-400",
+    bg: "bg-info-500/10",
     description: "Call any HTTP endpoint — CRM, calendar, booking system, etc.",
   },
   {
     value: "end_call",
     label: "End Call",
     icon: Wrench,
-    color: "text-red-400",
-    bg: "bg-red-500/10",
+    color: "text-error-400",
+    bg: "bg-error-500/10",
     description: "Agent ends the call cleanly after completing its task.",
   },
   {
     value: "transfer_call",
     label: "Transfer to Human",
     icon: Wrench,
-    color: "text-green-400",
-    bg: "bg-green-500/10",
+    color: "text-success-400",
+    bg: "bg-success-500/10",
     description: "Warm-transfer the caller to a human agent.",
   },
   {
     value: "calendar_booking",
     label: "Book Appointment",
     icon: Wrench,
-    color: "text-orange-400",
-    bg: "bg-orange-500/10",
+    color: "text-warning-400",
+    bg: "bg-warning-500/10",
     description: "Check real availability and book appointments via Cal.com or Calendly API.",
   },
 ];
@@ -62,6 +63,7 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Tool | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; item?: Tool}>({open: false});
 
   useEffect(() => {
     getTools(agentId)
@@ -100,7 +102,12 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
   };
 
   const handleDelete = async (tool: Tool) => {
-    if (!confirm(`Delete tool "${tool.name}"?`)) return;
+    setConfirmDelete({open: true, item: tool});
+  };
+
+  const doDelete = async () => {
+    const tool = confirmDelete.item;
+    if (!tool) return;
     try {
       await deleteTool(agentId, tool.id);
       setTools(prev => {
@@ -111,6 +118,8 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
       toast.success("Tool deleted");
     } catch {
       toast.error("Failed to delete tool");
+    } finally {
+      setConfirmDelete({open: false});
     }
   };
 
@@ -136,14 +145,14 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
           onClick={() => { setEditing(null); setShowModal(true); }}
           className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors"
         >
-          <Plus className="w-4 h-4" /> Add Tool
+          <Plus className="icon-sm" /> Add Tool
         </button>
       </div>
 
       {/* Info banner */}
-      <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-        <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-        <p className="text-xs text-blue-700">
+      <div className="flex items-start gap-3 p-3 bg-info-50 border border-info-200 rounded-xl">
+        <AlertCircle className="w-4 h-4 text-info-600 mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-info-700">
           Tools are passed to the AI as callable functions. The agent decides when to call them based on the conversation context and tool descriptions.
         </p>
       </div>
@@ -153,7 +162,7 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
         {TOOL_TYPES.map(tt => (
           <div key={tt.value} className={`rounded-xl p-3 border border-neutral-200 ${tt.bg} flex items-start gap-2.5`}>
             <div className={`w-7 h-7 rounded-lg bg-white/60 flex items-center justify-center flex-shrink-0`}>
-              <tt.icon className={`w-4 h-4 ${tt.color}`} />
+              <tt.icon className={`icon-sm ${tt.color}`} />
             </div>
             <div>
               <p className="text-xs font-medium text-neutral-800">{tt.label}</p>
@@ -173,7 +182,7 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
             onClick={() => { setEditing(null); setShowModal(true); }}
             className="mt-4 flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors mx-auto"
           >
-            <Plus className="w-4 h-4" /> Add First Tool
+            <Plus className="icon-sm" /> Add First Tool
           </button>
         </div>
       ) : (
@@ -192,7 +201,7 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className={`w-8 h-8 rounded-lg ${meta?.bg ?? "bg-neutral-100"} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className={`w-4 h-4 ${meta?.color ?? "text-neutral-400"}`} />
+                      <Icon className={`icon-sm ${meta?.color ?? "text-neutral-400"}`} />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -237,20 +246,20 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
                       title={tool.enabled ? "Disable" : "Enable"}
                     >
                       {tool.enabled
-                        ? <ToggleRight className="w-5 h-5 text-green-600" />
-                        : <ToggleLeft className="w-5 h-5" />}
+                        ? <ToggleRight className="icon-lg text-success-600" />
+                        : <ToggleLeft className="icon-lg" />}
                     </button>
                     <button
                       onClick={() => { setEditing(tool); setShowModal(true); }}
                       className="text-neutral-400 hover:text-neutral-700 transition-colors p-1"
                     >
-                      <Pencil className="w-4 h-4" />
+                      <Pencil className="icon-sm" />
                     </button>
                     <button
                       onClick={() => handleDelete(tool)}
-                      className="text-neutral-400 hover:text-red-500 transition-colors p-1"
+                      className="text-neutral-400 hover:text-error-500 transition-colors p-1"
                     >
-                      <Trash className="w-4 h-4" />
+                      <Trash className="icon-sm" />
                     </button>
                   </div>
                 </div>
@@ -268,6 +277,13 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
           onSaved={handleSaved}
         />
       )}
+      <ConfirmModal
+        open={confirmDelete.open}
+        title="Delete Tool"
+        message={confirmDelete.item ? `Delete tool "${confirmDelete.item.name}"?` : ""}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDelete({open: false})}
+      />
     </div>
   );
 }

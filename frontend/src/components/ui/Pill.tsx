@@ -28,7 +28,7 @@ export default function Pill({ children, selected = false, onRemove, className =
           aria-label="Remove"
           className="ml-0.5 rounded-full hover:text-red-500 transition-colors"
         >
-          <X className="w-3 h-3" />
+          <X className="icon-xs" />
         </button>
       )}
     </span>

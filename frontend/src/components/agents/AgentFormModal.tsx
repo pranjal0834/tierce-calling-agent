@@ -1,37 +1,32 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Lock, X, BookOpen, User, FileText, AudioLines, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { createAgent, updateAgent, getKnowledgeBases } from "@/lib/api";
 import { VoicePicker } from "./VoicePicker";
 import { LanguagePicker } from "./LanguagePicker";
+import { FormField, InputField, SelectField } from "@/components/ui/FormField";
+import type { FieldError } from "react-hook-form";
 
-const DEFAULT_FORM = {
-  name: "",
-  description: "",
-  system_prompt: "You are a helpful sales agent calling leads. Be friendly and professional.",
-  pipeline_mode: "native",
-  llm_model: "Tierce Voice Engine",
-  voice_id: "Aoede",
-  is_personal: false,
-  config: {
-    backchannel_enabled: true,
-    emotional_intelligence: true,
-    predictive_engine: true,
-    memory_graph: true,
-    accent: "",
-    speech_pace: "natural",
-    languages: ["English"] as string[],
-    knowledge_base_ids: [] as string[],
-    variables: [] as { name: string; value: string }[],
-    whatsapp_enabled: false,
-    whatsapp_message: "",
-  },
-};
+const agentSchema = z.object({
+  name: z.string().min(1, "Agent name is required").max(100, "Name too long"),
+  description: z.string().max(500, "Description too long").optional().default(""),
+  system_prompt: z.string().min(10, "System prompt must be at least 10 characters"),
+  voice_id: z.string().min(1, "Voice is required"),
+  accent: z.string().optional().default(""),
+  speech_pace: z.string().optional().default("natural"),
+  languages: z.array(z.string()).min(1, "At least one language is required"),
+  knowledge_base_ids: z.array(z.string()).optional().default([]),
+  whatsapp_enabled: z.boolean().optional().default(false),
+  whatsapp_message: z.string().optional().default(""),
+});
 
-// Starter WhatsApp messages the user can pick and then edit. [Customer Name] etc. are
-// filled in per call. "Custom" = start blank.
+type AgentFormValues = z.infer<typeof agentSchema>;
+
 const WHATSAPP_TEMPLATES: { label: string; text: string }[] = [
   { label: "Custom (write your own)", text: "" },
   { label: "Thank you / business info", text: "Hi [Customer Name]! Thanks for speaking with us. Here are our details — feel free to reach out anytime. 🙏" },
@@ -45,18 +40,6 @@ interface AgentFormModalProps {
   onSaved: (agent: any, isEdit: boolean) => void;
 }
 
-function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="label-base">
-        {label}
-        {required && <span className="text-red-400 ml-1">*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
 const TABS = [
   { id: "basics", label: "Basics", icon: User },
   { id: "prompt", label: "Prompt", icon: FileText },
@@ -65,11 +48,38 @@ const TABS = [
   { id: "followup", label: "Follow-up", icon: MessageCircle },
 ] as const;
 
+const TAB_FIELDS: Record<string, (keyof AgentFormValues)[]> = {
+  basics: ["name", "description"],
+  prompt: ["system_prompt"],
+  voice: ["voice_id", "accent", "speech_pace", "languages"],
+  knowledge: ["knowledge_base_ids"],
+  followup: ["whatsapp_enabled", "whatsapp_message"],
+};
+
 export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModalProps) {
-  const [form, setForm] = useState(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
+  const [isPersonal, setIsPersonal] = useState(false);
   const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("basics");
+  const [variables, setVariables] = useState<{ name: string; value: string }[]>([]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors }, trigger, getValues } = useForm<AgentFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(agentSchema) as any,
+    defaultValues: {
+      name: "",
+      description: "",
+      system_prompt: "You are a helpful sales agent calling leads. Be friendly and professional.",
+      voice_id: "Aoede",
+      accent: "",
+      speech_pace: "natural",
+      languages: ["English"],
+      knowledge_base_ids: [],
+      whatsapp_enabled: false,
+      whatsapp_message: "",
+    },
+  });
 
   useEffect(() => {
     getKnowledgeBases().then(setKnowledgeBases).catch(() => {});
@@ -77,72 +87,76 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
 
   useEffect(() => {
     if (editingAgent) {
-      setForm({
+      reset({
         name: editingAgent.name,
         description: editingAgent.description || "",
         system_prompt: editingAgent.system_prompt,
-        pipeline_mode: editingAgent.pipeline_mode,
-        llm_model: editingAgent.llm_model,
         voice_id: editingAgent.voice_id || "Aoede",
-        is_personal: editingAgent.is_personal ?? false,
-        config: {
-          // Preserve any existing config keys (e.g. tools) on edit
-          ...(editingAgent.config || {}),
-          backchannel_enabled: editingAgent.config?.backchannel_enabled ?? true,
-          emotional_intelligence: editingAgent.config?.emotional_intelligence ?? true,
-          predictive_engine: editingAgent.config?.predictive_engine ?? true,
-          memory_graph: editingAgent.config?.memory_graph ?? true,
-          accent: editingAgent.config?.accent ?? "",
-          speech_pace: editingAgent.config?.speech_pace ?? "natural",
-          languages: editingAgent.config?.languages ?? ["English"],
-          knowledge_base_ids: editingAgent.config?.knowledge_base_ids ?? [],
-          variables: editingAgent.config?.variables ?? [],
-          whatsapp_enabled: editingAgent.config?.whatsapp_enabled ?? false,
-          whatsapp_message: editingAgent.config?.whatsapp_message ?? "",
-        },
+        accent: editingAgent.config?.accent ?? "",
+        speech_pace: editingAgent.config?.speech_pace ?? "natural",
+        languages: editingAgent.config?.languages ?? ["English"],
+        knowledge_base_ids: editingAgent.config?.knowledge_base_ids ?? [],
+        whatsapp_enabled: editingAgent.config?.whatsapp_enabled ?? false,
+        whatsapp_message: editingAgent.config?.whatsapp_message ?? "",
       });
+      setIsPersonal(editingAgent.is_personal ?? false);
+      setVariables(editingAgent.config?.variables ?? []);
     } else {
-      setForm(DEFAULT_FORM);
+      reset();
+      setIsPersonal(false);
+      setVariables([]);
     }
     setTab("basics");
   }, [editingAgent]);
 
-  const variables: { name: string; value: string }[] = (form.config as any).variables ?? [];
-  const setVariables = (next: { name: string; value: string }[]) =>
-    setForm(f => ({ ...f, config: { ...f.config, variables: next } }));
+  const handleTabChange = (id: (typeof TABS)[number]["id"]) => {
+    trigger(TAB_FIELDS[tab] as any);
+    setTab(id);
+  };
+
   const addVariable = () => setVariables([...variables, { name: "", value: "" }]);
   const updateVariable = (i: number, key: "name" | "value", val: string) =>
     setVariables(variables.map((v, idx) => (idx === i ? { ...v, [key]: val } : v)));
   const removeVariable = (i: number) => setVariables(variables.filter((_, idx) => idx !== i));
 
-  const selectedKbs: string[] = (form.config as any).knowledge_base_ids ?? [];
+  const selectedKbs = watch("knowledge_base_ids") ?? [];
   const toggleKb = (id: string) => {
-    setForm(f => {
-      const cur: string[] = (f.config as any).knowledge_base_ids ?? [];
-      const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
-      return { ...f, config: { ...f.config, knowledge_base_ids: next } };
-    });
+    const cur = getValues("knowledge_base_ids") ?? [];
+    const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
+    setValue("knowledge_base_ids", next, { shouldValidate: true });
   };
 
-  const handleSave = async () => {
-    if (!form.name) {
-      setTab("basics");
-      toast.error("Name is required");
-      return;
-    }
-    if (!form.system_prompt) {
-      setTab("prompt");
-      toast.error("System prompt is required");
-      return;
-    }
+  const onSave = handleSubmit(async (data) => {
     setLoading(true);
     try {
+      const payload = {
+        name: data.name,
+        description: data.description,
+        system_prompt: data.system_prompt,
+        pipeline_mode: "native",
+        llm_model: "Tierce Voice Engine",
+        voice_id: data.voice_id,
+        is_personal: isPersonal,
+        config: {
+          backchannel_enabled: true,
+          emotional_intelligence: true,
+          predictive_engine: true,
+          memory_graph: true,
+          accent: data.accent,
+          speech_pace: data.speech_pace,
+          languages: data.languages,
+          knowledge_base_ids: data.knowledge_base_ids,
+          variables,
+          whatsapp_enabled: data.whatsapp_enabled,
+          whatsapp_message: data.whatsapp_message,
+        },
+      };
       if (editingAgent) {
-        const updated = await updateAgent(editingAgent.id, form);
+        const updated = await updateAgent(editingAgent.id, payload);
         toast.success("Agent updated!");
         onSaved(updated, true);
       } else {
-        const created = await createAgent(form);
+        const created = await createAgent(payload);
         toast.success("Agent created!");
         onSaved(created, false);
       }
@@ -152,11 +166,46 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
     } finally {
       setLoading(false);
     }
-  };
+  }, (errs) => {
+    for (const t of TABS) {
+      if (TAB_FIELDS[t.id].some(f => errs[f])) {
+        setTab(t.id);
+        return;
+      }
+    }
+  });
+
+  const onKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+    if (e.key === "Tab" && dialogRef.current) {
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }, [onClose]);
+
+  useEffect(() => {
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onKeyDown]);
+
+  useEffect(() => {
+    if (dialogRef.current) {
+      const first = dialogRef.current.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    }
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 sm:p-4 animate-fade-in">
-      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-modal w-full sm:max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col animate-scale-in">
+      <div ref={dialogRef} className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-modal w-full sm:max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col animate-scale-in">
         {/* Header */}
         <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between flex-shrink-0">
           <h2 className="text-[15px] font-semibold text-neutral-900">
@@ -166,7 +215,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
             onClick={onClose}
             className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="icon-sm" />
           </button>
         </div>
 
@@ -181,14 +230,14 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setTab(t.id)}
+                  onClick={() => handleTabChange(t.id)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-colors ${
                     active
                       ? "bg-brand-50 text-brand-700"
                       : "text-neutral-500 hover:text-neutral-800 hover:bg-neutral-50"
                   }`}
                 >
-                  <Icon className={`w-4 h-4 flex-shrink-0 ${active ? "text-brand-500" : "text-neutral-400"}`} />
+                  <Icon className={`icon-sm flex-shrink-0 ${active ? "text-brand-500" : "text-neutral-400"}`} />
                   {t.label}
                 </button>
               );
@@ -200,35 +249,32 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
             {/* ── Basics ─────────────────────────────────────────────── */}
             {tab === "basics" && (
               <div className="space-y-4">
-                <Field label="Name" required>
-                  <input
-                    className="input-base"
-                    placeholder="e.g. Sales Agent"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  />
-                </Field>
+                <InputField
+                  label="Name"
+                  required
+                  registration={register("name")}
+                  error={errors.name}
+                  placeholder="e.g. Sales Agent"
+                />
 
-                <Field label="Description">
-                  <input
-                    className="input-base"
-                    placeholder="Optional description"
-                    value={form.description}
-                    onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  />
-                </Field>
+                <InputField
+                  label="Description"
+                  registration={register("description")}
+                  error={errors.description}
+                  placeholder="Optional description"
+                />
 
                 {!editingAgent && (
-                  <label className="flex items-start gap-3 cursor-pointer p-3.5 rounded-xl border border-neutral-200 hover:border-amber-300 hover:bg-amber-50/40 transition-all duration-150">
+                  <label className="flex items-start gap-3 cursor-pointer p-3.5 rounded-xl border border-neutral-200 hover:border-warning-300 hover:bg-warning-50/40 transition-all duration-150">
                     <input
                       type="checkbox"
-                      className="mt-0.5 w-4 h-4 accent-amber-500 rounded"
-                      checked={form.is_personal}
-                      onChange={e => setForm(f => ({ ...f, is_personal: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 accent-warning-500 rounded"
+                      checked={isPersonal}
+                      onChange={e => setIsPersonal(e.target.checked)}
                     />
                     <div>
                       <p className="text-sm font-medium text-neutral-900 flex items-center gap-1.5">
-                        <Lock className="w-3.5 h-3.5 text-amber-500" /> Personal agent
+                        <Lock className="icon-xs text-warning-500" /> Personal agent
                       </p>
                       <p className="text-xs text-neutral-500 mt-0.5">Only you can see this agent — team members won&apos;t see it.</p>
                     </div>
@@ -240,16 +286,16 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
             {/* ── Prompt ─────────────────────────────────────────────── */}
             {tab === "prompt" && (
               <div className="space-y-4">
-                <Field label="System Prompt" required>
-                  <textarea
-                    className="input-base min-h-[160px] resize-none"
-                    placeholder="You are a helpful sales agent... e.g. Hi [Customer Name], this is [Agent Name] from [Company Name]."
-                    value={form.system_prompt}
-                    onChange={e => setForm(f => ({ ...f, system_prompt: e.target.value }))}
-                  />
-                </Field>
+                <InputField
+                  label="System Prompt"
+                  required
+                  registration={register("system_prompt")}
+                  error={errors.system_prompt}
+                  placeholder="You are a helpful sales agent... e.g. Hi [Customer Name], this is [Agent Name] from [Company Name]."
+                  rows={6}
+                />
 
-                <Field label="Prompt Variables">
+                <FormField label="Prompt Variables">
                   <p className="text-xs text-neutral-500 -mt-0.5 mb-1">
                     Use <code className="px-1 bg-neutral-100 rounded">[Placeholder]</code> in the prompt, then set its value here.
                     <span className="text-neutral-400"> <code className="px-1 bg-neutral-100 rounded">[Customer Name]</code> is filled automatically from the uploaded lead sheet.</span>
@@ -273,7 +319,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                         <button
                           type="button"
                           onClick={() => removeVariable(i)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-colors shrink-0"
                           title="Remove"
                         >
                           ✕
@@ -288,24 +334,20 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                       + Add variable
                     </button>
                   </div>
-                </Field>
+                </FormField>
               </div>
             )}
 
             {/* ── Voice & Speech ─────────────────────────────────────── */}
             {tab === "voice" && (
               <div className="space-y-4">
-                <Field label="Voice">
-                  <VoicePicker value={form.voice_id} onChange={v => setForm(f => ({ ...f, voice_id: v }))} />
-                </Field>
+                <FormField label="Voice" error={errors.voice_id} required>
+                  <VoicePicker value={watch("voice_id")} onChange={v => setValue("voice_id", v, { shouldValidate: true })} />
+                </FormField>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <Field label="Accent">
-                    <select
-                      className="input-base"
-                      value={(form.config as any).accent || ""}
-                      onChange={e => setForm(f => ({ ...f, config: { ...f.config, accent: e.target.value } }))}
-                    >
+                  <FormField label="Accent" error={errors.accent}>
+                    <select {...register("accent")} className="input-base">
                       <option value="">Default (Neutral)</option>
                       <optgroup label="South Asian">
                         <option value="Indian English">Indian English</option>
@@ -329,27 +371,26 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                         <option value="South African English">South African English</option>
                       </optgroup>
                     </select>
-                  </Field>
-                  <Field label="Speech Pace">
-                    <select
-                      className="input-base"
-                      value={(form.config as any).speech_pace || "natural"}
-                      onChange={e => setForm(f => ({ ...f, config: { ...f.config, speech_pace: e.target.value } }))}
-                    >
-                      <option value="natural">Natural</option>
-                      <option value="slowly and clearly">Slow & Clear</option>
-                      <option value="at a moderate pace">Moderate</option>
-                      <option value="at a brisk, confident pace">Brisk & Confident</option>
-                    </select>
-                  </Field>
+                  </FormField>
+                  <SelectField
+                    label="Speech Pace"
+                    registration={register("speech_pace")}
+                    error={errors.speech_pace}
+                    options={[
+                      { value: "natural", label: "Natural" },
+                      { value: "slowly and clearly", label: "Slow & Clear" },
+                      { value: "at a moderate pace", label: "Moderate" },
+                      { value: "at a brisk, confident pace", label: "Brisk & Confident" },
+                    ]}
+                  />
                 </div>
 
-                <Field label="Languages">
+                <FormField label="Languages" error={errors.languages as FieldError | undefined} required>
                   <LanguagePicker
-                    value={(form.config as any).languages ?? ["English"]}
-                    onChange={langs => setForm(f => ({ ...f, config: { ...f.config, languages: langs } }))}
+                    value={watch("languages")}
+                    onChange={langs => setValue("languages", langs, { shouldValidate: true })}
                   />
-                </Field>
+                </FormField>
               </div>
             )}
 
@@ -358,7 +399,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="label-base mb-0 flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-brand-500" /> Knowledge Base
+                    <BookOpen className="icon-xs text-brand-500" /> Knowledge Base
                   </p>
                   <Link href="/knowledge" className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors">
                     Manage
@@ -398,6 +439,9 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                     })}
                   </div>
                 )}
+                {errors.knowledge_base_ids && (
+                  <p className="text-xs text-error-600 flex items-center gap-1">{errors.knowledge_base_ids.message || errors.knowledge_base_ids.root?.message}</p>
+                )}
               </div>
             )}
 
@@ -408,8 +452,8 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                   <input
                     type="checkbox"
                     className="w-4 h-4 accent-brand-500 rounded"
-                    checked={(form.config as any).whatsapp_enabled ?? false}
-                    onChange={e => setForm(f => ({ ...f, config: { ...f.config, whatsapp_enabled: e.target.checked } }))}
+                    checked={watch("whatsapp_enabled")}
+                    onChange={e => setValue("whatsapp_enabled", e.target.checked, { shouldValidate: true })}
                   />
                   <span className="label-base mb-0">WhatsApp follow-up</span>
                 </label>
@@ -418,13 +462,13 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                   Requires WhatsApp to be connected in <span className="font-medium">Settings → WhatsApp</span>.
                 </p>
 
-                {(form.config as any).whatsapp_enabled && (
+                {watch("whatsapp_enabled") && (
                   <div className="space-y-2 pl-6">
                     <select
                       defaultValue=""
                       onChange={e => {
                         const t = WHATSAPP_TEMPLATES.find(t => t.label === e.target.value);
-                        if (t) setForm(f => ({ ...f, config: { ...f.config, whatsapp_message: t.text } }));
+                        if (t) setValue("whatsapp_message", t.text, { shouldValidate: true });
                       }}
                       className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:border-brand-500"
                     >
@@ -432,15 +476,17 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
                       {WHATSAPP_TEMPLATES.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
                     </select>
                     <textarea
+                      {...register("whatsapp_message")}
                       rows={4}
-                      value={(form.config as any).whatsapp_message ?? ""}
-                      onChange={e => setForm(f => ({ ...f, config: { ...f.config, whatsapp_message: e.target.value } }))}
                       placeholder="Hi [Customer Name]! Thanks for calling. Here are the details you asked for…"
                       className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 resize-none"
                     />
                     <p className="text-xs text-neutral-400">
                       Variables like <span className="font-mono">[Customer Name]</span> are filled in per call.
                     </p>
+                    {errors.whatsapp_message && (
+                      <p className="text-xs text-error-600 flex items-center gap-1">{errors.whatsapp_message.message}</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -457,7 +503,7 @@ export function AgentFormModal({ editingAgent, onClose, onSaved }: AgentFormModa
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={onSave}
             disabled={loading}
             className="h-9 px-5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50"
           >

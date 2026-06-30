@@ -3,12 +3,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  Bot, Phone, BarChart3, Settings, Zap,
+  Bot, Phone, BarChart3, Settings,
   CalendarClock, Hash, CreditCard, Webhook,
   ShieldCheck, Code2, ChevronLeft, ChevronRight, LayoutDashboard, X, BookOpen,
-  LayoutTemplate, FileCheck, Wallet, AlertTriangle,
+  LayoutTemplate, FileCheck, Wallet, AlertTriangle, FileText,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 
 const NAV_GROUPS = [
   {
@@ -35,6 +36,7 @@ const NAV_GROUPS = [
       { href: "/compliance",  icon: ShieldCheck, label: "Compliance" },
       { href: "/webhooks",    icon: Webhook,    label: "Webhooks"    },
       { href: "/developers",  icon: Code2,      label: "Developers"  },
+      { href: "/docs",        icon: FileText,   label: "Docs"        },
       { href: "/billing",     icon: CreditCard, label: "Billing"     },
       { href: "/settings",    icon: Settings,   label: "Settings"    },
     ],
@@ -100,14 +102,14 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
   const creditsRemainingPct = Math.max(0, 100 - creditsUsed);
   const creditsCritical = creditsRemainingPct <= 10;   // ≤10% left → red
   const creditsWarn = creditsRemainingPct <= 30;        // ≤30% left → amber (incl. critical)
-  const creditsColor = creditsCritical ? "bg-red-500" : creditsWarn ? "bg-amber-500" : "bg-brand-500";
-  const creditsTextColor = creditsCritical ? "text-red-600" : creditsWarn ? "text-amber-700" : "text-neutral-700";
+  const creditsColor = creditsCritical ? "bg-error-500" : creditsWarn ? "bg-warning-500" : "bg-brand-500";
+  const creditsTextColor = creditsCritical ? "text-error-600" : creditsWarn ? "text-warning-700" : "text-neutral-700";
   const creditsBox = creditsCritical
-    ? "bg-red-50 border-red-200 hover:bg-red-100"
+    ? "bg-error-50 border-error-200 hover:bg-error-100"
     : creditsWarn
-      ? "bg-amber-50 border-amber-200 hover:bg-amber-100"
+      ? "bg-warning-50 border-warning-200 hover:bg-warning-100"
       : "bg-neutral-50 border-neutral-200 hover:bg-neutral-100";
-  const creditsLabelColor = creditsCritical ? "text-red-700" : creditsWarn ? "text-amber-700" : "text-neutral-600";
+  const creditsLabelColor = creditsCritical ? "text-error-700" : creditsWarn ? "text-warning-700" : "text-neutral-600";
 
   const sidebarContent = (isMobile = false) => (
     <>
@@ -116,7 +118,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
         !isMobile && collapsed ? "justify-center px-0" : "px-5 gap-3"
       }`}>
         <div className="w-8 h-8 bg-brand-500 rounded-[10px] flex items-center justify-center shadow-brand flex-shrink-0">
-          <Zap className="w-4 h-4 text-white" />
+          <VaaniqWave className="icon-sm text-white" />
         </div>
         {(isMobile || !collapsed) && (
           <div className="min-w-0 flex-1 animate-fade-in">
@@ -130,7 +132,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
             onClick={onMobileClose}
             className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors ml-auto flex-shrink-0"
           >
-            <X className="w-4 h-4" />
+            <X className="icon-sm" />
           </button>
         )}
       </div>
@@ -164,7 +166,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                     {active && (isMobile || !collapsed) && (
                       <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-brand-500 rounded-full" />
                     )}
-                    <Icon className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${
+                    <Icon className={`icon-md flex-shrink-0 transition-colors ${
                       active ? "text-brand-500" : "text-neutral-400 group-hover:text-neutral-600"
                     }`} />
                     {(isMobile || !collapsed) && <span className="truncate">{label}</span>}
@@ -191,7 +193,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
             <Link href="/billing" className={`group block rounded-lg px-2.5 py-2 mb-1 border transition-colors ${creditsBox}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className={`flex items-center gap-1.5 text-[12px] font-medium ${creditsLabelColor}`}>
-                  <CreditCard className="w-3.5 h-3.5" /> Call Credits
+                  <CreditCard className="icon-xs" /> Call Credits
                 </span>
                 <span className={`text-[13px] font-semibold ${creditsTextColor}`}>{creditsUsed}% used</span>
               </div>
@@ -200,7 +202,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
               </div>
               <p className={`text-[11px] mt-1 flex items-center gap-1 ${creditsWarn ? creditsTextColor : "text-neutral-400"}`}>
                 {creditsWarn
-                  ? <><AlertTriangle className="w-3 h-3" /> {billing!.creditsBalance.toFixed(0)} min left — tap to top up</>
+                  ? <><AlertTriangle className="icon-xs" /> {billing!.creditsBalance.toFixed(0)} min left — tap to top up</>
                   : `${billing!.creditsBalance.toFixed(0)} min left`}
               </p>
             </Link>
@@ -210,8 +212,8 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
               title={`Call credits: ${creditsUsed}% used · ${billing!.creditsBalance.toFixed(0)} min left`}
               className={`group relative flex items-center justify-center h-9 w-9 mx-auto rounded-lg border transition-colors mb-1 ${creditsBox}`}
             >
-              <CreditCard className={`w-4 h-4 ${creditsWarn ? creditsTextColor : "text-neutral-500"}`} />
-              {creditsWarn && <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-white ${creditsCritical ? "bg-red-500" : "bg-amber-500"}`} />}
+              <CreditCard className={`icon-sm ${creditsWarn ? creditsTextColor : "text-neutral-500"}`} />
+              {creditsWarn && <span className={`absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-white ${creditsCritical ? "bg-error-500" : "bg-warning-500"}`} />}
               <span className="pointer-events-none absolute left-full ml-2.5 px-2 py-1 bg-neutral-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
                 Credits {creditsUsed}% used · {billing!.creditsBalance.toFixed(0)} min{creditsWarn ? " · top up" : ""}
               </span>
@@ -225,21 +227,21 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
               href="/phone-numbers"
               className={`group block rounded-lg px-2.5 py-2 mb-1 border transition-colors ${
                 walletLow
-                  ? "bg-amber-50 border-amber-200 hover:bg-amber-100"
+                  ? "bg-warning-50 border-warning-200 hover:bg-warning-100"
                   : "bg-neutral-50 border-neutral-200 hover:bg-neutral-100"
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className={`flex items-center gap-1.5 text-[12px] font-medium ${walletLow ? "text-amber-700" : "text-neutral-600"}`}>
+                <span className={`flex items-center gap-1.5 text-[12px] font-medium ${walletLow ? "text-warning-700" : "text-neutral-600"}`}>
                   <Wallet className="w-3.5 h-3.5" /> Number Wallet
                 </span>
-                <span className={`text-[13px] font-semibold ${walletLow ? "text-amber-700" : "text-neutral-800"}`}>
+                <span className={`text-[13px] font-semibold ${walletLow ? "text-warning-700" : "text-neutral-800"}`}>
                   ₹{billing!.walletBalance.toFixed(0)}
                 </span>
               </div>
-              <p className={`text-[11px] mt-0.5 flex items-center gap-1 ${walletLow ? "text-amber-600" : "text-neutral-400"}`}>
+              <p className={`text-[11px] mt-0.5 flex items-center gap-1 ${walletLow ? "text-warning-600" : "text-neutral-400"}`}>
                 {walletLow
-                  ? <><AlertTriangle className="w-3 h-3" /> Low balance — tap to top up</>
+                  ? <><AlertTriangle className="icon-xs" /> Low balance — tap to top up</>
                   : `≈ ${walletMonths} renewal${walletMonths === 1 ? "" : "s"} left`}
               </p>
             </Link>
@@ -248,11 +250,11 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
               href="/phone-numbers"
               title={`Number wallet: ₹${billing!.walletBalance.toFixed(0)}${walletLow ? " (low)" : ""}`}
               className={`group relative flex items-center justify-center h-9 w-9 mx-auto rounded-lg border transition-colors mb-1 ${
-                walletLow ? "bg-amber-50 border-amber-200" : "bg-neutral-50 border-neutral-200 hover:bg-neutral-100"
+                walletLow ? "bg-warning-50 border-warning-200" : "bg-neutral-50 border-neutral-200 hover:bg-neutral-100"
               }`}
             >
-              <Wallet className={`w-4 h-4 ${walletLow ? "text-amber-600" : "text-neutral-500"}`} />
-              {walletLow && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white" />}
+              <Wallet className={`icon-sm ${walletLow ? "text-warning-600" : "text-neutral-500"}`} />
+              {walletLow && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-warning-500 ring-2 ring-white" />}
               <span className="pointer-events-none absolute left-full ml-2.5 px-2 py-1 bg-neutral-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
                 Wallet ₹{billing!.walletBalance.toFixed(0)}{walletLow ? " · low" : ""}
               </span>
@@ -267,7 +269,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
               !isMobile && collapsed ? "justify-center h-9 w-9 mx-auto" : "px-2.5 py-2"
             }`}
           >
-            <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+            <ShieldCheck className="icon-sm flex-shrink-0" />
             {(isMobile || !collapsed) && "Super Admin"}
             {!isMobile && collapsed && (
               <span className="pointer-events-none absolute left-full ml-2.5 px-2 py-1 bg-neutral-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
@@ -284,15 +286,15 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
               !isMobile && collapsed ? "justify-center h-9 w-9 mx-auto" : "px-2.5 py-2"
             }`}
           >
-            <FileCheck className="w-4 h-4 flex-shrink-0" />
+            <FileCheck className="icon-sm flex-shrink-0" />
             {(isMobile || !collapsed) && <span className="flex-1">KYC Review</span>}
             {(isMobile || !collapsed) && kycPending > 0 && (
-              <span className="text-[10px] font-bold min-w-[18px] text-center px-1.5 py-0.5 rounded-full bg-red-500 text-white">
+              <span className="text-[10px] font-bold min-w-[18px] text-center px-1.5 py-0.5 rounded-full bg-error-500 text-white">
                 {kycPending}
               </span>
             )}
             {!isMobile && collapsed && kycPending > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-error-500 ring-2 ring-white" />
             )}
             {!isMobile && collapsed && (
               <span className="pointer-events-none absolute left-full ml-2.5 px-2 py-1 bg-neutral-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
@@ -346,9 +348,9 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
           className="absolute -right-3 top-[52px] w-6 h-6 bg-white border border-neutral-200 rounded-full flex items-center justify-center shadow-sm hover:bg-neutral-50 hover:border-neutral-300 hover:shadow-md transition-all duration-150 z-10"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed
-            ? <ChevronRight className="w-3 h-3 text-neutral-500" />
-            : <ChevronLeft  className="w-3 h-3 text-neutral-500" />}
+            {collapsed
+              ? <ChevronRight className="icon-xs text-neutral-500" />
+              : <ChevronLeft  className="icon-xs text-neutral-500" />}
         </button>
       </aside>
     </>

@@ -5,17 +5,26 @@ import { getAgents, deleteAgent } from "@/lib/api";
 import toast from "react-hot-toast";
 import { AgentCard } from "@/components/agents/AgentCard";
 import { AgentFormModal } from "@/components/agents/AgentFormModal";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingAgent, setEditingAgent] = useState<any | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; id?: string}>({open: false});
 
   const loadAgents = () => {
     getAgents().then(setAgents).catch(() => {});
   };
 
   useEffect(() => { loadAgents(); }, []);
+
+  // Deep-link from the command palette: /agents?new=1 opens the create form.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new")) {
+      setEditingAgent(null); setShowForm(true);
+    }
+  }, []);
 
   const openCreate = () => { setEditingAgent(null); setShowForm(true); };
   const openEdit   = (agent: any) => { setEditingAgent(agent); setShowForm(true); };
@@ -27,13 +36,18 @@ export default function AgentsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this agent? This cannot be undone.")) return;
+    setConfirmDelete({open: true, id});
+  };
+
+  const doDelete = async () => {
     try {
-      await deleteAgent(id);
-      setAgents(a => a.filter(x => x.id !== id));
+      await deleteAgent(confirmDelete.id!);
+      setAgents(a => a.filter(x => x.id !== confirmDelete.id));
       toast.success("Agent deleted");
     } catch {
       toast.error("Failed to delete agent");
+    } finally {
+      setConfirmDelete({open: false});
     }
   };
 
@@ -89,7 +103,7 @@ export default function AgentsPage() {
           {personal.length > 0 && (
             <div className="space-y-2.5">
               <div className="flex items-center gap-2 px-0.5 mb-3">
-                <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <Lock className="w-3.5 h-3.5 text-warning-500 shrink-0" />
                 <span className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">Personal</span>
                 <span className="text-xs text-neutral-400 truncate">· only visible to you</span>
               </div>
@@ -108,6 +122,13 @@ export default function AgentsPage() {
           onSaved={handleSaved}
         />
       )}
+      <ConfirmModal
+        open={confirmDelete.open}
+        title="Delete Agent"
+        message="Delete this agent? This cannot be undone."
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDelete({open: false})}
+      />
     </div>
   );
 }

@@ -75,12 +75,12 @@ function fmtDateTime(iso?: string | null) {
 }
 
 const STATUS_MAP: Record<string, { label: string; dot: string; text: string; bg: string; pulse?: boolean }> = {
-  completed:    { label: "Completed",   dot: "bg-emerald-400",              text: "text-emerald-700", bg: "bg-emerald-50"  },
+  completed:    { label: "Completed",   dot: "bg-success-400",              text: "text-success-700", bg: "bg-success-50"  },
   in_progress:  { label: "Live",        dot: "bg-brand-400 animate-pulse",  text: "text-brand-700",   bg: "bg-brand-50",    pulse: true },
-  ringing:      { label: "Ringing",     dot: "bg-amber-400 animate-pulse",  text: "text-amber-700",   bg: "bg-amber-50",    pulse: true },
-  initiated:    { label: "Initiated",   dot: "bg-amber-400",                text: "text-amber-700",   bg: "bg-amber-50"    },
+  ringing:      { label: "Ringing",     dot: "bg-warning-400 animate-pulse",  text: "text-warning-700",   bg: "bg-warning-50",    pulse: true },
+  initiated:    { label: "Initiated",   dot: "bg-warning-400",                text: "text-warning-700",   bg: "bg-warning-50"    },
   not_answered: { label: "No Answer",   dot: "bg-neutral-400",              text: "text-neutral-600", bg: "bg-neutral-100" },
-  failed:       { label: "Failed",      dot: "bg-red-400",                  text: "text-red-700",     bg: "bg-red-50"      },
+  failed:       { label: "Failed",      dot: "bg-error-400",                  text: "text-error-700",     bg: "bg-error-50"      },
   voicemail:    { label: "Voicemail",   dot: "bg-orange-400",               text: "text-orange-700",  bg: "bg-orange-50"   },
   cancelled:    { label: "Cancelled",   dot: "bg-neutral-400",              text: "text-neutral-600", bg: "bg-neutral-100" },
 };
@@ -96,10 +96,10 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 const INTEREST_COLOR: Record<string, string> = {
-  high: "text-green-600",
-  medium: "text-amber-600",
+  high: "text-success-600",
+  medium: "text-warning-600",
   low: "text-orange-600",
-  not_interested: "text-red-600",
+  not_interested: "text-error-600",
 };
 
 // ── Audio player with VBR duration fix ───────────────────────────────────────
@@ -300,11 +300,16 @@ export default function CallsPage() {
     getCalls().then(setCalls).catch((e: unknown) => { console.error("getCalls failed:", e); });
     getAgents().then(setAgents).catch(() => {});
     getBillingBalance().then((b: any) => setPlan(b?.plan ?? "")).catch(() => {});
+    // Deep-link from the command palette: /calls?dial=1 opens the dial modal.
+    if (new URLSearchParams(window.location.search).get("dial")) setShowDial(true);
   }, []);
 
   // Auto-refresh calls list: every 5s when there's a live call, every 10s otherwise
   useEffect(() => {
-    const refresh = () => getCalls().then(setCalls).catch(() => {});
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      getCalls().then(setCalls).catch(() => {});
+    };
     const hasLive = calls.some((c: any) =>
       c.status === "in_progress" || c.status === "ringing" || c.status === "initiated"
     );
@@ -318,6 +323,7 @@ export default function CallsPage() {
     const liveStatuses = new Set(["in_progress", "ringing", "initiated"]);
     if (!liveStatuses.has(detail.call.status)) return;
     const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       getCallDetail(detail.call.id)
         .then(setDetail)
         .catch(() => {});
@@ -482,10 +488,10 @@ export default function CallsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
           <KpiCard icon={<Phone className="w-4 h-4" />} label="Total Calls" value={String(total)}
             onClick={resetFilters} active={!filtersActive} />
-          <KpiCard icon={<CheckCircle2 className="w-4 h-4" />} label="Answered" value={`${answeredPct}%`} sub={`${completedCount} of ${total}`} accent="text-emerald-600"
+          <KpiCard icon={<CheckCircle2 className="w-4 h-4" />} label="Answered" value={`${answeredPct}%`} sub={`${completedCount} of ${total}`} accent="text-success-600"
             onClick={() => setStatusFilter(s => s === "completed" ? "all" : "completed")} active={statusFilter === "completed"} />
           <KpiCard icon={<Clock className="w-4 h-4" />} label="Avg Duration" value={fmtDuration(avgDur)} />
-          <KpiCard icon={<DollarSign className="w-4 h-4" />} label="Total Cost" value={`$${totalCost.toFixed(2)}`} accent="text-amber-600" />
+          <KpiCard icon={<DollarSign className="w-4 h-4" />} label="Total Cost" value={`$${totalCost.toFixed(2)}`} accent="text-warning-600" />
           <KpiCard icon={<Activity className="w-4 h-4" />} label="Live Now" value={String(liveCount)} accent={liveCount ? "text-brand-600" : undefined} pulse={liveCount > 0}
             onClick={() => setStatusFilter(s => s === "live" ? "all" : "live")} active={statusFilter === "live"} />
         </div>
@@ -564,11 +570,11 @@ export default function CallsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        call.direction === "outbound" ? "bg-brand-500/15" : "bg-green-500/15"
+                        call.direction === "outbound" ? "bg-brand-500/15" : "bg-success-500/15"
                       }`}>
                         {call.direction === "outbound"
                           ? <ArrowUpRight className="w-3.5 h-3.5 text-brand-400" />
-                          : <ArrowDownLeft className="w-3.5 h-3.5 text-green-400" />}
+                          : <ArrowDownLeft className="w-3.5 h-3.5 text-success-400" />}
                       </div>
                       <div className="min-w-0">
                         {call.extra_data?.caller_name ? (
@@ -669,7 +675,7 @@ export default function CallsPage() {
                         <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
                           detail.call.direction === "outbound"
                             ? "bg-brand-500/10 text-brand-400"
-                            : "bg-green-500/10 text-green-400"
+                            : "bg-success-500/10 text-success-400"
                         }`}>
                           {detail.call.direction === "outbound" ? "↑ Outbound" : "↓ Inbound"}
                         </span>
@@ -690,7 +696,7 @@ export default function CallsPage() {
                     {["initiated", "ringing", "in_progress"].includes(detail.call.status) && (
                       <button
                         onClick={() => handleHangup(detail.call.id)}
-                        className="flex items-center justify-center sm:justify-start gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap"
+                        className="flex items-center justify-center sm:justify-start gap-1.5 bg-error-600 hover:bg-error-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap"
                       >
                         <PhoneOff className="w-3.5 h-3.5" /> Hang Up
                       </button>
@@ -713,15 +719,15 @@ export default function CallsPage() {
                       : "—"}
                     valueClass={
                       detail.call.sentiment_score == null ? "text-neutral-400" :
-                      detail.call.sentiment_score >= 7 ? "text-green-400" :
-                      detail.call.sentiment_score >= 4 ? "text-yellow-400" : "text-red-400"
+                      detail.call.sentiment_score >= 7 ? "text-success-400" :
+                      detail.call.sentiment_score >= 4 ? "text-yellow-400" : "text-error-400"
                     }
                   />
                   <StatChip
                     icon={<DollarSign className="w-3 h-3" />}
                     label="Cost"
                     value={detail.call.cost_usd != null ? `$${detail.call.cost_usd.toFixed(4)}` : "—"}
-                    valueClass={detail.call.cost_usd != null ? "text-amber-600" : "text-neutral-400"}
+                    valueClass={detail.call.cost_usd != null ? "text-warning-600" : "text-neutral-400"}
                   />
                   <StatChip
                     icon={<Repeat className="w-3 h-3" />}
@@ -732,7 +738,7 @@ export default function CallsPage() {
                     icon={<Calendar className="w-3 h-3" />}
                     label="Appointment"
                     value={detail.call.extra_data?.appointment_booked ? "Booked" : "No"}
-                    valueClass={detail.call.extra_data?.appointment_booked ? "text-green-600" : "text-neutral-400"}
+                    valueClass={detail.call.extra_data?.appointment_booked ? "text-success-600" : "text-neutral-400"}
                   />
                 </div>
               </div>
@@ -769,9 +775,9 @@ export default function CallsPage() {
 
                     {/* Appointment */}
                     {detail.call.extra_data?.appointment_booked && (
-                      <Section icon={<Calendar className="w-4 h-4 text-green-400" />} title="Appointment Booked">
+                      <Section icon={<Calendar className="w-4 h-4 text-success-400" />} title="Appointment Booked">
                         <div className="flex items-start gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                          <CheckCircle2 className="w-4 h-4 text-success-400 flex-shrink-0 mt-0.5" />
                           <p className="text-xs sm:text-sm text-neutral-900 font-medium break-words">
                             {detail.call.extra_data.appointment_datetime
                               ? fmtDateTime(detail.call.extra_data.appointment_datetime)
@@ -793,13 +799,13 @@ export default function CallsPage() {
                         <InfoRow
                           label="Ended by"
                           value={detail.call.extra_data?.ended_by === "caller" ? "Caller" : detail.call.extra_data?.ended_by === "agent" ? "Agent" : "—"}
-                          valueClass={detail.call.extra_data?.ended_by === "caller" ? "text-orange-600" : detail.call.extra_data?.ended_by === "agent" ? "text-blue-600" : "text-neutral-400"}
+                          valueClass={detail.call.extra_data?.ended_by === "caller" ? "text-orange-600" : detail.call.extra_data?.ended_by === "agent" ? "text-info-600" : "text-neutral-400"}
                         />
                       </div>
                     </Section>
 
                     {/* Caller profile */}
-                    <Section icon={<User className="w-4 h-4 text-blue-400" />} title="Caller Profile">
+                    <Section icon={<User className="w-4 h-4 text-info-400" />} title="Caller Profile">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-2">
                         <InfoRow label="Name" value={detail.contact?.name || detail.call.extra_data?.caller_name || "—"} />
                         <InfoRow label="Phone" value={detail.contact?.phone_number || detail.call.phone_number} mono />
@@ -823,7 +829,7 @@ export default function CallsPage() {
                               <div className="flex items-center gap-2 min-w-0">
                                 {h.direction === "outbound"
                                   ? <ArrowUpRight className="w-3 h-3 text-brand-400 flex-shrink-0" />
-                                  : <ArrowDownLeft className="w-3 h-3 text-green-400 flex-shrink-0" />}
+                                  : <ArrowDownLeft className="w-3 h-3 text-success-400 flex-shrink-0" />}
                                 <span className="text-xs text-neutral-500 truncate">{fmtDate(h.created_at)}</span>
                               </div>
                               <div className="flex items-center gap-2 sm:gap-3">
@@ -858,17 +864,17 @@ export default function CallsPage() {
                     )}
 
                     {/* Appointment */}
-                    <Section icon={<Calendar className="w-4 h-4 text-green-400" />} title="Appointment">
+                    <Section icon={<Calendar className="w-4 h-4 text-success-400" />} title="Appointment">
                       <div className="flex items-start gap-3">
                         {detail.call.extra_data?.appointment_booked
-                          ? <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                          ? <CheckCircle2 className="w-5 h-5 text-success-400 flex-shrink-0" />
                           : <XCircle className="w-5 h-5 text-neutral-500 flex-shrink-0" />}
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-neutral-900 break-words">
                             {detail.call.extra_data?.appointment_booked ? "Appointment booked" : "No appointment booked"}
                           </p>
                           {detail.call.extra_data?.appointment_datetime && (
-                            <p className="text-xs text-green-400 mt-0.5 break-words">
+                            <p className="text-xs text-success-400 mt-0.5 break-words">
                               {fmtDateTime(detail.call.extra_data.appointment_datetime)}
                             </p>
                           )}
@@ -877,7 +883,7 @@ export default function CallsPage() {
                     </Section>
 
                     {/* Caller info extracted */}
-                    <Section icon={<User className="w-4 h-4 text-blue-400" />} title="Extracted Caller Info">
+                    <Section icon={<User className="w-4 h-4 text-info-400" />} title="Extracted Caller Info">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-2">
                         <InfoRow label="Name" value={detail.call.extra_data?.caller_name || "—"} />
                         <InfoRow
@@ -900,13 +906,13 @@ export default function CallsPage() {
                               <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                                 <span className="text-xs text-neutral-500">Overall positivity</span>
                                 <span className={`text-sm font-bold ${
-                                  pct >= 70 ? "text-green-400" : pct >= 40 ? "text-yellow-400" : "text-red-400"
+                                  pct >= 70 ? "text-success-400" : pct >= 40 ? "text-yellow-400" : "text-error-400"
                                 }`}>{sentimentLabel(detail.call.sentiment_score)} · {pct}%</span>
                               </div>
                               <div className="h-1.5 bg-neutral-200 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full ${
-                                    pct >= 70 ? "bg-green-500" : pct >= 40 ? "bg-yellow-500" : "bg-red-500"
+                                    pct >= 70 ? "bg-success-500" : pct >= 40 ? "bg-yellow-500" : "bg-error-500"
                                   }`}
                                   style={{ width: `${pct}%` }}
                                 />
@@ -1018,7 +1024,7 @@ export default function CallsPage() {
               <button onClick={() => setShowDial(false)} className="px-4 py-2 text-sm text-neutral-500 hover:text-neutral-900">Cancel</button>
               <button
                 onClick={handleDial}
-                className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                className="px-5 py-2 bg-success-600 hover:bg-success-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
               >
                 <PhoneCall className="w-4 h-4" /> Call
               </button>
@@ -1077,7 +1083,7 @@ function KpiCard({ icon, label, value, sub, accent, pulse, onClick, active }: {
 
 function SentimentDot({ score }: { score: number }) {
   const label = score >= 7 ? "Positive" : score >= 4 ? "Neutral" : "Negative";
-  const color = score >= 7 ? "bg-emerald-400" : score >= 4 ? "bg-amber-400" : "bg-red-400";
+  const color = score >= 7 ? "bg-success-400" : score >= 4 ? "bg-warning-400" : "bg-error-400";
   return (
     <span title={`Sentiment: ${label} · ${(score * 10).toFixed(0)}%`} className={`w-2 h-2 rounded-full flex-shrink-0 ${color}`} />
   );
@@ -1134,10 +1140,11 @@ function BulkCallModal({ agents, plan, onClose, onLaunched }: {
   const [parsing, setParsing] = useState(false);
   const [fileName, setFileName] = useState("");
   const [consent, setConsent] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFile = async (fileOrEvent: File | React.ChangeEvent<HTMLInputElement>) => {
+    const file = fileOrEvent instanceof File ? fileOrEvent : fileOrEvent.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
     setParsing(true);
@@ -1155,6 +1162,14 @@ function BulkCallModal({ agents, plan, onClose, onLaunched }: {
     const parsed = parseTextNumbers(pasteText);
     setContacts(parsed);
     if (parsed.length === 0) toast.error("No valid phone numbers found");
+  };
+
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragOver(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
   };
 
   const overFreeLimit = isFree && contacts.length > FREE_PLAN_BULK_LIMIT;
@@ -1227,12 +1242,18 @@ function BulkCallModal({ agents, plan, onClose, onLaunched }: {
           {tab === "file" && (
             <div>
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleFile} />
-              <button onClick={() => fileRef.current?.click()}
-                className="w-full border-2 border-dashed border-neutral-300 hover:border-brand-500 rounded-xl p-8 text-center transition-colors group">
-                <FileSpreadsheet className="w-10 h-10 text-neutral-400 group-hover:text-brand-400 mx-auto mb-2 transition-colors" />
-                <p className="text-sm text-neutral-700">{fileName ? fileName : "Click to upload CSV or Excel file"}</p>
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileRef.current?.click()}
+                className={`w-full border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+                  dragOver ? "border-brand-500 bg-brand-50" : "border-neutral-300 hover:border-brand-500"
+                }`}>
+                <FileSpreadsheet className="w-10 h-10 text-neutral-400 mx-auto mb-2 transition-colors" />
+                <p className="text-sm text-neutral-700">{fileName ? fileName : "Click or drag a CSV or Excel file"}</p>
                 <p className="text-xs text-neutral-500 mt-1">Any layout works — we auto-detect phone numbers (name, company, email picked up if present)</p>
-              </button>
+              </div>
               {parsing && <p className="text-sm text-neutral-500 text-center mt-2">Parsing file...</p>}
             </div>
           )}
@@ -1285,7 +1306,7 @@ function BulkCallModal({ agents, plan, onClose, onLaunched }: {
 
           {/* Free-plan bulk limit hint */}
           {isFree && (
-            <div className={`rounded-xl p-3 text-xs leading-relaxed border ${overFreeLimit ? "bg-red-50 border-red-200 text-red-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}>
+            <div className={`rounded-xl p-3 text-xs leading-relaxed border ${overFreeLimit ? "bg-error-50 border-red-200 text-error-700" : "bg-info-50 border-blue-200 text-info-700"}`}>
               {overFreeLimit
                 ? <>Your free plan allows up to <span className="font-semibold">{FREE_PLAN_BULK_LIMIT} contacts</span> per campaign — you loaded {contacts.length}. <a href="/billing" className="font-semibold underline">Upgrade</a> to call more.</>
                 : <>Free plan: up to <span className="font-semibold">{FREE_PLAN_BULK_LIMIT} contacts</span> per bulk campaign. <a href="/billing" className="font-semibold underline">Upgrade</a> for unlimited.</>}
@@ -1293,14 +1314,14 @@ function BulkCallModal({ agents, plan, onClose, onLaunched }: {
           )}
 
           {/* Consent attestation — required before launching a campaign */}
-          <label className="flex items-start gap-2.5 cursor-pointer bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <label className="flex items-start gap-2.5 cursor-pointer bg-warning-50 border border-amber-200 rounded-xl p-3">
             <input
               type="checkbox"
               className="mt-0.5 w-4 h-4 accent-amber-600 rounded"
               checked={consent}
               onChange={e => setConsent(e.target.checked)}
             />
-            <span className="text-xs text-amber-800 leading-relaxed">
+            <span className="text-xs text-warning-800 leading-relaxed">
               I confirm I have <span className="font-semibold">consent or an existing business relationship</span> to call
               these contacts, and that this campaign complies with TRAI/DLT and applicable telecom regulations.
               Numbers on your Do-Not-Call list are skipped automatically.
@@ -1313,7 +1334,7 @@ function BulkCallModal({ agents, plan, onClose, onLaunched }: {
           <button
             onClick={handleStart}
             disabled={loading || contacts.length === 0 || !agentId || !consent || overFreeLimit}
-            className="px-5 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+            className="px-5 py-2 bg-success-600 hover:bg-success-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-2"
           >
             <Users className="w-4 h-4" />
             {loading ? "Starting..." : `Call ${contacts.length || ""} Contacts`}

@@ -81,25 +81,25 @@ export default function CompliancePage() {
     <div className="space-y-6 max-w-4xl">
       {/* Health banner */}
       {stats?.blocked_from_campaigns ? (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <ShieldAlert className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-          <div className="text-sm text-red-700">
+        <div className="flex items-start gap-3 bg-error-50 border border-error-200 rounded-xl px-4 py-3">
+          <ShieldAlert className="w-5 h-5 text-error-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-error-700">
             <p className="font-semibold">Campaigns paused</p>
             <p className="text-xs mt-0.5">Your opt-out rate ({stats.opt_out_rate}%) is above the safety limit. Clean your lists, then campaigns resume automatically.</p>
           </div>
         </div>
       ) : stats?.flagged ? (
-        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-700">
+        <div className="flex items-start gap-3 bg-warning-50 border border-amber-200 rounded-xl px-4 py-3">
+          <AlertTriangle className="w-5 h-5 text-warning-500 shrink-0 mt-0.5" />
+          <div className="text-sm text-warning-700">
             <p className="font-semibold">Heads up — call health is slipping</p>
             <p className="text-xs mt-0.5">Higher-than-usual opt-outs or very short calls. Review your targeting and scripts.</p>
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-          <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-          <p className="text-sm text-emerald-700 font-medium">Call health looks good.</p>
+        <div className="flex items-center gap-3 bg-success-50 border border-emerald-200 rounded-xl px-4 py-3">
+          <ShieldCheck className="w-5 h-5 text-success-600 shrink-0" />
+          <p className="text-sm text-success-700 font-medium">Call health looks good.</p>
         </div>
       )}
 
@@ -107,9 +107,9 @@ export default function CompliancePage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={<Activity className="w-4 h-4" />} label="Calls (30d)" value={String(stats?.total_calls ?? 0)} />
         <StatCard icon={<TrendingDown className="w-4 h-4" />} label="Opt-out rate" value={`${stats?.opt_out_rate ?? 0}%`}
-          accent={(stats?.opt_out_rate ?? 0) >= 5 ? "text-red-600" : "text-neutral-900"} sub={`${stats?.opt_outs ?? 0} opted out`} />
+          accent={(stats?.opt_out_rate ?? 0) >= 5 ? "text-error-600" : "text-neutral-900"} sub={`${stats?.opt_outs ?? 0} opted out`} />
         <StatCard icon={<PhoneOff className="w-4 h-4" />} label="Short calls" value={`${stats?.short_call_rate ?? 0}%`}
-          accent={(stats?.short_call_rate ?? 0) >= 40 ? "text-amber-600" : "text-neutral-900"} sub="hung up < 10s" />
+          accent={(stats?.short_call_rate ?? 0) >= 40 ? "text-warning-600" : "text-neutral-900"} sub="hung up < 10s" />
         <StatCard icon={<ShieldCheck className="w-4 h-4" />} label="On DNC list" value={String(stats?.dnc_count ?? 0)} />
       </div>
 
@@ -195,7 +195,7 @@ export default function CompliancePage() {
                   </p>
                 </div>
                 <button onClick={() => handleRemoveDnc(r.id)}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0">
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-colors shrink-0">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

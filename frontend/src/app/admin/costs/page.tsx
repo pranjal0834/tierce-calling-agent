@@ -42,13 +42,13 @@ export default function AdminCostsPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-            <KpiStat label="Total AI Cost" value={`$${costs.total_cost_usd.toFixed(2)}`} icon={DollarSign} tint="bg-amber-50 text-amber-600" sub={`${costs.total_calls} calls · ${costs.total_minutes} min`} />
+            <KpiStat label="Total AI Cost" value={`$${costs.total_cost_usd.toFixed(2)}`} icon={DollarSign} tint="bg-warning-50 text-warning-600" sub={`${costs.total_calls} calls · ${costs.total_minutes} min`} />
             <KpiStat label="Realtime Audio" value={`$${costs.realtime_cost_usd.toFixed(2)}`} icon={Phone} tint="bg-brand-50 text-brand-600" sub={costs.total_cost_usd > 0 ? `${Math.round(costs.realtime_cost_usd / costs.total_cost_usd * 100)}% of cost` : "—"} />
             <KpiStat label="Auxiliary AI" value={`$${costs.auxiliary_cost_usd.toFixed(2)}`} icon={Zap} tint="bg-purple-50 text-purple-600" sub={costs.total_cost_usd > 0 ? `${Math.round(costs.auxiliary_cost_usd / costs.total_cost_usd * 100)}% of cost` : "—"} />
             <KpiStat label="KB Ingestion" value={`$${(costs.kb_ingestion_usd ?? 0).toFixed(4)}`} icon={Database} tint="bg-teal-50 text-teal-600" sub="one-time doc embedding" />
             <KpiStat label="Cost / Min" value={`$${costs.avg_cost_per_min_usd.toFixed(4)}`} icon={Activity} tint="bg-cyan-50 text-cyan-600" />
             <KpiStat label="Cost / Call" value={`$${costs.avg_cost_per_call_usd.toFixed(4)}`} icon={TrendingUp} tint="bg-pink-50 text-pink-600" />
-            <KpiStat label="Gross Margin" value={`$${costs.gross_margin_usd.toFixed(2)}`} icon={DollarSign} tint={costs.gross_margin_usd >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"} sub={`rev ≈ $${costs.revenue_usd.toFixed(2)}`} />
+            <KpiStat label="Gross Margin" value={`$${costs.gross_margin_usd.toFixed(2)}`} icon={DollarSign} tint={costs.gross_margin_usd >= 0 ? "bg-success-50 text-success-600" : "bg-error-50 text-error-600"} sub={`rev ≈ $${costs.revenue_usd.toFixed(2)}`} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -170,14 +170,14 @@ function CostEstimator({ usdToInr }: { usdToInr: number }) {
           <p className="text-[11px] text-neutral-500">Cost / call</p>
           <p className="text-lg font-semibold text-neutral-900">₹{costPerCallInr.toFixed(2)}</p>
         </div>
-        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
-          <p className="text-[11px] text-amber-600">Total AI cost</p>
-          <p className="text-lg font-semibold text-amber-700">{inr(totalCostInr)}</p>
-          <p className="text-[10px] text-amber-600/80 mt-0.5">+18% GST → {inr(totalWithGstInr)}</p>
+        <div className="rounded-lg bg-warning-50 border border-amber-200 p-3">
+          <p className="text-[11px] text-warning-600">Total AI cost</p>
+          <p className="text-lg font-semibold text-warning-700">{inr(totalCostInr)}</p>
+          <p className="text-[10px] text-warning-600/80 mt-0.5">+18% GST → {inr(totalWithGstInr)}</p>
         </div>
-        <div className={`rounded-lg border p-3 ${marginInr >= 0 ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
-          <p className={`text-[11px] ${marginInr >= 0 ? "text-emerald-600" : "text-red-600"}`}>Gross margin</p>
-          <p className={`text-lg font-semibold ${marginInr >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+        <div className={`rounded-lg border p-3 ${marginInr >= 0 ? "bg-success-50 border-emerald-200" : "bg-error-50 border-red-200"}`}>
+          <p className={`text-[11px] ${marginInr >= 0 ? "text-success-600" : "text-error-600"}`}>Gross margin</p>
+          <p className={`text-lg font-semibold ${marginInr >= 0 ? "text-success-700" : "text-error-700"}`}>
             {inr(marginInr)} <span className="text-xs font-normal">({Math.round(marginPct)}%)</span>
           </p>
         </div>

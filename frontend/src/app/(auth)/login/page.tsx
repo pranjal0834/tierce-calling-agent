@@ -2,11 +2,22 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Zap } from "lucide-react";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 import toast from "react-hot-toast";
 import { setToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 import PasswordInput from "@/components/ui/PasswordInput";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { InputField } from "@/components/ui/FormField";
+
+const schema = z.object({
+  email: z.string().min(1, "Email is required").email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+type FormValues = z.infer<typeof schema>;
 
 function OAuthErrorToast() {
   const params = useSearchParams();
@@ -28,18 +39,15 @@ const GoogleIcon = () => (
 );
 
 export default function LoginPage() {
-  const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.email || !form.password) {
-      toast.error("Email and password are required");
-      return;
-    }
+  const onSubmit = async (data: FormValues) => {
     setLoading(true);
     try {
-      const res = await api.post("/auth/login", form);
+      const res = await api.post("/auth/login", data);
       setToken(res.data.access_token);
       try {
         const me = await api.get<{ is_superadmin?: boolean }>("/auth/me");
@@ -64,7 +72,7 @@ export default function LoginPage() {
       {/* Logo mark */}
       <div className="flex items-center gap-2.5 justify-center mb-8">
         <div className="w-9 h-9 bg-brand-500 rounded-[11px] flex items-center justify-center shadow-brand">
-          <Zap className="w-4.5 h-4.5 text-white" />
+          <VaaniqWave className="icon-md text-white" />
         </div>
         <span className="text-2xl font-semibold tracking-tight text-neutral-900">Vaaniq</span>
       </div>
@@ -91,25 +99,22 @@ export default function LoginPage() {
           <div className="flex-1 h-px bg-neutral-100" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label-base">Email</label>
-            <input
-              type="email"
-              autoComplete="email"
-              className="input-base"
-              placeholder="you@company.com"
-              value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            />
-          </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <InputField
+            label="Email"
+            registration={register("email")}
+            error={errors.email}
+            type="email"
+            placeholder="you@company.com"
+          />
           <div>
             <label className="label-base">Password</label>
             <PasswordInput
               autoComplete="current-password"
-              value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              value={watch("password")}
+              onChange={e => setValue("password", e.target.value)}
             />
+            {errors.password && <p className="text-xs text-error-600 mt-1">{errors.password.message}</p>}
             <div className="flex justify-end mt-1.5">
               <Link href="/forgot-password" className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors">
                 Forgot password?

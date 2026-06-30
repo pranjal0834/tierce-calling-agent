@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Phone, Trash2, RefreshCw, CheckCircle, X, Bot, Mic, MessageSquare, AlertTriangle, Clock } from "lucide-react";
 import toast from "react-hot-toast";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   updateNumberRouting,
   updateNumberAutoRenew,
@@ -64,6 +65,7 @@ export default function NumberRow({
   const [autoRenew, setAutoRenew] = useState(number.auto_renew ?? true);
   const [togglingRenew, setTogglingRenew] = useState(false);
   const [renewing, setRenewing] = useState(false);
+  const [confirmReleaseModal, setConfirmReleaseModal] = useState(false);
 
   const suspended = !!number.is_suspended;
   const daysLeft = number.days_until_renewal;
@@ -147,11 +149,8 @@ export default function NumberRow({
 
   const providerLabel = number.provider === "plivo" ? "Plivo" : "Twilio";
 
-  function confirmRelease() {
-    if (!confirm(
-      `Release ${number.phone_number}?\n\n` +
-      `This removes it from your ${providerLabel} account immediately and stops all future charges.`
-    )) return;
+  function doRelease() {
+    setConfirmReleaseModal(false);
     onRelease(number.id);
   }
 
@@ -160,7 +159,7 @@ export default function NumberRow({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 sm:gap-4 min-w-0">
           <div className="w-10 h-10 bg-brand-500/10 border border-brand-500/25 rounded-xl flex items-center justify-center shrink-0">
-            <Phone className="w-5 h-5 text-brand-500" />
+            <Phone className="icon-lg text-brand-500" />
           </div>
           <div className="min-w-0">
             <p className="text-sm sm:text-base font-semibold text-neutral-900 font-mono tracking-wide break-all">{number.phone_number}</p>
@@ -170,17 +169,17 @@ export default function NumberRow({
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <CapBadge label="Voice" enabled={number.capabilities?.voice} icon={Mic} />
               <CapBadge label="SMS" enabled={number.capabilities?.sms} icon={MessageSquare} />
-              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-medium">
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success-50 text-success-600 border border-success-200 font-medium">
                 ₹{number.monthly_cost_inr}/month
               </span>
               <span className="text-xs text-neutral-400 capitalize">{providerLabel}</span>
               {suspended ? (
-                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 font-medium">
-                  <AlertTriangle className="w-3 h-3" /> Blocked
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-error-50 text-error-600 border border-error-200 font-medium">
+                  <AlertTriangle className="icon-xs" /> Blocked
                 </span>
               ) : dueSoon ? (
-                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium">
-                  <Clock className="w-3 h-3" /> Renews in {daysLeft! <= 0 ? "today" : `${daysLeft}d`}
+                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-warning-50 text-warning-700 border border-warning-200 font-medium">
+                  <Clock className="icon-xs" /> Renews in {daysLeft! <= 0 ? "today" : `${daysLeft}d`}
                 </span>
               ) : null}
             </div>
@@ -188,20 +187,20 @@ export default function NumberRow({
         </div>
 
         <button
-          onClick={confirmRelease}
-          className="p-2 text-neutral-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+          onClick={() => setConfirmReleaseModal(true)}
+          className="p-2 text-neutral-400 hover:text-error-500 hover:bg-error-50 rounded-lg transition-colors shrink-0"
           title="Release number"
         >
-          <Trash2 className="w-4 h-4" />
+          <Trash2 className="icon-sm" />
         </button>
       </div>
 
       {/* Renewal call-to-action — blocked or due soon */}
       {(suspended || dueSoon) && (
         <div className={`mt-3 rounded-xl border px-3 py-2.5 flex items-center justify-between gap-3 ${
-          suspended ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
+          suspended ? "bg-error-50 border-error-200" : "bg-warning-50 border-warning-200"
         }`}>
-          <p className={`text-xs ${suspended ? "text-red-700" : "text-amber-800"}`}>
+          <p className={`text-xs ${suspended ? "text-error-700" : "text-warning-800"}`}>
             {suspended
               ? "Rental expired — this number can't make or receive calls until renewed."
               : `Renews on ${renewalDateStr ?? "soon"} — renew now to avoid any interruption.`}
@@ -210,10 +209,10 @@ export default function NumberRow({
             onClick={renew}
             disabled={renewing}
             className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-50 ${
-              suspended ? "bg-red-500 hover:bg-red-600" : "bg-amber-500 hover:bg-amber-600"
+              suspended ? "bg-error-500 hover:bg-error-600" : "bg-warning-500 hover:bg-warning-600"
             }`}
           >
-            {renewing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+            {renewing ? <RefreshCw className="icon-xs animate-spin" /> : null}
             {suspended ? "Renew & reactivate" : "Renew now"} · ₹{number.monthly_cost_inr}
           </button>
         </div>
@@ -223,7 +222,7 @@ export default function NumberRow({
       <div className="mt-4 pt-4 border-t border-neutral-200">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-sm min-w-0">
-            <Bot className="w-4 h-4 text-neutral-400 shrink-0" />
+            <Bot className="icon-sm text-neutral-400 shrink-0" />
             {editing ? (
               <div className="flex items-center gap-2 flex-wrap">
                 <select
@@ -239,14 +238,14 @@ export default function NumberRow({
                   disabled={saving}
                   className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
                 >
-                  {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  {saving ? <RefreshCw className="icon-xs animate-spin" /> : <CheckCircle className="icon-xs" />}
                   Save
                 </button>
                 <button
                   onClick={() => { setEditing(false); setAgentId(number.agent_id || ""); }}
                   className="text-neutral-400 hover:text-neutral-900 transition-colors"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="icon-xs" />
                 </button>
               </div>
             ) : (
@@ -294,6 +293,13 @@ export default function NumberRow({
         Purchased {new Date(number.purchased_at + "Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         &nbsp;·&nbsp;{number.twilio_sid}
       </p>
+      <ConfirmModal
+        open={confirmReleaseModal}
+        title="Release Number"
+        message={`Release ${number.phone_number}? This removes it from your ${providerLabel} account immediately and stops all future charges.`}
+        onConfirm={doRelease}
+        onCancel={() => setConfirmReleaseModal(false)}
+      />
     </div>
   );
 }

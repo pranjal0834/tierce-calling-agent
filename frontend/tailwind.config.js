@@ -1,7 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
-  darkMode: "class",
   theme: {
     extend: {
       colors: {
@@ -28,6 +27,12 @@ module.exports = {
         },
         secondary: { 500: "#2BA7A9", 600: "#0B8A8F" },
         accent:    { 500: "#F4B63D", 600: "#D97706" },
+
+        // ── Semantic status tokens (use these instead of ad-hoc red/emerald/amber) ──
+        success: { 50: "#ECFDF5", 100: "#D1FAE5", 200: "#A7F3D0", 500: "#10B981", 600: "#059669", 700: "#047857" },
+        error:   { 50: "#FEF2F2", 100: "#FEE2E2", 200: "#FECACA", 500: "#EF4444", 600: "#DC2626", 700: "#B91C1C" },
+        warning: { 50: "#FFFBEB", 100: "#FEF3C7", 200: "#FDE68A", 500: "#F59E0B", 600: "#D97706", 700: "#B45309" },
+        info:    { 50: "#EFF6FF", 100: "#DBEAFE", 200: "#BFDBFE", 500: "#3B82F6", 600: "#2563EB", 700: "#1D4ED8" },
         neutral: {
           50:  "#FAFAF9",
           100: "#F5F5F4",
@@ -108,5 +113,17 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Icon size scale — `icon-xs/sm/md/lg/xl` set both width + height so icon
+    // sizing stays consistent everywhere (replaces ad-hoc w-3.5 / w-[18px] / w-5).
+    function ({ addUtilities }) {
+      addUtilities({
+        ".icon-xs": { width: "0.875rem", height: "0.875rem" }, // 14px
+        ".icon-sm": { width: "1rem",     height: "1rem" },     // 16px
+        ".icon-md": { width: "1.125rem", height: "1.125rem" }, // 18px
+        ".icon-lg": { width: "1.25rem",  height: "1.25rem" },  // 20px
+        ".icon-xl": { width: "1.5rem",   height: "1.5rem" },   // 24px
+      });
+    },
+  ],
 };

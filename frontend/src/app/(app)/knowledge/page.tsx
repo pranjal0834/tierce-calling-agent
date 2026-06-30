@@ -5,6 +5,7 @@ import {
   ChevronLeft, CheckCircle2, AlertCircle, X, Loader2, Eye, User as UserIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   getKnowledgeBases, createKnowledgeBase, getKnowledgeBase, deleteKnowledgeBase,
   addKbTextDoc, addKbUrlDoc, uploadKbPdf, deleteKbDoc, getKbDocContent,
@@ -22,17 +23,17 @@ interface KbDoc {
 }
 
 const SOURCE_META: Record<string, { icon: any; label: string; color: string; bg: string }> = {
-  pdf:  { icon: FileText, label: "PDF",     color: "text-red-600",     bg: "bg-red-50" },
-  url:  { icon: Globe,    label: "Website", color: "text-blue-600",    bg: "bg-blue-50" },
+  pdf:  { icon: FileText, label: "PDF",     color: "text-error-600",     bg: "bg-error-50" },
+  url:  { icon: Globe,    label: "Website", color: "text-info-600",    bg: "bg-info-50" },
   text: { icon: Type,     label: "Text",    color: "text-violet-600",  bg: "bg-violet-50" },
 };
 
 function StatusPill({ status }: { status: KbDoc["status"] }) {
   if (status === "ready")
-    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3 h-3" /> Ready</span>;
+    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-success-50 text-success-700 border border-success-200"><CheckCircle2 className="w-3 h-3" /> Ready</span>;
   if (status === "failed")
-    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200"><AlertCircle className="w-3 h-3" /> Failed</span>;
-  return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200"><Loader2 className="w-3 h-3 animate-spin" /> Processing</span>;
+    return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-error-50 text-error-700 border border-error-200"><AlertCircle className="w-3 h-3" /> Failed</span>;
+  return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-warning-50 text-warning-700 border border-warning-200"><Loader2 className="w-3 h-3 animate-spin" /> Processing</span>;
 }
 
 export default function KnowledgePage() {
@@ -43,6 +44,8 @@ export default function KnowledgePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<KbDoc | null>(null);
+  const [confirmDeleteKb, setConfirmDeleteKb] = useState<{open: boolean; item?: KB}>({open: false});
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<{open: boolean; item?: KbDoc}>({open: false});
 
   const loadKbs = () => getKnowledgeBases().then(setKbs).catch(() => {}).finally(() => setLoading(false));
   useEffect(() => { loadKbs(); }, []);
@@ -74,23 +77,35 @@ export default function KnowledgePage() {
   }, [selected, docs]);
 
   const handleDeleteKb = async (kb: KB) => {
-    if (!confirm(`Delete "${kb.name}" and all its documents? This cannot be undone.`)) return;
+    setConfirmDeleteKb({open: true, item: kb});
+  };
+
+  const doDeleteKb = async () => {
+    const kb = confirmDeleteKb.item;
+    if (!kb) return;
     try {
       await deleteKnowledgeBase(kb.id);
       setKbs(prev => prev.filter(k => k.id !== kb.id));
       if (selected?.id === kb.id) { setSelected(null); setDocs([]); }
       toast.success("Knowledge base deleted");
     } catch { toast.error("Failed to delete"); }
+    finally { setConfirmDeleteKb({open: false}); }
   };
 
   const handleDeleteDoc = async (doc: KbDoc) => {
     if (!selected) return;
-    if (!confirm(`Remove "${doc.title}" from this knowledge base?`)) return;
+    setConfirmDeleteDoc({open: true, item: doc});
+  };
+
+  const doDeleteDoc = async () => {
+    const doc = confirmDeleteDoc.item;
+    if (!selected || !doc) return;
     try {
       await deleteKbDoc(selected.id, doc.id);
       setDocs(prev => prev.filter(d => d.id !== doc.id));
       toast.success("Document removed");
     } catch { toast.error("Failed to remove document"); }
+    finally { setConfirmDeleteDoc({open: false}); }
   };
 
   return (
@@ -143,7 +158,7 @@ export default function KnowledgePage() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteKb(kb); }}
-                    className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                    className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-all"
                     title="Delete"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -153,7 +168,7 @@ export default function KnowledgePage() {
                 {kb.description && <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{kb.description}</p>}
                 <div className="flex items-center gap-3 mt-3 text-xs text-neutral-400">
                   <span>{kb.document_count} doc{kb.document_count !== 1 ? "s" : ""}</span>
-                  {kb.ready_count > 0 && <span className="text-emerald-600">{kb.ready_count} ready</span>}
+                  {kb.ready_count > 0 && <span className="text-success-600">{kb.ready_count} ready</span>}
                 </div>
               </div>
             ))}
@@ -220,7 +235,7 @@ export default function KnowledgePage() {
                               </span>
                             )}
                             {doc.status === "failed" && doc.error_message && (
-                              <span className="text-[10px] text-red-500 truncate max-w-[200px]" title={doc.error_message}>{doc.error_message}</span>
+                              <span className="text-[10px] text-error-500 truncate max-w-[200px]" title={doc.error_message}>{doc.error_message}</span>
                             )}
                           </div>
                         </div>
@@ -237,7 +252,7 @@ export default function KnowledgePage() {
                         )}
                         <button
                           onClick={() => handleDeleteDoc(doc)}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-colors"
                           title="Remove"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -272,6 +287,20 @@ export default function KnowledgePage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+      <ConfirmModal
+        open={confirmDeleteKb.open}
+        title="Delete Knowledge Base"
+        message={confirmDeleteKb.item ? `Delete "${confirmDeleteKb.item.name}" and all its documents? This cannot be undone.` : ""}
+        onConfirm={doDeleteKb}
+        onCancel={() => setConfirmDeleteKb({open: false})}
+      />
+      <ConfirmModal
+        open={confirmDeleteDoc.open}
+        title="Remove Document"
+        message={confirmDeleteDoc.item ? `Remove "${confirmDeleteDoc.item.title}" from this knowledge base?` : ""}
+        onConfirm={doDeleteDoc}
+        onCancel={() => setConfirmDeleteDoc({open: false})}
+      />
     </div>
   );
 }

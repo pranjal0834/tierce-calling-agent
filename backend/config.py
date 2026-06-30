@@ -70,6 +70,8 @@ _DEFAULTS = {
     "GEMINI_TEXT_OUT_COST_PER_M":  2.26,
     # India GST applied by Google on top of the API cost (for the true credit-deducted total).
     "GST_PCT": 18.0,
+    # Terms of Service — bump this version to force all users to re-accept after an update.
+    "TERMS_VERSION": "1.0",
     # Gemini tokenizes audio at ~25 tokens/sec — used to estimate cost (the 1.0.0
     # Live API gives no usage_metadata, so we meter audio seconds and estimate).
     "GEMINI_AUDIO_TOKENS_PER_SEC": 25,

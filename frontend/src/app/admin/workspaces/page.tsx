@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import toast from "react-hot-toast";
-import { adminGet, WsRow, WorkspaceRow, PageHeading, LoadingBlock } from "@/components/admin/ui";
+import { adminGet, WsRow, WorkspaceRow, PageHeading, LoadingBlock, ExportButton } from "@/components/admin/ui";
 
 export default function AdminWorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<WsRow[]>([]);
@@ -30,9 +30,12 @@ export default function AdminWorkspacesPage() {
         title="Workspaces"
         subtitle="Every tenant — adjust credits, enable/disable, inspect members & billing"
         action={
-          <button onClick={load} className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </button>
+          <div className="flex gap-2">
+            <ExportButton rows={workspaces as unknown as Record<string, unknown>[]} filename="workspaces" />
+            <button onClick={load} className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
+          </div>
         }
       />
 

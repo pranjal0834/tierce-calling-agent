@@ -86,7 +86,7 @@ export default function NumberWalletCard() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 bg-brand-500/10 border border-brand-500/25 rounded-xl flex items-center justify-center shrink-0">
-            <Wallet className="w-5 h-5 text-brand-500" />
+            <Wallet className="icon-lg text-brand-500" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-neutral-900">Number Wallet</p>
@@ -108,7 +108,7 @@ export default function NumberWalletCard() {
             onClick={() => setOpen(o => !o)}
             className="inline-flex items-center gap-1.5 h-9 px-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg shadow-xs transition-colors"
           >
-            <Plus className="w-4 h-4" /> Top up
+            <Plus className="icon-sm" /> Top up
           </button>
         </div>
       </div>
@@ -117,7 +117,7 @@ export default function NumberWalletCard() {
         <div className="mt-4 pt-4 border-t border-neutral-200">
           <div className="flex items-center justify-between mb-2.5">
             <p className="text-xs font-medium text-neutral-600">Choose an amount to add (paid via Razorpay)</p>
-            <button onClick={() => setOpen(false)} className="text-neutral-400 hover:text-neutral-700"><X className="w-4 h-4" /></button>
+            <button onClick={() => setOpen(false)} className="text-neutral-400 hover:text-neutral-700"><X className="icon-sm" /></button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {PRESETS.map(amt => (
@@ -127,7 +127,7 @@ export default function NumberWalletCard() {
                 disabled={busy != null}
                 className="inline-flex items-center justify-center gap-1.5 h-10 rounded-lg border border-neutral-200 hover:border-brand-300 hover:bg-brand-50 text-sm font-semibold text-neutral-800 transition-colors disabled:opacity-50"
               >
-                {busy === amt ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                {busy === amt ? <RefreshCw className="icon-xs animate-spin" /> : null}
                 ₹{amt}
                 <span className="text-[11px] font-normal text-neutral-400">· {Math.floor(amt / price)}mo</span>
               </button>

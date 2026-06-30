@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, Zap, ShieldCheck, RefreshCw } from "lucide-react";
+import { Menu, ShieldCheck, RefreshCw } from "lucide-react";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 import { getToken, clearToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 
@@ -85,7 +86,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-brand-500 rounded-lg flex items-center justify-center shadow-brand">
-              <Zap className="w-3.5 h-3.5 text-white" />
+              <VaaniqWave className="icon-xs text-white" />
             </div>
             <span className="font-semibold text-[15px] text-neutral-900 tracking-tight">Vaaniq</span>
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-600"><ShieldCheck className="w-3 h-3" /> Admin</span>

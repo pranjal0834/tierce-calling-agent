@@ -104,9 +104,9 @@ function shortDay(iso: string) {
 }
 
 function sentimentLabel(s: number) {
-  if (s >= 0.6) return { text: "Positive", color: "text-green-400" };
+  if (s >= 0.6) return { text: "Positive", color: "text-success-400" };
   if (s >= 0.3) return { text: "Neutral",  color: "text-yellow-400" };
-  return { text: "Negative", color: "text-red-400" };
+  return { text: "Negative", color: "text-error-400" };
 }
 
 function exportCSV(data: DayPoint[], filename: string) {
@@ -338,9 +338,9 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
     <div className="space-y-6">
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <KpiCard label="Total Calls"   value={data.total_calls}                     sub={period}                          icon={Phone}      color="text-blue-400"   />
+        <KpiCard label="Total Calls"   value={data.total_calls}                     sub={period}                          icon={Phone}      color="text-info-400"   />
         <KpiCard label="Active Agents" value={data.active_agents}                   sub="in workspace"                    icon={Bot}        color="text-brand-400" />
-        <KpiCard label="Avg Duration"  value={`${data.avg_duration_s.toFixed(0)}s`} sub={`${(data.avg_duration_s/60).toFixed(1)} min`} icon={Clock} color="text-green-400" />
+        <KpiCard label="Avg Duration"  value={`${data.avg_duration_s.toFixed(0)}s`} sub={`${(data.avg_duration_s/60).toFixed(1)} min`} icon={Clock} color="text-success-400" />
         <KpiCard label="Avg Sentiment" value={`${(data.avg_sentiment_score * 100).toFixed(0)}%`} sub={sl.text} icon={TrendingUp} color={sl.color} />
       </div>
 
@@ -591,14 +591,14 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
             </ResponsiveContainer>
             <div className="flex-1 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-green-500 shrink-0" />
+                <div className="w-3 h-3 rounded-full bg-success-500 shrink-0" />
                 <div className="flex-1">
                   <div className="flex items-baseline justify-between">
                     <p className="text-sm text-neutral-900">Resolved in 1 call</p>
                     <p className="text-lg font-bold text-neutral-900">{data.first_call_resolution.single_call_contacts}</p>
                   </div>
                   <div className="h-1.5 bg-neutral-200 rounded-full mt-1 overflow-hidden">
-                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${data.first_call_resolution.rate * 100}%` }} />
+                    <div className="h-full bg-success-500 rounded-full" style={{ width: `${data.first_call_resolution.rate * 100}%` }} />
                   </div>
                 </div>
               </div>
@@ -680,8 +680,8 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <KpiCard label="Total Calls"    value={data.total_calls}                              sub={period}                    icon={Phone}      color="text-blue-400"   />
-            <KpiCard label="Avg Duration"   value={`${data.avg_duration_s.toFixed(0)}s`}           sub={`${(data.avg_duration_s/60).toFixed(1)} min`} icon={Clock} color="text-green-400"  />
+            <KpiCard label="Total Calls"    value={data.total_calls}                              sub={period}                    icon={Phone}      color="text-info-400"   />
+            <KpiCard label="Avg Duration"   value={`${data.avg_duration_s.toFixed(0)}s`}           sub={`${(data.avg_duration_s/60).toFixed(1)} min`} icon={Clock} color="text-success-400"  />
             <KpiCard label="Quality Score"  value={`${data.avg_eval_score.toFixed(1)}/10`}         sub="auto-evaluated"            icon={Target}     color="text-yellow-400" />
             <KpiCard label="Avg Sentiment"  value={`${(data.avg_sentiment_score*100).toFixed(0)}%`} sub={sentimentLabel(data.avg_sentiment_score).text} icon={TrendingUp} color={sentimentLabel(data.avg_sentiment_score).color} />
             <KpiCard label="Cache Hit Rate" value={`${(data.cache_hit_rate*100).toFixed(1)}%`}     sub="prediction cache"          icon={Zap}        color="text-purple-400" />
@@ -729,11 +729,11 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
             <h3 className="text-sm font-semibold text-neutral-900 mb-4">Self-Improving Feedback Loop</h3>
             <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
               {[
-                { label: "Live Calls",      desc: `${data.total_calls} total`,                    color: "bg-blue-50 text-blue-700 border-blue-200"     },
+                { label: "Live Calls",      desc: `${data.total_calls} total`,                    color: "bg-info-50 text-info-700 border-blue-200"     },
                 { label: "Auto Evaluation", desc: `${data.avg_eval_score.toFixed(1)}/10 avg`,      color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
                 { label: "Failure Mining",  desc: "Low-score turns",                              color: "bg-orange-50 text-orange-700 border-orange-200" },
                 { label: "Fine-Tuning",     desc: `${data.fine_tuning_runs} runs`,                 color: "bg-purple-50 text-purple-700 border-purple-200" },
-                { label: "Better Model",    desc: data.latest_model ? "Custom model" : "Pending",  color: "bg-green-50 text-green-700 border-green-200"   },
+                { label: "Better Model",    desc: data.latest_model ? "Custom model" : "Pending",  color: "bg-success-50 text-success-700 border-green-200"   },
               ].map((step, i, arr) => (
                 <div key={step.label} className="flex flex-col sm:flex-1 sm:flex-row sm:items-stretch">
                   <div className={`flex-1 rounded-xl px-4 py-3 border ${step.color} text-center`}>

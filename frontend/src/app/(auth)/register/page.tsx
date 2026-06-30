@@ -1,11 +1,24 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Zap } from "lucide-react";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 import toast from "react-hot-toast";
 import { setToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 import PasswordInput from "@/components/ui/PasswordInput";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { InputField } from "@/components/ui/FormField";
+
+const schema = z.object({
+  workspace_name: z.string().min(1, "Workspace name is required"),
+  email: z.string().min(1, "Email is required").email("Invalid email"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  confirm_password: z.string().min(1, "Please confirm your password"),
+}).refine(d => d.password === d.confirm_password, { message: "Passwords don't match", path: ["confirm_password"] });
+
+type FormValues = z.infer<typeof schema>;
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
@@ -17,34 +30,18 @@ const GoogleIcon = () => (
 );
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({
-    workspace_name: "",
-    email: "",
-    password: "",
-    confirm_password: "",
-  });
   const [loading, setLoading] = useState(false);
+  const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.workspace_name || !form.email || !form.password) {
-      toast.error("All fields are required");
-      return;
-    }
-    if (form.password !== form.confirm_password) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    if (form.password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
+  const onSubmit = async (data: FormValues) => {
     setLoading(true);
     try {
       const res = await api.post("/auth/register", {
-        workspace_name: form.workspace_name,
-        email: form.email,
-        password: form.password,
+        workspace_name: data.workspace_name,
+        email: data.email,
+        password: data.password,
       });
       setToken(res.data.access_token);
       toast.success("Workspace created!");
@@ -65,7 +62,7 @@ export default function RegisterPage() {
       {/* Logo */}
       <div className="flex items-center gap-2.5 justify-center mb-8">
         <div className="w-9 h-9 bg-brand-500 rounded-[11px] flex items-center justify-center shadow-brand">
-          <Zap className="w-4.5 h-4.5 text-white" />
+          <VaaniqWave className="icon-md text-white" />
         </div>
         <span className="text-2xl font-semibold tracking-tight text-neutral-900">Vaaniq</span>
       </div>
@@ -92,43 +89,38 @@ export default function RegisterPage() {
           <div className="flex-1 h-px bg-neutral-100" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label-base">Workspace Name</label>
-            <input
-              className="input-base"
-              placeholder="Acme Inc."
-              value={form.workspace_name}
-              onChange={e => setForm(f => ({ ...f, workspace_name: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="label-base">Email</label>
-            <input
-              type="email"
-              autoComplete="email"
-              className="input-base"
-              placeholder="you@company.com"
-              value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            />
-          </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <InputField
+            label="Workspace Name"
+            registration={register("workspace_name")}
+            error={errors.workspace_name}
+            placeholder="Acme Inc."
+          />
+          <InputField
+            label="Email"
+            registration={register("email")}
+            error={errors.email}
+            type="email"
+            placeholder="you@company.com"
+          />
           <div>
             <label className="label-base">Password</label>
             <PasswordInput
               autoComplete="new-password"
               placeholder="Minimum 8 characters"
-              value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              value={watch("password")}
+              onChange={e => setValue("password", e.target.value)}
             />
+            {errors.password && <p className="text-xs text-error-600 mt-1">{errors.password.message}</p>}
           </div>
           <div>
             <label className="label-base">Confirm Password</label>
             <PasswordInput
               autoComplete="new-password"
-              value={form.confirm_password}
-              onChange={e => setForm(f => ({ ...f, confirm_password: e.target.value }))}
+              value={watch("confirm_password")}
+              onChange={e => setValue("confirm_password", e.target.value)}
             />
+            {errors.confirm_password && <p className="text-xs text-error-600 mt-1">{errors.confirm_password.message}</p>}
           </div>
 
           <button

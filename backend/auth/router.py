@@ -377,7 +377,21 @@ async def get_me(user: User = Depends(get_current_user)):
     data = UserOut.model_validate(user)
     data.is_superadmin = user.email.lower() in admin_emails
     data.has_password = bool(user.hashed_password)
+    # Prompt for terms if never accepted, or accepted an older version than current.
+    data.needs_terms_acceptance = (user.terms_accepted_version != settings.TERMS_VERSION)
     return data
+
+
+@router.post("/accept-terms")
+async def accept_terms(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Record that the current user accepted the current Terms of Service version."""
+    user.terms_accepted_at = datetime.utcnow()
+    user.terms_accepted_version = settings.TERMS_VERSION
+    await db.commit()
+    return {"accepted": True, "version": settings.TERMS_VERSION, "accepted_at": user.terms_accepted_at}
 
 
 # ── Change password (authenticated) ─────────────────────────────────────────────

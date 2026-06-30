@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Menu, CreditCard, Settings, ShieldCheck, LogOut, Wallet, User as UserIcon } from "lucide-react";
+import { Menu, CreditCard, Settings, LogOut, User as UserIcon, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { logout } from "@/lib/auth";
 
@@ -37,8 +37,8 @@ export default function TopBar({
 
   const creditTone =
     credits === null ? { box: "bg-white border-neutral-200", icon: "text-neutral-400", text: "text-neutral-500" }
-    : credits <= 0   ? { box: "bg-red-50 border-red-200 hover:border-red-300", icon: "text-red-500", text: "text-red-600" }
-    : credits <= 5   ? { box: "bg-amber-50 border-amber-200 hover:border-amber-300", icon: "text-amber-500", text: "text-amber-600" }
+    : credits <= 0   ? { box: "bg-error-50 border-error-200 hover:border-error-300", icon: "text-error-500", text: "text-error-600" }
+    : credits <= 5   ? { box: "bg-warning-50 border-warning-200 hover:border-warning-300", icon: "text-warning-500", text: "text-warning-600" }
     : { box: "bg-brand-50 border-brand-200 hover:border-brand-300", icon: "text-brand-500", text: "text-neutral-900" };
 
   const initial = (me?.email?.[0] || "?").toUpperCase();
@@ -51,7 +51,7 @@ export default function TopBar({
         className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors flex-shrink-0"
         aria-label="Open menu"
       >
-        <Menu className="w-5 h-5" />
+        <Menu className="icon-lg" />
       </button>
 
       {/* Title */}
@@ -62,13 +62,24 @@ export default function TopBar({
 
       {/* Right cluster */}
       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        {/* Command palette trigger */}
+        <button
+          onClick={() => window.dispatchEvent(new Event("vaaniq:command"))}
+          className="hidden md:flex items-center gap-2 px-3 h-9 rounded-lg border border-neutral-200 bg-white text-neutral-400 hover:border-neutral-300 hover:text-neutral-600 transition-colors shadow-xs"
+          title="Search (Ctrl/⌘ + K)"
+        >
+          <Search className="icon-sm" />
+          <span className="text-sm">Search</span>
+          <kbd className="text-[10px] font-medium bg-neutral-100 border border-neutral-200 rounded px-1 py-0.5">⌘K</kbd>
+        </button>
+
         {/* Credits chip */}
         <Link
           href="/billing"
           className={`flex items-center gap-2 px-3 h-9 rounded-lg border transition-all shadow-xs ${creditTone.box}`}
           title="Call credits"
         >
-          <CreditCard className={`w-4 h-4 ${creditTone.icon}`} />
+          <CreditCard className={`icon-sm ${creditTone.icon}`} />
           <span className={`text-sm font-semibold ${creditTone.text}`}>
             {credits === null ? "—" : `${credits.toFixed(1)} min`}
           </span>
@@ -87,20 +98,19 @@ export default function TopBar({
           {open && (
             <div className="absolute right-0 mt-2 w-60 bg-white border border-neutral-200 rounded-xl shadow-modal py-1.5 z-50 animate-scale-in origin-top-right">
               <div className="px-3 py-2.5 border-b border-neutral-100">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-1">Account</p>
                 <p className="text-sm font-medium text-neutral-900 truncate flex items-center gap-1.5">
-                  <UserIcon className="w-3.5 h-3.5 text-neutral-400" /> {me?.email || "—"}
+                  <UserIcon className="icon-xs text-neutral-400" /> {me?.email || "—"}
                 </p>
                 {me?.role && <p className="text-[11px] text-neutral-400 mt-0.5 capitalize">{me.role}{me.is_superadmin ? " · super admin" : ""}</p>}
               </div>
               <MenuLink href="/settings" icon={Settings} label="Settings" onClick={() => setOpen(false)} />
-              <MenuLink href="/billing" icon={Wallet} label="Billing & Credits" onClick={() => setOpen(false)} />
-              {me?.is_superadmin && <MenuLink href="/admin" icon={ShieldCheck} label="Super Admin" onClick={() => setOpen(false)} />}
               <div className="border-t border-neutral-100 my-1" />
               <button
                 onClick={() => { setOpen(false); logout(); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-error-600 hover:bg-error-50 transition-colors"
               >
-                <LogOut className="w-4 h-4" /> Sign out
+                <LogOut className="icon-sm" /> Sign out
               </button>
             </div>
           )}
@@ -113,7 +123,7 @@ export default function TopBar({
 function MenuLink({ href, icon: Icon, label, onClick }: { href: string; icon: React.ElementType; label: string; onClick: () => void }) {
   return (
     <Link href={href} onClick={onClick} className="flex items-center gap-2.5 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 transition-colors">
-      <Icon className="w-4 h-4 text-neutral-400" /> {label}
+      <Icon className="icon-sm text-neutral-400" /> {label}
     </Link>
   );
 }

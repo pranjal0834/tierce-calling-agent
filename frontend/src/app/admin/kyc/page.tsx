@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck, ShieldAlert, RefreshCw, Download, Check, X, FileText, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { adminListKyc, adminApproveKyc, adminRejectKyc, adminDeleteKyc, downloadKycDocAdmin } from "@/lib/api";
 
 interface DocMeta { id: string; doc_type: string; file_name: string; size_bytes: number; }
@@ -17,10 +18,10 @@ interface KycRow {
 
 const STATUS_STYLE: Record<string, string> = {
   pending:   "bg-neutral-100 text-neutral-600",
-  submitted: "bg-blue-50 text-blue-700",
-  approved:  "bg-emerald-50 text-emerald-700",
-  rejected:  "bg-red-50 text-red-700",
-  failed:    "bg-red-50 text-red-700",
+  submitted: "bg-info-50 text-info-700",
+  approved:  "bg-success-50 text-success-700",
+  rejected:  "bg-error-50 text-error-700",
+  failed:    "bg-error-50 text-error-700",
 };
 
 export default function AdminKycPage() {
@@ -29,6 +30,7 @@ export default function AdminKycPage() {
   const [denied, setDenied] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [sidInput, setSidInput] = useState<Record<string, string>>({});
+  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; item?: KycRow}>({open: false});
 
   const reload = async () => {
     try {
@@ -53,9 +55,15 @@ export default function AdminKycPage() {
     catch { toast.error("Failed to reject"); }
   };
   const remove = async (r: KycRow) => {
-    if (!window.confirm(`Permanently delete the KYC packet for "${r.business_name || "(no name)"}"?\n\nThis removes the submission and all ${r.doc_count} uploaded document${r.doc_count === 1 ? "" : "s"}. This cannot be undone.`)) return;
+    setConfirmDelete({open: true, item: r});
+  };
+
+  const doDelete = async () => {
+    const r = confirmDelete.item;
+    if (!r) return;
     try { await adminDeleteKyc(r.id); toast.success("Deleted"); setRows(rs => rs.filter(x => x.id !== r.id)); }
     catch { toast.error("Failed to delete"); }
+    finally { setConfirmDelete({open: false}); }
   };
 
   if (loading) return <div className="flex items-center justify-center py-24 gap-2"><RefreshCw className="w-5 h-5 animate-spin text-brand-500" /><span className="text-sm text-neutral-500">Loading…</span></div>;
@@ -120,10 +128,10 @@ export default function AdminKycPage() {
 
               {r.status === "approved" ? (
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex-1">
+                  <div className="flex items-center gap-2 text-xs text-success-700 bg-success-50 border border-emerald-200 rounded-lg px-3 py-2 flex-1">
                     <ShieldCheck className="w-4 h-4 shrink-0" /> Approved · bundle <span className="font-mono break-all">{r.plivo_bundle_sid}</span>
                   </div>
-                  <button onClick={() => remove(r)} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 border border-red-200 text-red-600 hover:bg-red-50 text-sm font-medium rounded-lg shrink-0">
+                  <button onClick={() => remove(r)} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 border border-red-200 text-error-600 hover:bg-error-50 text-sm font-medium rounded-lg shrink-0">
                     <Trash2 className="w-4 h-4" /> Delete
                   </button>
                 </div>
@@ -135,24 +143,31 @@ export default function AdminKycPage() {
                     placeholder="Approved Plivo bundle / compliance ID"
                     className="flex-1 bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm font-mono"
                   />
-                  <button onClick={() => approve(r)} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg">
+                  <button onClick={() => approve(r)} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 bg-success-600 hover:bg-success-700 text-white text-sm font-medium rounded-lg">
                     <Check className="w-4 h-4" /> Approve
                   </button>
-                  <button onClick={() => reject(r)} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 border border-red-200 text-red-600 hover:bg-red-50 text-sm font-medium rounded-lg">
+                  <button onClick={() => reject(r)} className="inline-flex items-center justify-center gap-1.5 h-9 px-4 border border-red-200 text-error-600 hover:bg-error-50 text-sm font-medium rounded-lg">
                     <X className="w-4 h-4" /> Reject
                   </button>
-                  <button onClick={() => remove(r)} title="Delete packet" className="inline-flex items-center justify-center gap-1.5 h-9 px-3 border border-neutral-200 text-neutral-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 text-sm font-medium rounded-lg">
+                  <button onClick={() => remove(r)} title="Delete packet" className="inline-flex items-center justify-center gap-1.5 h-9 px-3 border border-neutral-200 text-neutral-500 hover:text-error-600 hover:border-red-200 hover:bg-error-50 text-sm font-medium rounded-lg">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               )}
               {r.error_message && r.status === "rejected" && (
-                <p className="text-xs text-red-600 flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> {r.error_message}</p>
+                <p className="text-xs text-error-600 flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5" /> {r.error_message}</p>
               )}
             </div>
           )}
         </div>
       ))}
+      <ConfirmModal
+        open={confirmDelete.open}
+        title="Delete KYC Packet"
+        message={confirmDelete.item ? `Permanently delete the KYC packet for "${confirmDelete.item.business_name || "(no name)"}"? This removes the submission and all ${confirmDelete.item.doc_count} uploaded document${confirmDelete.item.doc_count === 1 ? "" : "s"}. This cannot be undone.` : ""}
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDelete({open: false})}
+      />
     </div>
   );
 }

@@ -27,7 +27,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   ghost:
     "bg-transparent text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 active:scale-[0.98]",
   danger:
-    "bg-red-500 text-white border border-red-600/20 hover:bg-red-600 shadow-xs active:scale-[0.98]",
+    "bg-error-500 text-white border border-error-600/20 hover:bg-error-600 shadow-xs active:scale-[0.98]",
   outline:
     "bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 shadow-xs active:scale-[0.98]",
 };
@@ -67,7 +67,7 @@ export default function Button({
       className={`${base} ${className}`.trim()}
     >
       {loading ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        <Loader2 className="icon-xs animate-spin" />
       ) : icon ? (
         <span className="flex-shrink-0">{icon}</span>
       ) : null}

@@ -2,38 +2,41 @@
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Zap, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 import toast from "react-hot-toast";
 import { setToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 import PasswordInput from "@/components/ui/PasswordInput";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const schema = z.object({
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  confirm_password: z.string().min(1, "Please confirm your password"),
+}).refine(d => d.password === d.confirm_password, { message: "Passwords don't match", path: ["confirm_password"] });
+
+type FormValues = z.infer<typeof schema>;
 
 function ResetForm() {
   const params = useSearchParams();
   const token = params.get("token") || "";
 
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (data: FormValues) => {
     if (!token) {
       toast.error("Invalid or missing reset link");
       return;
     }
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-    if (password !== confirm) {
-      toast.error("Passwords do not match");
-      return;
-    }
     setLoading(true);
     try {
-      const res = await api.post("/auth/reset-password", { token, new_password: password });
+      const res = await api.post("/auth/reset-password", { token, new_password: data.password });
       setToken(res.data.access_token);
       setDone(true);
       toast.success("Password updated!");
@@ -47,8 +50,8 @@ function ResetForm() {
   if (done) {
     return (
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-modal p-6 sm:p-8 text-center">
-        <div className="w-12 h-12 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+        <div className="w-12 h-12 bg-success-50 border border-success-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <CheckCircle2 className="w-6 h-6 text-success-500" />
         </div>
         <h1 className="text-xl font-semibold text-neutral-900 tracking-tight">Password updated</h1>
         <p className="text-sm text-neutral-500 mt-2">Signing you in…</p>
@@ -64,27 +67,29 @@ function ResetForm() {
       </div>
 
       {!token ? (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <p className="text-sm text-red-700">This reset link is invalid or incomplete. Please request a new one.</p>
+        <div className="bg-error-50 border border-error-200 rounded-xl px-4 py-3">
+          <p className="text-sm text-error-700">This reset link is invalid or incomplete. Please request a new one.</p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <label className="label-base">New password</label>
             <PasswordInput
               autoComplete="new-password"
               placeholder="Minimum 8 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={watch("password")}
+              onChange={e => setValue("password", e.target.value)}
             />
+            {errors.password && <p className="text-xs text-error-600 mt-1">{errors.password.message}</p>}
           </div>
           <div>
             <label className="label-base">Confirm new password</label>
             <PasswordInput
               autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
+              value={watch("confirm_password")}
+              onChange={e => setValue("confirm_password", e.target.value)}
             />
+            {errors.confirm_password && <p className="text-xs text-error-600 mt-1">{errors.confirm_password.message}</p>}
           </div>
           <button
             type="submit"
@@ -105,7 +110,7 @@ export default function ResetPasswordPage() {
       {/* Logo */}
       <div className="flex items-center gap-2.5 justify-center mb-8">
         <div className="w-9 h-9 bg-brand-500 rounded-[11px] flex items-center justify-center shadow-brand">
-          <Zap className="w-4.5 h-4.5 text-white" />
+          <VaaniqWave className="icon-md text-white" />
         </div>
         <span className="text-2xl font-semibold tracking-tight text-neutral-900">Vaaniq</span>
       </div>

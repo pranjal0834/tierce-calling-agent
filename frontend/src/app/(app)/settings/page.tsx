@@ -12,6 +12,7 @@ import {
   api,
 } from "@/lib/api";
 import PasswordInput from "@/components/ui/PasswordInput";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ function CopyButton({ text }: { text: string }) {
   }
   return (
     <button onClick={copy} className="text-neutral-400 hover:text-neutral-900 transition-colors">
-      {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? <Check className="w-3.5 h-3.5 text-success-500" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -262,6 +263,7 @@ function TeamTab({ me }: { me: Me }) {
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState<{open: boolean; id?: string; email?: string}>({open: false});
   const isOwner = me.role === "owner";
 
   const load = useCallback(async () => {
@@ -291,13 +293,19 @@ function TeamTab({ me }: { me: Me }) {
   }
 
   async function remove(id: string, email: string) {
-    if (!confirm(`Remove ${email} from the workspace?`)) return;
+    setConfirmRemove({open: true, id, email});
+  }
+
+  async function doRemove() {
+    if (!confirmRemove.id) return;
     try {
-      await removeMember(id);
-      setMembers((m) => m.filter((x) => x.id !== id));
+      await removeMember(confirmRemove.id);
+      setMembers((m) => m.filter((x) => x.id !== confirmRemove.id));
       toast.success("Member removed");
     } catch {
       toast.error("Failed to remove member");
+    } finally {
+      setConfirmRemove({open: false});
     }
   }
 
@@ -393,6 +401,13 @@ function TeamTab({ me }: { me: Me }) {
           </div>
         )}
       </div>
+      <ConfirmModal
+        open={confirmRemove.open}
+        title="Remove Member"
+        message={confirmRemove.email ? `Remove ${confirmRemove.email} from the workspace?` : ""}
+        onConfirm={doRemove}
+        onCancel={() => setConfirmRemove({open: false})}
+      />
     </div>
   );
 }
@@ -507,6 +522,7 @@ function WhatsAppSection() {
   const [saving, setSaving] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -539,7 +555,10 @@ function WhatsAppSection() {
   }
 
   async function disconnect() {
-    if (!confirm("Disconnect WhatsApp? Agents will stop sending messages.")) return;
+    setConfirmDisconnect(true);
+  }
+
+  async function doDisconnect() {
     setSaving(true);
     try {
       await saveWhatsappConfig("");
@@ -549,6 +568,7 @@ function WhatsAppSection() {
       toast.error("Failed to disconnect");
     } finally {
       setSaving(false);
+      setConfirmDisconnect(false);
     }
   }
 
@@ -577,7 +597,7 @@ function WhatsAppSection() {
         description="Connect your own WhatsApp so agents can message callers from your number."
         icon={MessageCircle}
         action={connected
-          ? <span className="text-xs font-medium text-green-600 bg-green-50 border border-green-200 px-2 py-1 rounded-full">Connected</span>
+          ? <span className="text-xs font-medium text-success-600 bg-green-50 border border-green-200 px-2 py-1 rounded-full">Connected</span>
           : <span className="text-xs font-medium text-neutral-500 bg-neutral-100 border border-neutral-200 px-2 py-1 rounded-full">Not connected</span>}
       >
         {!systemAvailable && (
@@ -640,6 +660,13 @@ function WhatsAppSection() {
           </div>
         </SectionCard>
       )}
+      <ConfirmModal
+        open={confirmDisconnect}
+        title="Disconnect WhatsApp"
+        message="Disconnect WhatsApp? Agents will stop sending messages."
+        onConfirm={doDisconnect}
+        onCancel={() => setConfirmDisconnect(false)}
+      />
     </div>
   );
 }

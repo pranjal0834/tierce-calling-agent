@@ -14,7 +14,7 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
       <div className="flex items-start gap-3.5 min-w-0">
         {/* Icon */}
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-violet-50">
-          <Zap className="w-4 h-4 text-violet-500" />
+          <Zap className="icon-sm text-violet-500" />
         </div>
 
         {/* Info */}
@@ -22,7 +22,7 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-[14px] font-semibold text-neutral-900 leading-tight">{agent.name}</h3>
             {agent.is_personal && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-100 px-1.5 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium bg-warning-50 text-warning-600 border border-warning-100 px-1.5 py-0.5 rounded-full">
                 <Lock className="w-2.5 h-2.5" /> Personal
               </span>
             )}
@@ -43,21 +43,21 @@ export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {
           className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-500 hover:bg-brand-50 transition-colors"
           title="View agent"
         >
-          <Eye className="w-3.5 h-3.5" />
+          <Eye className="icon-xs" />
         </Link>
         <button
           onClick={() => onEdit(agent)}
           className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-500 hover:bg-brand-50 transition-colors"
           title="Edit agent"
         >
-          <Pencil className="w-3.5 h-3.5" />
+          <Pencil className="icon-xs" />
         </button>
         <button
           onClick={() => onDelete(agent.id)}
-          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-colors"
           title="Delete agent"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="icon-xs" />
         </button>
       </div>
     </div>

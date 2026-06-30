@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
-import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Vaaniq Voice Agent",
@@ -17,9 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="bg-neutral-50 text-neutral-900 min-h-screen">
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        {children}
         <Toaster
           position="top-right"
           toastOptions={{

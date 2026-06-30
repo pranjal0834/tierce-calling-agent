@@ -13,16 +13,20 @@ GET  /api/admin/costs                         — AI cost (COGS) rollup — owne
 """
 from datetime import datetime, timedelta
 
+import httpx
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.dependencies import require_superadmin
+from backend.config import settings
 from backend.db.database import get_db
 from backend.db.models import (
     Agent, Call, CreditTransaction, User, Workspace,
+    PhoneNumber, DncEntry, ConsentAttestation,
+    WebhookEndpoint, WebhookDelivery, ScheduledCall,
 )
 
 log = structlog.get_logger()
@@ -447,6 +451,7 @@ async def list_all_calls(
             "duration_seconds": c.duration_seconds,
             "pipeline_mode": c.pipeline_mode,
             "created_at": c.created_at.isoformat() if c.created_at else None,
+            "has_recording": bool(c.recording_url),
             "cost_usd": round(float(c.cost_usd), 6) if c.cost_usd is not None else None,
             "cost_breakdown": {
                 "realtime_usd": cb.get("realtime_usd"),
@@ -460,3 +465,477 @@ async def list_all_calls(
             },
         })
     return rows
+
+
+# ── Phone number inventory (global) ───────────────────────────────────────────
+
+@router.get("/phone-numbers")
+async def admin_phone_numbers(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Every purchased number across all workspaces, with monthly cost liability."""
+    rows = (await db.execute(
+        select(PhoneNumber).order_by(desc(PhoneNumber.purchased_at))
+    )).scalars().all()
+    price = float(settings.NUMBER_PRICE_INR)
+    out, active, suspended = [], 0, 0
+    for n in rows:
+        ws = await db.get(Workspace, n.workspace_id)
+        if n.is_suspended:
+            suspended += 1
+        elif n.is_active:
+            active += 1
+        base = n.last_billed_at or n.purchased_at
+        out.append({
+            "id": n.id,
+            "phone_number": n.phone_number,
+            "workspace_name": ws.name if ws else "—",
+            "workspace_id": n.workspace_id,
+            "provider": n.provider,
+            "is_active": n.is_active,
+            "is_suspended": n.is_suspended,
+            "auto_renew": n.auto_renew,
+            "monthly_cost_inr": price,
+            "purchased_at": n.purchased_at.isoformat() if n.purchased_at else None,
+            "renews_at": (base + timedelta(days=30)).isoformat() if base else None,
+        })
+    return {
+        "numbers": out,
+        "summary": {
+            "total": len(rows),
+            "active": active,
+            "suspended": suspended,
+            "number_price_inr": price,
+            "monthly_liability_inr": round(active * price, 2),
+        },
+    }
+
+
+# ── Transaction browser + revenue ─────────────────────────────────────────────
+
+@router.get("/transactions")
+async def admin_transactions(
+    limit: int = 100,
+    q: str = "",
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Recent credit/payment transactions across the platform, with revenue rollup."""
+    from backend.billing.credits import USD_TO_INR
+    txs = (await db.execute(
+        select(CreditTransaction).order_by(desc(CreditTransaction.created_at)).limit(500)
+    )).scalars().all()
+
+    ws_cache: dict[str, str] = {}
+    async def wsname(wid: str) -> str:
+        if wid not in ws_cache:
+            w = await db.get(Workspace, wid)
+            ws_cache[wid] = w.name if w else "—"
+        return ws_cache[wid]
+
+    rows, total_rev, ws_rev = [], 0.0, {}
+    for t in txs:
+        name = await wsname(t.workspace_id)
+        amt = float(t.amount_paid or 0.0)
+        amt_inr = amt if (t.currency or "INR") == "INR" else amt * USD_TO_INR
+        if t.type == "purchase" and amt_inr:
+            total_rev += amt_inr
+            ws_rev[name] = ws_rev.get(name, 0.0) + amt_inr
+        rows.append({
+            "id": t.id,
+            "workspace_name": name,
+            "type": t.type,
+            "minutes": t.minutes,
+            "amount_inr": round(amt_inr, 2) if amt_inr else None,
+            "balance_after": t.balance_after,
+            "description": t.description,
+            "payment_provider": t.payment_provider,
+            "payment_id": t.payment_id,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
+
+    if q:
+        ql = q.lower()
+        rows = [r for r in rows if ql in (f"{r['workspace_name']} {r['type']} {r['description'] or ''}").lower()]
+    rows = rows[:limit]
+
+    top = sorted(
+        ({"workspace": k, "revenue_inr": round(v, 2)} for k, v in ws_rev.items()),
+        key=lambda x: x["revenue_inr"], reverse=True,
+    )[:10]
+    return {"transactions": rows, "summary": {"total_revenue_inr": round(total_rev, 2), "top_workspaces": top}}
+
+
+# ── Compliance audit (per workspace) ──────────────────────────────────────────
+
+@router.get("/compliance")
+async def admin_compliance(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """DNC lists, opt-outs, consent attestations, and calling windows per workspace."""
+    workspaces = (await db.execute(select(Workspace))).scalars().all()
+    out, tot_dnc, tot_opt, tot_consent = [], 0, 0, 0
+    for w in workspaces:
+        dnc = (await db.execute(select(func.count()).select_from(DncEntry).where(DncEntry.workspace_id == w.id))).scalar() or 0
+        opt = (await db.execute(select(func.count()).select_from(DncEntry).where(DncEntry.workspace_id == w.id, DncEntry.source == "opt_out"))).scalar() or 0
+        consent = (await db.execute(select(func.count()).select_from(ConsentAttestation).where(ConsentAttestation.workspace_id == w.id))).scalar() or 0
+        tot_dnc += dnc; tot_opt += opt; tot_consent += consent
+        if dnc == 0 and consent == 0 and not w.calling_window_enabled:
+            continue
+        out.append({
+            "workspace": w.name,
+            "workspace_id": w.id,
+            "dnc_count": dnc,
+            "opt_out_count": opt,
+            "consent_attestations": consent,
+            "calling_window_enabled": bool(w.calling_window_enabled),
+            "calling_window": (f"{int(w.calling_start_hour):02d}:00–{int(w.calling_end_hour):02d}:00 {w.calling_timezone}"
+                               if w.calling_window_enabled else None),
+        })
+    out.sort(key=lambda x: (x["dnc_count"] + x["consent_attestations"]), reverse=True)
+    return {"workspaces": out, "summary": {"total_dnc": tot_dnc, "total_opt_outs": tot_opt, "total_consent_attestations": tot_consent}}
+
+
+# ── Admin call recording playback (any call) ──────────────────────────────────
+
+@router.get("/calls/{call_id}/recording")
+async def admin_call_recording(
+    call_id: str,
+    request: Request,
+    token: str = "",
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream any call's recording for QA. Token in the query param so an <audio>
+    element can play it. Requires the token to belong to a super admin."""
+    from jose import JWTError, jwt
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        uid = payload.get("sub")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = await db.get(User, uid) if uid else None
+    admin_emails = [e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()]
+    if not user or user.email.lower() not in admin_emails:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    call = await db.get(Call, call_id)
+    if not call or not call.recording_url:
+        raise HTTPException(status_code=404, detail="No recording available")
+
+    upstream_headers = {}
+    if request.headers.get("range"):
+        upstream_headers["Range"] = request.headers["range"]
+    rec_url = call.recording_url
+    get_kwargs = dict(timeout=60, follow_redirects=True, headers=upstream_headers)
+    if "twilio.com" in rec_url:
+        get_kwargs["auth"] = (settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+    elif "plivo.com" in rec_url:
+        get_kwargs["auth"] = (settings.PLIVO_AUTH_ID, settings.PLIVO_AUTH_TOKEN)
+    async with httpx.AsyncClient() as client:
+        up = await client.get(rec_url, **get_kwargs)
+    if up.status_code not in (200, 206):
+        raise HTTPException(status_code=502, detail="Recording unavailable from provider")
+    headers = {"Content-Type": "audio/mpeg", "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"}
+    for k in ("Content-Length", "Content-Range"):
+        if k in up.headers:
+            headers[k] = up.headers[k]
+    return Response(content=up.content, status_code=up.status_code, headers=headers)
+
+
+# ── Global agent browser ──────────────────────────────────────────────────────
+
+class AgentStatusRequest(BaseModel):
+    is_active: bool
+
+
+@router.get("/agents")
+async def admin_agents(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Every agent across all workspaces, with call volume and total AI cost."""
+    agents = (await db.execute(select(Agent).order_by(desc(Agent.created_at)))).scalars().all()
+    stat_rows = (await db.execute(
+        select(Call.agent_id, func.count(Call.id), func.coalesce(func.sum(Call.cost_usd), 0.0))
+        .group_by(Call.agent_id)
+    )).all()
+    stats = {r[0]: (int(r[1]), float(r[2] or 0.0)) for r in stat_rows}
+    out = []
+    for a in agents:
+        ws = await db.get(Workspace, a.workspace_id)
+        cc, cost = stats.get(a.id, (0, 0.0))
+        out.append({
+            "id": a.id,
+            "name": a.name,
+            "workspace_name": ws.name if ws else "—",
+            "workspace_id": a.workspace_id,
+            "pipeline_mode": a.pipeline_mode,
+            "is_active": a.is_active,
+            "call_count": cc,
+            "cost_usd": round(cost, 4),
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        })
+    return out
+
+
+@router.put("/agents/{agent_id}/status")
+async def admin_agent_status(
+    agent_id: str,
+    payload: AgentStatusRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    a = await db.get(Agent, agent_id)
+    if not a:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    a.is_active = payload.is_active
+    await db.commit()
+    return {"id": a.id, "is_active": a.is_active}
+
+
+# ── Webhook health ────────────────────────────────────────────────────────────
+
+@router.get("/webhooks")
+async def admin_webhooks(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Webhook endpoints across the platform with delivery success/failure stats."""
+    endpoints = (await db.execute(
+        select(WebhookEndpoint).order_by(desc(WebhookEndpoint.created_at))
+    )).scalars().all()
+    out, tot_deliv, tot_failed = [], 0, 0
+    for e in endpoints:
+        ws = await db.get(Workspace, e.workspace_id)
+        delivs = (await db.execute(
+            select(WebhookDelivery).where(WebhookDelivery.endpoint_id == e.id)
+        )).scalars().all()
+        total = len(delivs)
+        failed = sum(1 for d in delivs if d.delivered_at is None or (d.response_status or 0) >= 400)
+        last = max((d.created_at for d in delivs if d.created_at), default=None)
+        tot_deliv += total
+        tot_failed += failed
+        # Most recent deliveries (newest first) with status + truncated response body.
+        recent = sorted(delivs, key=lambda d: d.created_at or datetime.min, reverse=True)[:8]
+        recent_out = [{
+            "event_type": d.event_type,
+            "status": d.response_status,
+            "ok": bool(d.delivered_at) and (d.response_status or 0) < 400,
+            "attempt_count": d.attempt_count,
+            "body": (d.response_body or "")[:200],
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        } for d in recent]
+        last_fail = next((r for r in recent_out if not r["ok"]), None)
+        out.append({
+            "id": e.id,
+            "workspace_name": ws.name if ws else "—",
+            "url": e.url,
+            "events": e.events or [],
+            "is_active": e.is_active,
+            "total_deliveries": total,
+            "failed_deliveries": failed,
+            "success_rate": round((total - failed) / total * 100, 1) if total else None,
+            "last_delivery": last.isoformat() if last else None,
+            "last_error": (f"{last_fail['status'] or 'no response'}: {last_fail['body']}".strip()
+                           if last_fail else None),
+            "recent_deliveries": recent_out,
+        })
+    return {
+        "endpoints": out,
+        "summary": {
+            "total_endpoints": len(endpoints),
+            "total_deliveries": tot_deliv,
+            "total_failed": tot_failed,
+        },
+    }
+
+
+# ── Scheduled calls overview ──────────────────────────────────────────────────
+
+@router.get("/scheduled-calls")
+async def admin_scheduled_calls(
+    limit: int = 200,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Upcoming and failed scheduled calls platform-wide."""
+    rows = (await db.execute(
+        select(ScheduledCall).order_by(desc(ScheduledCall.scheduled_at)).limit(limit)
+    )).scalars().all()
+    out, counts = [], {}
+    for s in rows:
+        ws = await db.get(Workspace, s.workspace_id)
+        counts[s.status] = counts.get(s.status, 0) + 1
+        out.append({
+            "id": s.id,
+            "workspace_name": ws.name if ws else "—",
+            "phone_number": s.phone_number,
+            "contact_name": s.contact_name,
+            "scheduled_at": s.scheduled_at.isoformat() if s.scheduled_at else None,
+            "status": s.status,
+            "error_message": s.error_message,
+            "call_id": s.call_id,
+        })
+    return {"scheduled": out, "summary": counts}
+
+
+# ── WhatsApp usage (per workspace) ────────────────────────────────────────────
+
+@router.get("/whatsapp")
+async def admin_whatsapp(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Which workspaces have WhatsApp connected, and how many agents use it."""
+    workspaces = (await db.execute(select(Workspace))).scalars().all()
+    out, connected = [], 0
+    for w in workspaces:
+        has_wa = bool(getattr(w, "whatsapp_api_key", None))
+        agents = (await db.execute(select(Agent).where(Agent.workspace_id == w.id))).scalars().all()
+        enabled = sum(1 for a in agents if (a.config or {}).get("whatsapp_enabled"))
+        if not has_wa and enabled == 0:
+            continue
+        if has_wa:
+            connected += 1
+        out.append({
+            "workspace": w.name, "workspace_id": w.id,
+            "connected": has_wa, "enabled_agents": enabled, "total_agents": len(agents),
+        })
+    out.sort(key=lambda x: (x["connected"], x["enabled_agents"]), reverse=True)
+    return {"workspaces": out, "summary": {"connected_workspaces": connected, "shown": len(out)}}
+
+
+# ── Knowledge base storage audit ──────────────────────────────────────────────
+
+@router.get("/knowledge")
+async def admin_knowledge(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """KB count, documents, chunks, characters, and embedding cost per workspace."""
+    from backend.db.models import KnowledgeBase, KnowledgeDocument
+    kbs = (await db.execute(select(KnowledgeBase))).scalars().all()
+    docs = (await db.execute(select(KnowledgeDocument))).scalars().all()
+    by_ws: dict[str, dict] = {}
+    def bucket(wid):
+        return by_ws.setdefault(wid, {"kbs": 0, "docs": 0, "chunks": 0, "chars": 0, "embed_usd": 0.0})
+    for kb in kbs:
+        bucket(kb.workspace_id)["kbs"] += 1
+    for d in docs:
+        b = bucket(d.workspace_id)
+        b["docs"] += 1
+        b["chunks"] += int(d.chunk_count or 0)
+        b["chars"] += int(d.char_count or 0)
+        b["embed_usd"] += float(d.embedding_cost_usd or 0.0)
+    out, tot_embed, tot_docs = [], 0.0, 0
+    for wid, b in by_ws.items():
+        ws = await db.get(Workspace, wid)
+        tot_embed += b["embed_usd"]; tot_docs += b["docs"]
+        out.append({"workspace": ws.name if ws else "—", "workspace_id": wid, **b, "embed_usd": round(b["embed_usd"], 4)})
+    out.sort(key=lambda x: x["docs"], reverse=True)
+    return {"workspaces": out, "summary": {"total_docs": tot_docs, "total_embed_usd": round(tot_embed, 4), "workspaces": len(out)}}
+
+
+# ── Trends (time series for charts) ───────────────────────────────────────────
+
+@router.get("/trends")
+async def admin_trends(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """Daily calls, revenue (INR), and COGS (INR) over the last N days."""
+    from collections import defaultdict
+    from backend.billing.credits import USD_TO_INR
+    days = max(min(int(days or 30), 90), 7)
+    since = datetime.utcnow() - timedelta(days=days)
+    calls = (await db.execute(select(Call.created_at, Call.cost_usd).where(Call.created_at >= since))).all()
+    txs = (await db.execute(
+        select(CreditTransaction.created_at, CreditTransaction.amount_paid, CreditTransaction.currency)
+        .where(CreditTransaction.created_at >= since, CreditTransaction.type == "purchase")
+    )).all()
+    day_calls, day_cogs, day_rev = defaultdict(int), defaultdict(float), defaultdict(float)
+    for cat, cost in calls:
+        if not cat:
+            continue
+        k = cat.strftime("%Y-%m-%d")
+        day_calls[k] += 1
+        day_cogs[k] += float(cost or 0.0)
+    for cat, amt, cur in txs:
+        if not cat:
+            continue
+        k = cat.strftime("%Y-%m-%d")
+        a = float(amt or 0.0)
+        day_rev[k] += a if (cur or "INR") == "INR" else a * USD_TO_INR
+    series = []
+    for i in range(days, -1, -1):
+        d = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
+        series.append({
+            "date": d,
+            "calls": day_calls.get(d, 0),
+            "cogs_inr": round(day_cogs.get(d, 0.0) * USD_TO_INR, 2),
+            "revenue_inr": round(day_rev.get(d, 0.0), 2),
+        })
+    return {"days": days, "series": series}
+
+
+# ── Official template management ───────────────────────────────────────────────
+
+class TemplateUpsert(BaseModel):
+    name: str
+    category: str = "Custom"
+    description: str = ""
+    system_prompt: str
+    voice_id: str | None = None
+    pipeline_mode: str = "native"
+    tags: list = []
+
+
+@router.get("/templates")
+async def admin_list_templates(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    from backend.db.models import AgentTemplate
+    rows = (await db.execute(select(AgentTemplate).order_by(desc(AgentTemplate.created_at)))).scalars().all()
+    return [{
+        "id": t.id, "name": t.name, "category": t.category, "description": t.description,
+        "voice_id": t.voice_id, "pipeline_mode": t.pipeline_mode, "tags": t.tags or [],
+        "is_official": t.is_official, "created_at": t.created_at.isoformat() if t.created_at else None,
+    } for t in rows]
+
+
+@router.post("/templates", status_code=201)
+async def admin_create_template(
+    payload: TemplateUpsert,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_superadmin),
+):
+    from backend.db.models import AgentTemplate
+    t = AgentTemplate(
+        name=payload.name, category=payload.category, description=payload.description,
+        system_prompt=payload.system_prompt, voice_id=payload.voice_id,
+        pipeline_mode=payload.pipeline_mode, tags=payload.tags, is_official=True,
+        created_by=admin.id,
+    )
+    db.add(t)
+    await db.commit()
+    return {"id": t.id, "name": t.name}
+
+
+@router.delete("/templates/{template_id}", status_code=204)
+async def admin_delete_template(
+    template_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    from backend.db.models import AgentTemplate
+    t = await db.get(AgentTemplate, template_id)
+    if t:
+        await db.delete(t)
+        await db.commit()
+    return Response(status_code=204)

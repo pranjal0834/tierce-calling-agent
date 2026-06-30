@@ -10,6 +10,7 @@ import {
   cancelScheduledCall, getAgents,
 } from "@/lib/api";
 import toast from "react-hot-toast";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -69,8 +70,8 @@ function nowLocalMin(): string {
 const STATUS_STYLES: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
   pending:   { label: "Pending",   cls: "text-yellow-700 bg-yellow-50 border-yellow-200",  icon: <Clock className="w-3 h-3" /> },
   running:   { label: "Running",   cls: "text-brand-600 bg-brand-50 border-brand-200",     icon: <Loader2 className="w-3 h-3 animate-spin" /> },
-  completed: { label: "Completed", cls: "text-green-600 bg-green-50 border-green-200",     icon: <CheckCircle2 className="w-3 h-3" /> },
-  failed:    { label: "Failed",    cls: "text-red-600 bg-red-50 border-red-200",           icon: <XCircle className="w-3 h-3" /> },
+  completed: { label: "Completed", cls: "text-success-600 bg-success-50 border-green-200",     icon: <CheckCircle2 className="w-3 h-3" /> },
+  failed:    { label: "Failed",    cls: "text-error-600 bg-error-50 border-error-200",           icon: <XCircle className="w-3 h-3" /> },
   cancelled: { label: "Cancelled", cls: "text-neutral-500 bg-neutral-100 border-neutral-200", icon: <X className="w-3 h-3" /> },
 };
 
@@ -135,6 +136,7 @@ export default function SchedulingPage() {
   const [bulkForm, setBulkForm] = useState({ agent_id: "", scheduled_at: "", notes: "" });
   const [bulkPreview, setBulkPreview] = useState<BulkContact[]>([]);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState<{open: boolean; item?: ScheduledCall}>({open: false});
 
   const load = async (statusFilter?: string) => {
     try {
@@ -234,13 +236,20 @@ export default function SchedulingPage() {
 
   // ── Cancel ──
   const handleCancel = async (sc: ScheduledCall) => {
-    if (!confirm(`Cancel scheduled call to ${sc.phone_number}?`)) return;
+    setConfirmCancel({open: true, item: sc});
+  };
+
+  const doCancel = async () => {
+    const sc = confirmCancel.item;
+    if (!sc) return;
     try {
       await cancelScheduledCall(sc.id);
       toast.success("Call cancelled");
       load(filter);
     } catch {
       toast.error("Failed to cancel scheduled call");
+    } finally {
+      setConfirmCancel({open: false});
     }
   };
 
@@ -346,7 +355,7 @@ export default function SchedulingPage() {
                     <td className="px-4 py-3">
                       <StatusBadge status={sc.status} />
                       {sc.error_message && (
-                        <div className="mt-1 flex items-center gap-1 text-xs text-red-400">
+                        <div className="mt-1 flex items-center gap-1 text-xs text-error-400">
                           <AlertCircle className="w-3 h-3 shrink-0" />
                           <span className="truncate max-w-[160px]" title={sc.error_message}>{sc.error_message}</span>
                         </div>
@@ -368,7 +377,7 @@ export default function SchedulingPage() {
                         {sc.status === "pending" && (
                           <button
                             onClick={() => handleCancel(sc)}
-                            className="inline-flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
+                            className="inline-flex items-center gap-1 text-xs text-error-400 hover:text-error-300"
                           >
                             <Trash2 className="w-3 h-3" /> Cancel
                           </button>
@@ -439,7 +448,7 @@ export default function SchedulingPage() {
                 </p>
               )}
               {sc.error_message && (
-                <div className="mt-2.5 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2.5 py-2">
+                <div className="mt-2.5 flex items-start gap-1.5 text-xs text-error-600 bg-error-50 border border-error-100 rounded-lg px-2.5 py-2">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span>{sc.error_message}</span>
                 </div>
@@ -459,7 +468,7 @@ export default function SchedulingPage() {
                   {sc.status === "pending" && (
                     <button
                       onClick={() => handleCancel(sc)}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-600 ml-auto"
+                      className="inline-flex items-center gap-1 text-xs font-medium text-error-500 hover:text-error-600 ml-auto"
                     >
                       <Trash2 className="w-3 h-3" /> Cancel
                     </button>
@@ -572,6 +581,14 @@ export default function SchedulingPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmCancel.open}
+        title="Cancel Scheduled Call"
+        message={confirmCancel.item ? `Cancel scheduled call to ${confirmCancel.item.phone_number}?` : ""}
+        onConfirm={doCancel}
+        onCancel={() => setConfirmCancel({open: false})}
+      />
 
       {/* ── Bulk Schedule Modal ── */}
       {showBulk && (

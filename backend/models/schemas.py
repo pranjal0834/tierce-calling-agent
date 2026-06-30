@@ -41,6 +41,7 @@ class UserOut(BaseModel):
     is_active: bool
     is_superadmin: bool = False
     has_password: bool = False
+    needs_terms_acceptance: bool = False
     created_at: datetime
 
     class Config:

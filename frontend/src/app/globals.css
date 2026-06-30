@@ -84,7 +84,7 @@ html, body {
 
   /* Card base */
   .card {
-    @apply bg-white border border-neutral-200 rounded-xl shadow-card;
+    @apply border border-neutral-200 rounded-xl shadow-card;
   }
 
   /* Badge base */

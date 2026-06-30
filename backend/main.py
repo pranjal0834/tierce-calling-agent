@@ -85,6 +85,15 @@ async def _repair_null_jsonb():
             pass
         try:
             await db.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP"
+            ))
+            await db.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_version VARCHAR(20)"
+            ))
+        except Exception:
+            pass
+        try:
+            await db.execute(text(
                 "ALTER TABLE call_turns ADD COLUMN IF NOT EXISTS from_transfer BOOLEAN DEFAULT FALSE"
             ))
         except Exception:

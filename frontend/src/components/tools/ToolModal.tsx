@@ -1,43 +1,47 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Globe, PhoneOff, UserCheck, Calendar, X, Plus, Trash
 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { addTool, updateTool } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import toast from "react-hot-toast";
+import { FormField, InputField } from "@/components/ui/FormField";
 
 const TOOL_TYPES = [
   {
     value: "webhook",
     label: "Webhook / HTTP",
     icon: Globe,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10",
+    color: "text-info-400",
+    bg: "bg-info-500/10",
     description: "Call any HTTP endpoint — CRM, calendar, booking system, etc.",
   },
   {
     value: "end_call",
     label: "End Call",
     icon: PhoneOff,
-    color: "text-red-400",
-    bg: "bg-red-500/10",
+    color: "text-error-400",
+    bg: "bg-error-500/10",
     description: "Agent ends the call cleanly after completing its task.",
   },
   {
     value: "transfer_call",
     label: "Transfer to Human",
     icon: UserCheck,
-    color: "text-green-400",
-    bg: "bg-green-500/10",
+    color: "text-success-400",
+    bg: "bg-success-500/10",
     description: "Warm-transfer the caller to a human agent.",
   },
   {
     value: "calendar_booking",
     label: "Book Appointment",
     icon: Calendar,
-    color: "text-orange-400",
-    bg: "bg-orange-500/10",
+    color: "text-warning-400",
+    bg: "bg-warning-500/10",
     description: "Check real availability and book appointments via Cal.com or Calendly API.",
   },
 ];
@@ -123,18 +127,39 @@ interface ToolModalProps {
   onSaved: (tool: Tool) => void;
 }
 
+const toolSchema = z.object({
+  name: z.string().min(1, "Tool name is required"),
+  type: z.enum(["webhook", "transfer_call", "calendar_booking", "end_call"]),
+  description: z.string().optional().default(""),
+  webhookUrl: z.string().optional().default(""),
+  transferTo: z.string().optional().default(""),
+  calIntegration: z.string().optional().default("calcom"),
+  calApiKey: z.string().optional().default(""),
+  calEventId: z.string().optional().default(""),
+  calTimezone: z.string().optional().default("Asia/Kolkata"),
+}).superRefine((data, ctx) => {
+  if (data.type === "webhook" && !data.webhookUrl) {
+    ctx.addIssue({ code: "custom", path: ["webhookUrl"], message: "Webhook URL is required" });
+  }
+  if (data.type === "transfer_call" && !data.transferTo) {
+    ctx.addIssue({ code: "custom", path: ["transferTo"], message: "Transfer phone number is required" });
+  }
+  if (data.type === "calendar_booking") {
+    const preset = CALENDAR_INTEGRATIONS.find(c => c.value === data.calIntegration);
+    if (preset && !preset.oauth) {
+      if (!data.calApiKey) {
+        ctx.addIssue({ code: "custom", path: ["calApiKey"], message: "API key is required" });
+      }
+      if (!data.calEventId) {
+        ctx.addIssue({ code: "custom", path: ["calEventId"], message: "Event type ID / URI is required" });
+      }
+    }
+  }
+});
+
+type ToolFormValues = z.infer<typeof toolSchema>;
+
 export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProps) {
-  const [type, setType] = useState(existing?.type ?? "webhook");
-  const [name, setName] = useState(existing?.name ?? "");
-  const [description, setDescription] = useState(existing?.description ?? "");
-  const [webhookUrl, setWebhookUrl] = useState((existing?.config?.url as string) ?? "");
-  const [transferTo, setTransferTo] = useState((existing?.config?.transfer_to as string) ?? "");
-  const [calIntegration, setCalIntegration] = useState((existing?.config?.integration as string) ?? "calcom");
-  const [calApiKey, setCalApiKey] = useState((existing?.config?.api_key as string) ?? "");
-  const [calEventId, setCalEventId] = useState(
-    ((existing?.config?.event_type_id ?? existing?.config?.event_type_uri) as string) ?? ""
-  );
-  const [calTimezone, setCalTimezone] = useState((existing?.config?.timezone as string) ?? "Asia/Kolkata");
   const [params, setParams] = useState<ParamDef[]>(
     existing?.parameters?.properties
       ? Object.entries(existing.parameters.properties as Record<string, {type: string; description: string}>).map(([k, v]) => ({
@@ -146,15 +171,37 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
       : []
   );
   const [saving, setSaving] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  const { register, handleSubmit, watch, setValue, getValues, formState: { errors }, trigger } = useForm<ToolFormValues>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(toolSchema) as any,
+    defaultValues: {
+      name: existing?.name ?? "",
+      type: (existing?.type as any) ?? "webhook",
+      description: existing?.description ?? "",
+      webhookUrl: (existing?.config?.url as string) ?? "",
+      transferTo: (existing?.config?.transfer_to as string) ?? "",
+      calIntegration: (existing?.config?.integration as string) ?? "calcom",
+      calApiKey: (existing?.config?.api_key as string) ?? "",
+      calEventId: ((existing?.config?.event_type_id ?? existing?.config?.event_type_uri) as string) ?? "",
+      calTimezone: (existing?.config?.timezone as string) ?? "Asia/Kolkata",
+    },
+  });
+
+  const type = watch("type");
+  const calIntegration = watch("calIntegration");
 
   const applyCalPreset = (integrationValue: string) => {
     const preset = CALENDAR_INTEGRATIONS.find(c => c.value === integrationValue);
     if (preset && !existing) {
-      if (!name) setName(preset.autoName);
-      if (!description) setDescription(preset.autoDesc);
+      const curName = getValues("name");
+      const curDesc = getValues("description");
+      if (!curName) setValue("name", preset.autoName);
+      if (!curDesc) setValue("description", preset.autoDesc);
     }
-    setCalIntegration(integrationValue);
-    setCalEventId("");
+    setValue("calIntegration", integrationValue);
+    setValue("calEventId", "");
   };
 
   const addParam = () => setParams(p => [...p, { name: "", type: "string", description: "", required: false }]);
@@ -162,7 +209,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
   const updateParam = (i: number, field: keyof ParamDef, value: string | boolean) =>
     setParams(p => p.map((param, j) => j === i ? { ...param, [field]: value } : param));
 
-  const buildPayload = () => {
+  const buildPayload = (data: ToolFormValues) => {
     const properties: Record<string, { type: string; description: string }> = {};
     const required: string[] = [];
     for (const p of params) {
@@ -175,18 +222,16 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
       : {};
 
     const config: Record<string, string> = {};
-    if (type === "webhook" && webhookUrl) config.url = webhookUrl;
-    if (type === "transfer_call" && transferTo) config.transfer_to = transferTo;
-    if (type === "calendar_booking") {
-      const preset = CALENDAR_INTEGRATIONS.find(c => c.value === calIntegration);
-      config.integration = calIntegration;
-      config.timezone = calTimezone;
-      // Google Calendar uses OAuth (connected separately) — no API key / event id.
+    if (data.type === "webhook" && data.webhookUrl) config.url = data.webhookUrl;
+    if (data.type === "transfer_call" && data.transferTo) config.transfer_to = data.transferTo;
+    if (data.type === "calendar_booking") {
+      const preset = CALENDAR_INTEGRATIONS.find(c => c.value === data.calIntegration);
+      config.integration = data.calIntegration;
+      config.timezone = data.calTimezone;
       if (preset && !preset.oauth) {
-        config.api_key = calApiKey;
-        config[preset.idKey] = calEventId;
+        config.api_key = data.calApiKey;
+        config[preset.idKey] = data.calEventId;
       } else if (preset && preset.oauth) {
-        // Preserve the OAuth connection set by the Connect flow — don't wipe it on save.
         const ec = (existing?.config ?? {}) as Record<string, string>;
         if (ec.refresh_token) config.refresh_token = ec.refresh_token;
         if (ec.client_id) config.client_id = ec.client_id;
@@ -195,24 +240,13 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
       }
     }
 
-    return { name, type, description, parameters, config, enabled: true };
+    return { name: data.name, type: data.type, description: data.description, parameters, config, enabled: true };
   };
 
-  const handleSave = async () => {
-    if (!name.trim()) { toast.error("Tool name is required"); return; }
-    if (type === "webhook" && !webhookUrl.trim()) { toast.error("Webhook URL is required"); return; }
-    if (type === "transfer_call" && !transferTo.trim()) { toast.error("Transfer phone number is required"); return; }
-    if (type === "calendar_booking") {
-      const preset = CALENDAR_INTEGRATIONS.find(c => c.value === calIntegration);
-      if (preset && !preset.oauth) {
-        if (!calApiKey.trim()) { toast.error("API key is required"); return; }
-        if (!calEventId.trim()) { toast.error("Event type ID / URI is required"); return; }
-      }
-    }
-
+  const onSave = handleSubmit(async (data: ToolFormValues) => {
     setSaving(true);
     try {
-      const payload = buildPayload();
+      const payload = buildPayload(data);
       const saved = existing
         ? await updateTool(agentId, existing.id, payload)
         : await addTool(agentId, payload);
@@ -223,17 +257,45 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
     } finally {
       setSaving(false);
     }
-  };
+  });
+
+  const onKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+    if (e.key === "Tab" && dialogRef.current) {
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }, [onClose]);
+
+  useEffect(() => {
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onKeyDown]);
+
+  useEffect(() => {
+    if (dialogRef.current) {
+      const first = dialogRef.current.querySelector<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      first?.focus();
+    }
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4">
-      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-lg w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <div ref={dialogRef} className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-lg w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-neutral-200">
           <h2 className="text-lg font-semibold text-neutral-900">
             {existing ? "Edit Tool" : "Add Tool"}
           </h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900">
-            <X className="w-5 h-5" />
+            <X className="icon-lg" />
           </button>
         </div>
 
@@ -245,14 +307,15 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
               {TOOL_TYPES.map(tt => (
                 <button
                   key={tt.value}
-                  onClick={() => setType(tt.value)}
+                  type="button"
+                  onClick={() => setValue("type", tt.value as any)}
                   className={`flex flex-col items-center gap-2 p-3 rounded-xl border text-center transition-all ${
                     type === tt.value
                       ? "border-brand-500 bg-brand-50"
                       : "border-neutral-200 bg-neutral-50 hover:border-neutral-300"
                   }`}
                 >
-                  <tt.icon className={`w-5 h-5 ${type === tt.value ? "text-brand-600" : tt.color}`} />
+                  <tt.icon className={`icon-lg ${type === tt.value ? "text-brand-600" : tt.color}`} />
                   <span className="text-xs font-medium text-neutral-700 leading-tight">{tt.label}</span>
                 </button>
               ))}
@@ -263,61 +326,46 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
           </div>
 
           {/* Name */}
-          <div>
-            <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
-              Function Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value.replace(/\s+/g, "_").toLowerCase())}
-              placeholder="check_availability"
-              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500"
-            />
-            <p className="text-xs text-neutral-400 mt-1">Lowercase, underscores only. This is what the AI calls.</p>
-          </div>
+          <InputField
+            label="Function Name"
+            required
+            registration={register("name", { setValueAs: (v: string) => v.replace(/\s+/g, "_").toLowerCase() })}
+            error={errors.name}
+            placeholder="check_availability"
+            hint="Lowercase, underscores only. This is what the AI calls."
+          />
 
           {/* Description */}
-          <div>
-            <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">Description</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={2}
-              placeholder="Check available time slots in the calendar"
-              className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 resize-none"
-            />
-            <p className="text-xs text-neutral-400 mt-1">Describe when the AI should call this tool.</p>
-          </div>
+          <InputField
+            label="Description"
+            registration={register("description")}
+            error={errors.description}
+            placeholder="Check available time slots in the calendar"
+            rows={2}
+            hint="Describe when the AI should call this tool."
+          />
 
           {/* Webhook URL */}
           {type === "webhook" && (
-            <div>
-              <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
-                Webhook URL <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={webhookUrl}
-                onChange={e => setWebhookUrl(e.target.value)}
-                placeholder="https://your-api.com/webhook"
-                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
-              />
-              <p className="text-xs text-neutral-400 mt-1">POST request with JSON body of collected parameters.</p>
-            </div>
+            <InputField
+              label="Webhook URL"
+              required
+              registration={register("webhookUrl")}
+              error={errors.webhookUrl}
+              placeholder="https://your-api.com/webhook"
+              hint="POST request with JSON body of collected parameters."
+            />
           )}
 
           {/* Transfer number */}
           {type === "transfer_call" && (
-            <div>
-              <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
-                Transfer To (E.164) <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={transferTo}
-                onChange={e => setTransferTo(e.target.value)}
-                placeholder="+14155552671"
-                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
-              />
-            </div>
+            <InputField
+              label="Transfer To (E.164)"
+              required
+              registration={register("transferTo")}
+              error={errors.transferTo}
+              placeholder="+14155552671"
+            />
           )}
 
           {/* Calendar Booking Config */}
@@ -357,8 +405,8 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
 
               {/* OAuth connect (Google) — no API key needed */}
               {CALENDAR_INTEGRATIONS.find(c => c.value === calIntegration)?.oauth && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
-                  <p className="text-xs font-semibold text-blue-700">Connect your Google account</p>
+                <div className="bg-info-50 border border-info-200 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-semibold text-info-700">Connect your Google account</p>
                   <p className="text-xs text-neutral-600">
                     Save this tool first, then authorize Google Calendar. Appointments are booked on your
                     primary calendar — no caller email required.
@@ -384,57 +432,44 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                 if (!preset || preset.oauth) return null;
                 return (
                   <>
-                    <div>
-                      <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
-                        {preset.apiKeyLabel} <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={calApiKey}
-                        onChange={e => setCalApiKey(e.target.value)}
-                        placeholder={preset.apiKeyPlaceholder}
-                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
-                      />
-                      <p className="text-xs text-neutral-400 mt-1">{preset.apiKeyHint}</p>
-                    </div>
-                    <div>
-                      <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
-                        {preset.idLabel} <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        value={calEventId}
-                        onChange={e => setCalEventId(e.target.value)}
-                        placeholder={preset.idPlaceholder}
-                        className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 font-mono"
-                      />
-                      <p className="text-xs text-neutral-400 mt-1">{preset.idHint}</p>
-                    </div>
+                    <InputField
+                      label={preset.apiKeyLabel}
+                      required
+                      registration={register("calApiKey")}
+                      error={errors.calApiKey}
+                      placeholder={preset.apiKeyPlaceholder}
+                      hint={preset.apiKeyHint}
+                      type="password"
+                    />
+                    <InputField
+                      label={preset.idLabel}
+                      required
+                      registration={register("calEventId")}
+                      error={errors.calEventId}
+                      placeholder={preset.idPlaceholder}
+                      hint={preset.idHint}
+                    />
                   </>
                 );
               })()}
 
               {/* Timezone */}
-              <div>
-                <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">Booking Timezone</label>
-                <select
-                  value={calTimezone}
-                  onChange={e => setCalTimezone(e.target.value)}
-                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:border-brand-500"
-                >
+              <FormField label="Booking Timezone" error={errors.calTimezone}>
+                <select {...register("calTimezone")} className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:border-brand-500">
                   {TIMEZONES.map(tz => (
                     <option key={tz} value={tz}>{tz}</option>
                   ))}
                 </select>
-              </div>
+              </FormField>
 
               {/* How it works */}
-              <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-1">
-                <p className="text-xs font-semibold text-orange-700 mb-1.5">How the agent uses this tool</p>
+              <div className="bg-warning-50 border border-warning-200 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-warning-700 mb-1.5">How the agent uses this tool</p>
                 <p className="text-xs text-neutral-600">1. Caller says they want to book an appointment</p>
-                <p className="text-xs text-neutral-600">2. Agent asks for preferred date → calls <span className="font-mono text-orange-600">check_availability</span></p>
+                <p className="text-xs text-neutral-600">2. Agent asks for preferred date → calls <span className="font-mono text-warning-600">check_availability</span></p>
                 <p className="text-xs text-neutral-600">3. Agent reads available slots, caller picks one</p>
-                <p className="text-xs text-neutral-600">4. Agent collects name + email → calls <span className="font-mono text-orange-600">book</span></p>
-                <p className="text-xs text-neutral-600">5. Confirmation sent to caller&apos;s email automatically</p>
+                <p className="text-xs text-neutral-600">4. Agent collects name + email → calls <span className="font-mono text-warning-600">book</span></p>
+                <p className="text-xs text-neutral-600">5. Confirmation sent to caller's email automatically</p>
               </div>
             </div>
           )}
@@ -448,7 +483,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                   onClick={addParam}
                   className="flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add
+                  <Plus className="icon-xs" /> Add
                 </button>
               </div>
               {params.length === 0 ? (
@@ -473,8 +508,8 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                           <option value="number">number</option>
                           <option value="boolean">boolean</option>
                         </select>
-                        <button onClick={() => removeParam(i)} className="text-neutral-400 hover:text-red-500">
-                          <Trash className="w-3.5 h-3.5" />
+                        <button onClick={() => removeParam(i)} className="text-neutral-400 hover:text-error-500">
+                          <Trash className="icon-xs" />
                         </button>
                       </div>
                       <input
@@ -505,7 +540,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={onSave}
             disabled={saving}
             className="px-4 py-2 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg disabled:opacity-50 transition-colors"
           >

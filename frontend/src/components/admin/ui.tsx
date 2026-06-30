@@ -3,16 +3,41 @@ import { useState } from "react";
 import {
   Users, Phone, Bot, RefreshCw,
   ToggleLeft, ToggleRight, Plus, Minus, ChevronDown, ChevronUp,
-  Megaphone, Send, Trash2, AlertTriangle, X,
+  Megaphone, Send, Trash2, AlertTriangle, X, Play, Download,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { api } from "@/lib/api";
+import { api, getAdminRecordingUrl } from "@/lib/api";
 
 // ── Shared API helpers ────────────────────────────────────────────────────────
 
 export const adminGet  = (path: string) => api.get(`/api/admin${path}`).then(r => r.data);
 export const adminPost = (path: string, body: unknown) => api.post(`/api/admin${path}`, body).then(r => r.data);
 export const adminPut  = (path: string, body: unknown) => api.put(`/api/admin${path}`, body).then(r => r.data);
+export const adminDelete = (path: string) => api.delete(`/api/admin${path}`).then(r => r.data);
+
+// Convert an array of objects to a CSV file and trigger a browser download.
+export function exportCsv(filename: string, rows: Record<string, unknown>[]) {
+  if (!rows.length) return;
+  const cols = Array.from(new Set(rows.flatMap(r => Object.keys(r))));
+  const esc = (v: unknown) => {
+    const s = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = [cols.join(","), ...rows.map(r => cols.map(c => esc(r[c])).join(","))].join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = `${filename}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+export function ExportButton({ rows, filename }: { rows: Record<string, unknown>[]; filename: string }) {
+  return (
+    <button onClick={() => exportCsv(filename, rows)} disabled={!rows.length}
+      className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 disabled:opacity-40 transition-colors">
+      <Download className="icon-sm" /> Export CSV
+    </button>
+  );
+}
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 
@@ -42,6 +67,7 @@ export interface CallRow {
   id: string; workspace_name: string; phone_number: string;
   direction: string; status: string; duration_seconds?: number;
   pipeline_mode: string; created_at: string;
+  has_recording?: boolean;
   cost_usd?: number | null;
   cost_breakdown?: {
     realtime_usd?: number | null; auxiliary_usd?: number | null;
@@ -94,7 +120,7 @@ export function KpiStat({ label, value, icon: Icon, sub, tint }: {
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400 truncate">{label}</span>
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${tint}`}>
-          <Icon className="w-3.5 h-3.5" />
+          <Icon className="icon-xs" />
         </div>
       </div>
       <div className="text-[22px] font-semibold text-neutral-900 tracking-tight leading-none">{value}</div>
@@ -106,10 +132,10 @@ export function KpiStat({ label, value, icon: Icon, sub, tint }: {
 export function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "emerald" | "amber" | "blue" | "red" }) {
   const tones: Record<string, string> = {
     neutral: "bg-neutral-100 text-neutral-600",
-    emerald: "bg-emerald-50 text-emerald-700",
-    amber:   "bg-amber-50 text-amber-700",
-    blue:    "bg-blue-50 text-blue-700",
-    red:     "bg-red-50 text-red-700",
+    emerald: "bg-success-50 text-success-700",
+    amber:   "bg-warning-50 text-warning-700",
+    blue:    "bg-info-50 text-info-700",
+    red:     "bg-error-50 text-error-700",
   };
   return <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full capitalize ${tones[tone]}`}>{children}</span>;
 }
@@ -119,7 +145,7 @@ export function CardLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function LoadingBlock() {
-  return <div className="flex items-center justify-center py-20"><RefreshCw className="w-5 h-5 text-neutral-400 animate-spin" /></div>;
+  return <div className="flex items-center justify-center py-20"><RefreshCw className="icon-lg text-neutral-400 animate-spin" /></div>;
 }
 
 // ── Workspace row with expandable detail ──────────────────────────────────────
@@ -171,34 +197,34 @@ export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => vo
   return (
     <div className="bg-white border border-neutral-200 rounded-xl shadow-xs overflow-hidden transition-colors">
       <div className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-neutral-50 transition-colors" onClick={expand}>
-        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ws.is_active ? "bg-emerald-400" : "bg-neutral-300"}`} />
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ws.is_active ? "bg-success-400" : "bg-neutral-300"}`} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-neutral-900 truncate">{ws.name}</p>
           <p className="text-xs text-neutral-400">{fmt(ws.created_at)}</p>
         </div>
         <div className="hidden sm:flex items-center gap-5 text-xs text-neutral-500">
-          <span title="Members"><Users className="w-3.5 h-3.5 inline mr-1 text-neutral-400" />{ws.member_count}</span>
-          <span title="Agents"><Bot className="w-3.5 h-3.5 inline mr-1 text-neutral-400" />{ws.agent_count}</span>
-          <span title="Calls"><Phone className="w-3.5 h-3.5 inline mr-1 text-neutral-400" />{ws.call_count}</span>
-          <span title="Balance" className={`font-medium ${ws.credits_balance <= 0 ? "text-red-500" : "text-emerald-600"}`}>{ws.credits_balance.toFixed(1)} min</span>
+          <span title="Members"><Users className="icon-xs inline mr-1 text-neutral-400" />{ws.member_count}</span>
+          <span title="Agents"><Bot className="icon-xs inline mr-1 text-neutral-400" />{ws.agent_count}</span>
+          <span title="Calls"><Phone className="icon-xs inline mr-1 text-neutral-400" />{ws.call_count}</span>
+          <span title="Balance" className={`font-medium ${ws.credits_balance <= 0 ? "text-error-500" : "text-success-600"}`}>{ws.credits_balance.toFixed(1)} min</span>
         </div>
         <Pill tone={ws.is_active ? "emerald" : "neutral"}>{ws.is_active ? "Active" : "Disabled"}</Pill>
-        {expanded ? <ChevronUp className="w-4 h-4 text-neutral-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-neutral-400 flex-shrink-0" />}
+        {expanded ? <ChevronUp className="icon-sm text-neutral-400 flex-shrink-0" /> : <ChevronDown className="icon-sm text-neutral-400 flex-shrink-0" />}
       </div>
 
       {expanded && (
         <div className="border-t border-neutral-100 bg-neutral-50 p-5 space-y-5">
           {loadingDetail ? (
-            <div className="flex justify-center py-6"><RefreshCw className="w-5 h-5 text-neutral-400 animate-spin" /></div>
+            <div className="flex justify-center py-6"><RefreshCw className="icon-lg text-neutral-400 animate-spin" /></div>
           ) : detail ? (
             <>
               <div className="flex flex-wrap items-center gap-3">
                 <button onClick={toggleStatus} disabled={toggling}
                   className={`inline-flex items-center gap-2 px-3 h-9 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 ${
-                    ws.is_active ? "text-red-600 border-red-200 hover:bg-red-50" : "text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                    ws.is_active ? "text-error-600 border-error-200 hover:bg-error-50" : "text-success-600 border-success-200 hover:bg-success-50"
                   }`}
                 >
-                  {ws.is_active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                  {ws.is_active ? <ToggleRight className="icon-sm" /> : <ToggleLeft className="icon-sm" />}
                   {ws.is_active ? "Disable workspace" : "Enable workspace"}
                 </button>
               </div>
@@ -211,12 +237,12 @@ export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => vo
                   <input type="text" placeholder="Reason (optional)" value={adjReason} onChange={e => setAdjReason(e.target.value)}
                     className="flex-1 min-w-[8rem] bg-white border border-neutral-200 rounded-lg px-3 h-9 text-neutral-900 text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10" />
                   <button onClick={() => adjustCredits(1)} disabled={adjusting}
-                    className="inline-flex items-center gap-1 px-3 h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg disabled:opacity-50">
+                    className="inline-flex items-center gap-1 px-3 h-9 bg-success-600 hover:bg-success-700 text-white text-xs font-medium rounded-lg disabled:opacity-50">
                     <Plus className="w-3.5 h-3.5" /> Add
                   </button>
                   <button onClick={() => adjustCredits(-1)} disabled={adjusting}
-                    className="inline-flex items-center gap-1 px-3 h-9 bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-medium rounded-lg disabled:opacity-50">
-                    <Minus className="w-3.5 h-3.5" /> Deduct
+                    className="inline-flex items-center gap-1 px-3 h-9 bg-white border border-error-200 text-error-600 hover:bg-error-50 text-xs font-medium rounded-lg disabled:opacity-50">
+                    <Minus className="icon-xs" /> Deduct
                   </button>
                 </div>
                 <p className="text-xs text-neutral-500">Current balance: <span className="text-neutral-900 font-medium">{detail.credits_balance.toFixed(1)} min</span></p>
@@ -272,7 +298,7 @@ export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => vo
                         <span className="text-neutral-700 truncate max-w-[160px]">{t.description || t.type}</span>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {t.amount_paid ? <span className="text-neutral-400">{t.currency === "INR" ? "₹" : "$"}{t.amount_paid}</span> : null}
-                          <span className={`font-medium ${t.minutes >= 0 ? "text-emerald-600" : "text-red-500"}`}>{t.minutes >= 0 ? "+" : ""}{t.minutes.toFixed(1)}m</span>
+                          <span className={`font-medium ${t.minutes >= 0 ? "text-success-600" : "text-error-500"}`}>{t.minutes >= 0 ? "+" : ""}{t.minutes.toFixed(1)}m</span>
                         </div>
                       </div>
                     ))}
@@ -296,7 +322,7 @@ function CostLine({ label, v, bold, accent, sub }: { label: string; v?: number |
       <span className={bold ? "text-neutral-700 font-medium" : "text-neutral-500"}>
         {label}{sub && <span className="text-neutral-400 ml-1">{sub}</span>}
       </span>
-      <span className={accent ? "text-amber-600 font-semibold" : bold ? "text-neutral-900 font-medium" : "text-neutral-600"}>
+      <span className={accent ? "text-warning-600 font-semibold" : bold ? "text-neutral-900 font-medium" : "text-neutral-600"}>
         {v != null ? `$${Number(v).toFixed(4)}` : "—"}
       </span>
     </div>
@@ -305,6 +331,7 @@ function CostLine({ label, v, bold, accent, sub }: { label: string; v?: number |
 
 export function AdminCallRow({ c }: { c: CallRow }) {
   const [open, setOpen] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const cb = c.cost_breakdown;
   const hasCost = c.cost_usd != null && c.cost_usd > 0;
   const auxEntries = cb?.auxiliary ? Object.entries(cb.auxiliary) : [];
@@ -312,7 +339,7 @@ export function AdminCallRow({ c }: { c: CallRow }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl shadow-xs overflow-hidden">
       <div className="flex items-center gap-4 px-5 py-3">
-        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "in_progress" ? "bg-brand-400 animate-pulse" : c.status === "completed" ? "bg-emerald-400" : "bg-amber-400"}`} />
+        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "in_progress" ? "bg-brand-400 animate-pulse" : c.status === "completed" ? "bg-success-400" : "bg-warning-400"}`} />
         <div className="flex-1 min-w-0">
           <p className="text-sm text-neutral-900 truncate">{c.phone_number}</p>
           <p className="text-xs text-neutral-400 truncate">{c.workspace_name} · {c.pipeline_mode}</p>
@@ -320,16 +347,29 @@ export function AdminCallRow({ c }: { c: CallRow }) {
         <span className="text-xs text-neutral-400 hidden sm:inline capitalize">{c.direction}</span>
         {c.duration_seconds ? <span className="text-xs text-neutral-500">{c.duration_seconds}s</span> : null}
         {hasCost
-          ? <span className="text-xs font-medium text-amber-700 bg-amber-50 rounded px-1.5 py-0.5">${c.cost_usd!.toFixed(4)}</span>
+          ? <span className="text-xs font-medium text-warning-700 bg-warning-50 rounded px-1.5 py-0.5">${c.cost_usd!.toFixed(4)}</span>
           : <span className="text-xs text-neutral-300">—</span>}
         <Pill tone={c.status === "completed" ? "emerald" : "neutral"}>{c.status}</Pill>
         <span className="text-xs text-neutral-400 hidden md:inline">{fmt(c.created_at)}</span>
+        {c.has_recording && (
+          <button onClick={() => setPlaying(p => !p)}
+            className={`w-7 h-7 flex items-center justify-center rounded-lg flex-shrink-0 transition-colors ${playing ? "text-brand-600 bg-brand-50" : "text-neutral-400 hover:text-brand-600 hover:bg-brand-50"}`}
+            title="Play recording">
+            <Play className="icon-sm" />
+          </button>
+        )}
         <button onClick={() => setOpen(o => !o)} disabled={!hasCost}
           className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 disabled:opacity-30 disabled:cursor-default flex-shrink-0"
           title={hasCost ? "Cost breakdown" : "No cost recorded"}>
-          {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {open ? <ChevronUp className="icon-sm" /> : <ChevronDown className="icon-sm" />}
         </button>
       </div>
+
+      {playing && c.has_recording && (
+        <div className="border-t border-neutral-100 bg-neutral-50 px-5 py-3">
+          <audio controls autoPlay src={getAdminRecordingUrl(c.id)} className="w-full h-9" />
+        </div>
+      )}
 
       {open && hasCost && cb && (
         <div className="border-t border-neutral-100 bg-neutral-50 px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
@@ -367,19 +407,19 @@ export function DeleteConfirmModal({ email, onConfirm, onCancel, loading }: {
     <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-fade-in">
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-modal w-full max-w-sm animate-scale-in">
         <div className="flex items-start justify-between p-6 pb-4">
-          <div className="w-10 h-10 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
+          <div className="w-10 h-10 bg-error-50 border border-error-100 rounded-xl flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="icon-lg text-error-500" />
           </div>
           <button onClick={onCancel} className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors">
-            <X className="w-4 h-4" />
+            <X className="icon-sm" />
           </button>
         </div>
         <div className="px-6 pb-6">
           <h2 className="text-[15px] font-semibold text-neutral-900 mb-1.5">Delete account</h2>
           <p className="text-sm text-neutral-500 mb-1">You are about to permanently delete:</p>
           <p className="text-sm font-semibold text-neutral-800 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 mb-4 font-mono break-all">{email}</p>
-          <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-6">
-            <p className="text-xs text-red-700 leading-relaxed">
+          <div className="bg-error-50 border border-error-100 rounded-xl px-4 py-3 mb-6">
+            <p className="text-xs text-error-700 leading-relaxed">
               If this is the only member of their workspace, <span className="font-semibold">the entire workspace — including all agents, calls, and data — will also be permanently deleted.</span> This action cannot be undone.
             </p>
           </div>
@@ -389,8 +429,8 @@ export function DeleteConfirmModal({ email, onConfirm, onCancel, loading }: {
               Cancel
             </button>
             <button onClick={onConfirm} disabled={loading}
-              className="flex-1 h-10 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl shadow-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
-              {loading ? (<><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Deleting…</>) : (<><Trash2 className="w-3.5 h-3.5" /> Delete Account</>)}
+              className="flex-1 h-10 bg-error-500 hover:bg-error-600 text-white text-sm font-semibold rounded-xl shadow-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5">
+              {loading ? (<><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Deleting…</>) : (<><Trash2 className="icon-xs" /> Delete Account</>)}
             </button>
           </div>
         </div>
@@ -433,14 +473,14 @@ export function AnnouncementPanel() {
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 transition-colors">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-brand-50 border border-brand-200 rounded-lg flex items-center justify-center">
-            <Megaphone className="w-4 h-4 text-brand-500" />
+            <Megaphone className="icon-sm text-brand-500" />
           </div>
           <div className="text-left">
             <p className="text-sm font-semibold text-neutral-900">Send Announcement</p>
             <p className="text-xs text-neutral-500">Broadcast a feature update or message to all opted-in users</p>
           </div>
         </div>
-        <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`icon-sm text-neutral-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
@@ -472,7 +512,7 @@ export function AnnouncementPanel() {
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <button onClick={send} disabled={sending}
               className="inline-flex items-center gap-2 h-9 px-5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg shadow-xs transition-colors disabled:opacity-50">
-              <Send className="w-3.5 h-3.5" /> {sending ? "Sending…" : "Send to All Users"}
+              <Send className="icon-xs" /> {sending ? "Sending…" : "Send to All Users"}
             </button>
             <button onClick={sendTest} disabled={testSending}
               className="inline-flex items-center gap-2 h-9 px-4 bg-white hover:bg-neutral-50 border border-neutral-200 text-sm font-medium text-neutral-600 rounded-lg shadow-xs transition-colors disabled:opacity-50">

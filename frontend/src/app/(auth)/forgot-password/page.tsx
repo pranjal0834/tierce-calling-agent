@@ -1,24 +1,32 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Zap, ArrowLeft, MailCheck } from "lucide-react";
+import { ArrowLeft, MailCheck } from "lucide-react";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 import toast from "react-hot-toast";
 import { api } from "@/lib/api";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { InputField } from "@/components/ui/FormField";
+
+const schema = z.object({
+  email: z.string().min(1, "Email is required").email("Invalid email address"),
+});
+
+type FormValues = z.infer<typeof schema>;
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const { register, handleSubmit, formState: { errors }, watch } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      toast.error("Please enter your email");
-      return;
-    }
+  const onSubmit = async (data: FormValues) => {
     setLoading(true);
     try {
-      await api.post("/auth/forgot-password", { email });
+      await api.post("/auth/forgot-password", { email: data.email });
       setSent(true);
     } catch {
       // Still show success to avoid leaking which emails exist
@@ -32,7 +40,7 @@ export default function ForgotPasswordPage() {
       {/* Logo */}
       <div className="flex items-center gap-2.5 justify-center mb-8">
         <div className="w-9 h-9 bg-brand-500 rounded-[11px] flex items-center justify-center shadow-brand">
-          <Zap className="w-4.5 h-4.5 text-white" />
+          <VaaniqWave className="icon-md text-white" />
         </div>
         <span className="text-2xl font-semibold tracking-tight text-neutral-900">Vaaniq</span>
       </div>
@@ -41,12 +49,12 @@ export default function ForgotPasswordPage() {
       <div className="bg-white rounded-2xl border border-neutral-200 shadow-modal p-6 sm:p-8">
         {sent ? (
           <div className="text-center">
-            <div className="w-12 h-12 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <MailCheck className="w-6 h-6 text-emerald-500" />
+            <div className="w-12 h-12 bg-success-50 border border-success-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <MailCheck className="w-6 h-6 text-success-500" />
             </div>
             <h1 className="text-xl font-semibold text-neutral-900 tracking-tight">Check your email</h1>
             <p className="text-sm text-neutral-500 mt-2 leading-relaxed">
-              If an account exists for <span className="font-medium text-neutral-800">{email}</span>,
+              If an account exists for <span className="font-medium text-neutral-800">{watch("email")}</span>,
               we&apos;ve sent a password reset link. It expires in 30 minutes.
             </p>
             <p className="text-xs text-neutral-400 mt-3">
@@ -68,18 +76,14 @@ export default function ForgotPasswordPage() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="label-base">Email</label>
-                <input
-                  type="email"
-                  autoComplete="email"
-                  className="input-base"
-                  placeholder="you@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              <InputField
+                label="Email"
+                registration={register("email")}
+                error={errors.email}
+                type="email"
+                placeholder="you@company.com"
+              />
               <button
                 type="submit"
                 disabled={loading}

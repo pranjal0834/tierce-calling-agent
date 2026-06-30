@@ -7,9 +7,11 @@ import {
   Wrench, Brain
 } from "lucide-react";
 import Link from "next/link";
+import Breadcrumb from "@/components/Breadcrumb";
 import { getAgent, getCalls, getAgentAnalytics, deleteAgent } from "@/lib/api";
 import toast from "react-hot-toast";
 import { ToolsTab } from "@/components/tools/ToolsTab";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 // Gemini voices (current) plus legacy OpenAI ids so older agents still show a name.
 const VOICE_LABELS: Record<string, string> = {
@@ -39,15 +41,15 @@ function toolDetail(t: any): string {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; dot: string; text: string; bg: string }> = {
-    completed:     { label: "Completed", dot: "bg-emerald-400",             text: "text-emerald-700", bg: "bg-emerald-50"  },
+    completed:     { label: "Completed", dot: "bg-success-400",             text: "text-success-700", bg: "bg-success-50"  },
     "in-progress": { label: "Live",      dot: "bg-brand-400 animate-pulse", text: "text-brand-700",   bg: "bg-brand-50"    },
     in_progress:   { label: "Live",      dot: "bg-brand-400 animate-pulse", text: "text-brand-700",   bg: "bg-brand-50"    },
-    ringing:       { label: "Ringing",   dot: "bg-amber-400 animate-pulse", text: "text-amber-700",   bg: "bg-amber-50"    },
-    initiated:     { label: "Initiated", dot: "bg-amber-400",               text: "text-amber-700",   bg: "bg-amber-50"    },
+    ringing:       { label: "Ringing",   dot: "bg-warning-400 animate-pulse", text: "text-warning-700",   bg: "bg-warning-50"    },
+    initiated:     { label: "Initiated", dot: "bg-warning-400",               text: "text-warning-700",   bg: "bg-warning-50"    },
     not_answered:  { label: "No Answer", dot: "bg-neutral-400",             text: "text-neutral-600", bg: "bg-neutral-100" },
-    failed:        { label: "Failed",    dot: "bg-red-400",                 text: "text-red-700",     bg: "bg-red-50"      },
+    failed:        { label: "Failed",    dot: "bg-error-400",                 text: "text-error-700",     bg: "bg-error-50"      },
     cancelled:     { label: "Cancelled", dot: "bg-neutral-400",             text: "text-neutral-600", bg: "bg-neutral-100" },
-    voicemail:     { label: "Voicemail", dot: "bg-orange-400",              text: "text-orange-700",  bg: "bg-orange-50"   },
+    voicemail:     { label: "Voicemail", dot: "bg-warning-400",              text: "text-warning-700",  bg: "bg-warning-50"   },
   };
   const b = map[status] ?? { label: status, dot: "bg-neutral-400", text: "text-neutral-600", bg: "bg-neutral-100" };
   return (
@@ -86,6 +88,7 @@ export default function AgentViewPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "tools">( "overview");
   const [toolsCount, setToolsCount] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -101,13 +104,18 @@ export default function AgentViewPage() {
   }, [id]);
 
   const handleDelete = async () => {
-    if (!confirm("Delete this agent? This cannot be undone.")) return;
+    setConfirmDelete(true);
+  };
+
+  const doDelete = async () => {
     try {
       await deleteAgent(id);
       toast.success("Agent deleted");
       router.push("/agents");
     } catch {
       toast.error("Failed to delete agent");
+    } finally {
+      setConfirmDelete(false);
     }
   };
 
@@ -135,12 +143,17 @@ export default function AgentViewPage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumb items={[{ label: "Agents", href: "/agents" }, { label: agent.name }]} />
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-start gap-4">
-          <Link href="/agents" className="mt-1 text-neutral-400 hover:text-neutral-900 transition-colors">
+          <button
+            onClick={() => (window.history.length > 1 ? router.back() : router.push("/agents"))}
+            className="mt-1 text-neutral-400 hover:text-neutral-900 transition-colors"
+            title="Back"
+          >
             <ArrowLeft className="w-5 h-5" />
-          </Link>
+          </button>
           <div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-500/20">
@@ -162,7 +175,7 @@ export default function AgentViewPage() {
           </Link>
           <button
             onClick={handleDelete}
-            className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-error-500 hover:text-error-600 bg-error-50 hover:bg-error-100 border border-error-100 rounded-lg transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" /> Delete
           </button>
@@ -228,7 +241,7 @@ export default function AgentViewPage() {
               </Row>
               <Row label="Status">
                 {agent.is_active
-                  ? <span className="flex items-center gap-1 text-sm text-green-600"><CheckCircle2 className="w-3.5 h-3.5" /> Active</span>
+                  ? <span className="flex items-center gap-1 text-sm text-success-600"><CheckCircle2 className="w-3.5 h-3.5" /> Active</span>
                   : <span className="flex items-center gap-1 text-sm text-neutral-400"><XCircle className="w-3.5 h-3.5" /> Inactive</span>}
               </Row>
               <Row label="Accent">
@@ -279,7 +292,7 @@ export default function AgentViewPage() {
                     return (
                       <div key={t.id ?? t.name} className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.enabled === false ? "bg-neutral-300" : "bg-green-500"}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${t.enabled === false ? "bg-neutral-300" : "bg-success-500"}`} />
                           <span className="text-sm text-neutral-800 truncate">{TOOL_TYPE_LABELS[t.type] ?? t.type}</span>
                         </div>
                         {detail && <span className="text-xs text-neutral-400 font-mono truncate max-w-[50%]">{detail}</span>}
@@ -323,9 +336,9 @@ export default function AgentViewPage() {
                     <div key={call.id} className="flex items-center justify-between py-2.5 border-b border-neutral-200 last:border-0">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                          call.direction === "outbound" ? "bg-brand-50" : "bg-green-50"
+                          call.direction === "outbound" ? "bg-brand-50" : "bg-success-50"
                         }`}>
-                          <Phone className={`w-3.5 h-3.5 ${call.direction === "outbound" ? "text-brand-600" : "text-green-600"}`} />
+                          <Phone className={`w-3.5 h-3.5 ${call.direction === "outbound" ? "text-brand-600" : "text-success-600"}`} />
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm text-neutral-900 font-mono truncate">{call.phone_number}</p>
@@ -353,6 +366,13 @@ export default function AgentViewPage() {
       )}
 
       {activeTab === "tools" && <ToolsTab agentId={id} onToolsChange={setToolsCount} />}
+      <ConfirmModal
+        open={confirmDelete}
+        title="Delete Agent"
+        message="Delete this agent? This cannot be undone."
+        onConfirm={doDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

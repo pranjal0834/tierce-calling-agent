@@ -100,6 +100,10 @@ export const getRecordingUrl = (callId: string): string => {
   const token = getToken();
   return `${BASE}/api/calls/${callId}/recording?token=${encodeURIComponent(token || "")}`;
 };
+export const getAdminRecordingUrl = (callId: string): string => {
+  const token = getToken();
+  return `${BASE}/api/admin/calls/${callId}/recording?token=${encodeURIComponent(token || "")}`;
+};
 
 // ── Analytics ────────────────────────────────────────────────────────────────
 
@@ -125,6 +129,7 @@ export const clearMemory = (contactId: string) =>
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export const getMe = () => api.get("/auth/me").then((r: AxiosResponse) => r.data);
+export const acceptTerms = () => api.post("/auth/accept-terms").then((r: AxiosResponse) => r.data);
 export const getWorkspace = () => api.get("/auth/workspace").then((r: AxiosResponse) => r.data);
 export const getApiKeys = () => api.get("/auth/api-keys").then((r: AxiosResponse) => r.data);
 export const createApiKey = (name: string) => api.post("/auth/api-keys", { name }).then((r: AxiosResponse) => r.data);

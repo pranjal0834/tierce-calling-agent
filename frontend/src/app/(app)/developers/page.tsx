@@ -5,6 +5,7 @@ import {
   Terminal, Globe, Zap, Phone, CalendarClock, BookOpen,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getApiKeys, createApiKey, revokeApiKey, getWorkspace } from "@/lib/api";
 
 interface ApiKey { id: string; name: string; last_used_at?: string; created_at: string; }
@@ -21,7 +22,7 @@ function CopyButton({ text }: { text: string }) {
   }
   return (
     <button onClick={copy} title="Copy" className="text-neutral-400 hover:text-neutral-900 transition-colors shrink-0">
-      {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? <Check className="w-3.5 h-3.5 text-success-500" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -43,7 +44,7 @@ function CodeBlock({ code, language = "bash" }: { code: string; language?: strin
           className="flex items-center gap-1 text-[10px] font-medium text-neutral-500 hover:text-neutral-800 transition-colors"
         >
           {copied
-            ? <><Check className="w-3 h-3 text-green-500" /> Copied</>
+            ? <><Check className="w-3 h-3 text-success-500" /> Copied</>
             : <><Copy className="w-3 h-3" /> Copy</>}
         </button>
       </div>
@@ -71,6 +72,7 @@ function ApiKeysSection() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState("");
+  const [confirmRevoke, setConfirmRevoke] = useState<{open: boolean; id?: string; name?: string}>({open: false});
 
   const load = useCallback(async () => {
     try { setKeys(await getApiKeys()); }
@@ -97,13 +99,19 @@ function ApiKeysSection() {
   }
 
   async function revoke(id: string, name: string) {
-    if (!confirm(`Revoke key "${name}"? This cannot be undone.`)) return;
+    setConfirmRevoke({open: true, id, name});
+  }
+
+  async function doRevoke() {
+    if (!confirmRevoke.id) return;
     try {
-      await revokeApiKey(id);
-      setKeys((k) => k.filter((x) => x.id !== id));
+      await revokeApiKey(confirmRevoke.id);
+      setKeys((k) => k.filter((x) => x.id !== confirmRevoke.id));
       toast.success("Key revoked");
     } catch {
       toast.error("Failed to revoke key");
+    } finally {
+      setConfirmRevoke({open: false});
     }
   }
 
@@ -187,6 +195,13 @@ function ApiKeysSection() {
           </div>
         )}
       </div>
+      <ConfirmModal
+        open={confirmRevoke.open}
+        title="Revoke API Key"
+        message={confirmRevoke.name ? `Revoke key "${confirmRevoke.name}"? This cannot be undone.` : ""}
+        onConfirm={doRevoke}
+        onCancel={() => setConfirmRevoke({open: false})}
+      />
     </div>
   );
 }

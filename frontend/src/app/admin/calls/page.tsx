@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { RefreshCw, Search, Phone } from "lucide-react";
 import toast from "react-hot-toast";
-import { adminGet, CallRow, AdminCallRow, PageHeading, LoadingBlock } from "@/components/admin/ui";
+import { adminGet, CallRow, AdminCallRow, PageHeading, LoadingBlock, ExportButton } from "@/components/admin/ui";
 
 export default function AdminCallsPage() {
   const [calls, setCalls] = useState<CallRow[]>([]);
@@ -30,9 +30,12 @@ export default function AdminCallsPage() {
         title="Calls"
         subtitle="Recent calls across all workspaces — tap a row for its cost breakdown"
         action={
-          <button onClick={load} className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </button>
+          <div className="flex gap-2">
+            <ExportButton rows={calls.map(({ cost_breakdown, ...r }) => r) as unknown as Record<string, unknown>[]} filename="calls" />
+            <button onClick={load} className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
+          </div>
         }
       />
 

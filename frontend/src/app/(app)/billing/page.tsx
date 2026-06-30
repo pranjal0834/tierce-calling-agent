@@ -74,9 +74,9 @@ function fmtMins(m: number) {
 }
 
 const TX_ICONS: Record<string, React.ReactNode> = {
-  purchase:    <ArrowUpRight className="w-4 h-4 text-green-500" />,
+  purchase:    <ArrowUpRight className="w-4 h-4 text-success-500" />,
   free_trial:  <Zap className="w-4 h-4 text-yellow-500" />,
-  deduction:   <ArrowDownLeft className="w-4 h-4 text-red-500" />,
+  deduction:   <ArrowDownLeft className="w-4 h-4 text-error-500" />,
 };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -263,9 +263,9 @@ export default function BillingPage() {
 
       {/* Test mode banner */}
       {testMode && (
-        <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-          <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-700">
+        <div className="flex items-start gap-2.5 bg-warning-50 border border-warning-200 rounded-xl px-4 py-3">
+          <Zap className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-warning-700">
             <span className="font-semibold">Test mode is on.</span> Clicking “Buy Now” will simulate a successful
             payment and add credits instantly — no real money is charged. Turn off <code className="font-mono">BILLING_TEST_MODE</code> for live payments.
           </p>
@@ -309,7 +309,7 @@ export default function BillingPage() {
               </p>
             )}
             {balance != null && balance <= 0 && (
-              <p className="mt-2 text-sm text-red-600 flex items-center gap-1">
+              <p className="mt-2 text-sm text-error-600 flex items-center gap-1">
                 <Zap className="w-3.5 h-3.5" /> No balance — calls are blocked until you top up
               </p>
             )}
@@ -395,13 +395,13 @@ export default function BillingPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <p className="text-xs text-neutral-400">{symbol}{perMin}/min</p>
                   {savePct >= 1 && (
-                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                    <span className="text-[11px] font-semibold text-success-700 bg-success-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
                       Save {savePct}%
                     </span>
                   )}
                 </div>
               )}
-              <div className="flex items-center gap-1 text-xs text-emerald-600 mb-3">
+              <div className="flex items-center gap-1 text-xs text-success-600 mb-3">
                 <Phone className="w-3 h-3" />
                 Unlocks dedicated phone numbers
               </div>
@@ -448,7 +448,7 @@ export default function BillingPage() {
                     <p className="text-xs text-neutral-500">{fmtDate(tx.created_at)}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className={`text-sm font-medium ${tx.minutes >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    <p className={`text-sm font-medium ${tx.minutes >= 0 ? "text-success-600" : "text-error-600"}`}>
                       {tx.minutes >= 0 ? "+" : ""}{fmtMins(tx.minutes)}
                     </p>
                     {tx.amount_paid != null && (

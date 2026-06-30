@@ -706,13 +706,22 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
 
 @router.get("", response_model=List[TemplateOut])
 async def list_templates(
+    db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     user: User = Depends(get_current_user),
 ):
-    """Get all 15 prebuilt templates."""
-    res = []
-    for val in TEMPLATES.values():
-        res.append(TemplateOut(**val))
+    """Built-in templates plus any admin-published official templates."""
+    res = [TemplateOut(**val) for val in TEMPLATES.values()]
+    from sqlalchemy import select as _sel
+    from backend.db.models import AgentTemplate
+    rows = (await db.execute(_sel(AgentTemplate).where(AgentTemplate.is_official == True))).scalars().all()
+    for t in rows:
+        res.append(TemplateOut(
+            id=f"db_{t.id}", name=t.name, category=t.category or "Custom",
+            description=t.description or "", difficulty="Beginner", duration="2-3 mins",
+            tags=t.tags or [], system_prompt=t.system_prompt, pipeline_mode=t.pipeline_mode or "native",
+            llm_model="Tierce Voice Engine", voice_id=t.voice_id or "Puck", config=t.config or {},
+        ))
     return res
 
 @router.post("/{template_id}/import", response_model=AgentOut, status_code=201)
@@ -723,25 +732,30 @@ async def import_template(
     workspace: Workspace = Depends(require_workspace),
     user: User = Depends(get_current_user),
 ):
-    """Import a prebuilt template into the current workspace as a live Agent."""
-    if template_id not in TEMPLATES:
-        raise HTTPException(status_code=404, detail="Template not found")
-    
-    tpl = TEMPLATES[template_id]
-    
-    agent = Agent(
-        id=str(uuid.uuid4()),
-        workspace_id=workspace.id,
-        name=payload.name or tpl["name"],
-        description=tpl["description"],
-        system_prompt=tpl["system_prompt"],
-        pipeline_mode=tpl["pipeline_mode"],
-        llm_model=tpl["llm_model"],
-        voice_id=tpl["voice_id"],
-        config=tpl["config"],
-        is_personal=payload.is_personal,
-        created_by=user.id,
-    )
+    """Import a built-in OR admin-published template into the workspace as a live Agent."""
+    if template_id in TEMPLATES:
+        tpl = TEMPLATES[template_id]
+        agent = Agent(
+            id=str(uuid.uuid4()), workspace_id=workspace.id,
+            name=payload.name or tpl["name"], description=tpl["description"],
+            system_prompt=tpl["system_prompt"], pipeline_mode=tpl["pipeline_mode"],
+            llm_model=tpl["llm_model"], voice_id=tpl["voice_id"], config=tpl["config"],
+            is_personal=payload.is_personal, created_by=user.id,
+        )
+    else:
+        # Admin-published official template (id prefixed with "db_").
+        from backend.db.models import AgentTemplate
+        tid = template_id[3:] if template_id.startswith("db_") else template_id
+        t = await db.get(AgentTemplate, tid)
+        if not t:
+            raise HTTPException(status_code=404, detail="Template not found")
+        agent = Agent(
+            id=str(uuid.uuid4()), workspace_id=workspace.id,
+            name=payload.name or t.name, description=t.description or "",
+            system_prompt=t.system_prompt, pipeline_mode=t.pipeline_mode or "native",
+            llm_model="Tierce Voice Engine", voice_id=t.voice_id, config=t.config or {},
+            is_personal=payload.is_personal, created_by=user.id,
+        )
     db.add(agent)
     await db.flush()
     await db.commit()

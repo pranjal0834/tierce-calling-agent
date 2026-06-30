@@ -1,9 +1,12 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Menu, Zap } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
+import TermsModal from "@/components/TermsModal";
+import CommandPalette from "@/components/CommandPalette";
+import { VaaniqWave } from "@/components/VaaniqLogo";
 import { getToken, clearToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 
@@ -31,7 +34,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const topbar = TOPBAR_PAGES[pathname];
+  const [needsTerms, setNeedsTerms] = useState(false);
+  const topbar = TOPBAR_PAGES[pathname] || Object.entries(TOPBAR_PAGES).find(([key]) => key !== "/" && pathname.startsWith(key))?.[1];
 
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_KEY);
@@ -51,9 +55,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
-    api.get<{ is_superadmin?: boolean }>("/auth/me")
+    api.get<{ is_superadmin?: boolean; needs_terms_acceptance?: boolean }>("/auth/me")
       .then(r => {
-        if (r.data?.is_superadmin) window.location.href = "/admin";
+        if (r.data?.is_superadmin) { window.location.href = "/admin"; return; }
+        if (r.data?.needs_terms_acceptance) setNeedsTerms(true);
       })
       .catch((err: { response?: { status?: number } }) => {
         if (!err.response || err.response.status === 401 || err.response.status === 403) {
@@ -65,6 +70,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50">
+      {needsTerms && <TermsModal onAccepted={() => setNeedsTerms(false)} />}
+      <CommandPalette />
       <Sidebar
         collapsed={collapsed}
         onToggle={toggleSidebar}
@@ -88,7 +95,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-brand-500 rounded-lg flex items-center justify-center shadow-brand">
-                <Zap className="w-3.5 h-3.5 text-white" />
+                <VaaniqWave className="icon-xs text-white" />
               </div>
               <span className="font-semibold text-[15px] text-neutral-900 tracking-tight">Vaaniq</span>
             </div>

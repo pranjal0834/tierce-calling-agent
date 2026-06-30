@@ -56,6 +56,9 @@ class User(Base):
     google_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     role: Mapped[str] = mapped_column(String(20), default="member")    # owner | member
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Terms of Service acceptance (audit trail). Version lets us re-prompt when terms change.
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    terms_accepted_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="users")
@@ -222,6 +225,25 @@ class Agent(Base):
     calls: Mapped[list["Call"]] = relationship("Call", back_populates="agent")
 
     __table_args__ = (Index("idx_agents_workspace_id", "workspace_id"),)
+
+
+class AgentTemplate(Base):
+    """Admin-created 'official' agent templates shown in the user template picker
+    alongside the built-in ones."""
+    __tablename__ = "agent_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(100), default="Custom")
+    description: Mapped[str] = mapped_column(Text, default="")
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    voice_id: Mapped[str | None] = mapped_column(String(100))
+    pipeline_mode: Mapped[str] = mapped_column(String(20), default="native")
+    config: Mapped[dict] = mapped_column(JSONB, default=dict)
+    tags: Mapped[list] = mapped_column(JSONB, default=list)
+    is_official: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 # ─── Knowledge Base ────────────────────────────────────────────────────────────
