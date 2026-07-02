@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useState } from "react";
 import { X, RefreshCw, ShieldCheck, ShieldAlert } from "lucide-react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -107,7 +108,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
   const [cin, setCin] = useState(existing?.cin ?? "");
   const [authorizedPan, setAuthorizedPan] = useState(existing?.authorized_pan ?? "");
   const [documentFiles, setDocumentFiles] = useState<File[]>([]);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>(true, onClose);
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors }, trigger } = useForm<KycFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,44 +157,16 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
     }
   });
 
-  const onKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
-    if (e.key === "Tab" && dialogRef.current) {
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    }
-  }, [onClose]);
-
-  useEffect(() => {
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onKeyDown]);
-
-  useEffect(() => {
-    if (dialogRef.current) {
-      const first = dialogRef.current.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      first?.focus();
-    }
-  }, []);
-
   const inp = "w-full bg-neutral-100 border border-neutral-200 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500";
   const lbl = "block text-xs text-neutral-500 mb-1.5";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="kyc-modal-title">
       <div ref={dialogRef} className="bg-white border border-neutral-200 sm:rounded-2xl rounded-t-2xl w-full sm:max-w-lg shadow-2xl max-h-[92vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-neutral-100 shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-neutral-900">KYC — {countryName}</h2>
+            <h2 id="kyc-modal-title" className="text-base font-semibold text-neutral-900">KYC — {countryName}</h2>
             <p className="text-xs text-neutral-500 mt-0.5">
               Required before buying a {countryName} number
               {country === "IN" ? " (TRAI regulation)" : ""}
@@ -208,7 +181,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
         <form onSubmit={onSave} className="p-5 space-y-4 overflow-y-auto flex-1 font-sans">
           {/* Business type toggle */}
           <div>
-            <label className={lbl}>Entity type</label>
+            <label id="kyc-entity-type-label" className={lbl}>Entity type</label>
             <div className="flex gap-2">
               {(["company", "individual"] as const).map(t => (
                 <button
@@ -228,6 +201,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
 
           <InputField
             label={businessType === "company" ? "Registered business name" : "Full name"}
+            id="business_name"
             required
             registration={register("business_name")}
             error={errors.business_name}
@@ -240,8 +214,8 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
                 <input {...register("gstin")} placeholder="22AAAAA0000A1Z5" className={inp} />
               </FormField>
               <div>
-                <label className={lbl}>CIN (optional)</label>
-                <input value={cin} onChange={e => setCin(e.target.value)}
+                <label htmlFor="kyc-cin" className={lbl}>CIN (optional)</label>
+                <input id="kyc-cin" value={cin} onChange={e => setCin(e.target.value)}
                   placeholder="U72900MH2020PTC123456" className={inp} />
               </div>
             </div>
@@ -249,6 +223,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
 
           <InputField
             label="Registered address"
+            id="business_address"
             required
             registration={register("business_address")}
             error={errors.business_address}
@@ -259,6 +234,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
             <div className="col-span-1">
               <InputField
                 label="City"
+                id="kyc-city"
                 required
                 registration={register("city")}
                 error={errors.city}
@@ -268,6 +244,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
             <div className="col-span-1">
               <InputField
                 label="State"
+                id="kyc-state"
                 required
                 registration={register("state")}
                 error={errors.state}
@@ -277,6 +254,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
             <div className="col-span-1">
               <InputField
                 label={country === "IN" ? "PIN code" : "Postal code"}
+                id="kyc-pincode"
                 required
                 registration={register("pincode")}
                 error={errors.pincode}
@@ -290,6 +268,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
             <div className="grid grid-cols-2 gap-3">
               <InputField
                 label="Full name"
+                id="authorized_signatory"
                 required
                 registration={register("authorized_signatory")}
                 error={errors.authorized_signatory}
@@ -297,6 +276,7 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
               />
               <InputField
                 label="Designation"
+                id="signatory_designation"
                 required
                 registration={register("signatory_designation")}
                 error={errors.signatory_designation}
@@ -305,8 +285,8 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
             </div>
             {country === "IN" && (
               <div className="mt-3">
-                <label className={lbl}>PAN number</label>
-                <input value={authorizedPan} onChange={e => setAuthorizedPan(e.target.value.toUpperCase())}
+                <label htmlFor="kyc-pan" className={lbl}>PAN number</label>
+                <input id="kyc-pan" value={authorizedPan} onChange={e => setAuthorizedPan(e.target.value.toUpperCase())}
                   placeholder="ABCDE1234F" maxLength={10} className={`${inp} font-mono`} />
               </div>
             )}
@@ -314,8 +294,9 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
 
           {/* Document upload */}
           <div>
-            <label className={lbl}>Upload Documents <span className="text-error-400 ml-0.5">*</span></label>
+            <label htmlFor="kyc-documents" className={lbl}>Upload Documents <span className="text-error-400 ml-0.5">*</span></label>
             <input
+              id="kyc-documents"
               type="file"
               multiple
               onChange={e => {
@@ -338,8 +319,8 @@ export function KycFormModal({ country, existing, onClose, onSubmitted }: KycFor
           </div>
 
           {/* Agree checkbox */}
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input type="checkbox" {...register("agree")} className="mt-0.5 w-4 h-4 accent-brand-500 rounded" />
+          <label htmlFor="kyc-agree" className="flex items-start gap-2.5 cursor-pointer">
+            <input id="kyc-agree" type="checkbox" {...register("agree")} className="mt-0.5 w-4 h-4 accent-brand-500 rounded" />
             <span className="text-xs text-neutral-600">
               I confirm that the information provided is accurate and agree to the terms of service.
             </span>

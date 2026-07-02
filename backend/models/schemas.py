@@ -42,10 +42,30 @@ class UserOut(BaseModel):
     is_superadmin: bool = False
     has_password: bool = False
     needs_terms_acceptance: bool = False
+    # Profile
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    phone: Optional[str] = None
+    address_line: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    postal_code: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address_line: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    postal_code: Optional[str] = None
 
 
 class ApiKeyCreate(BaseModel):

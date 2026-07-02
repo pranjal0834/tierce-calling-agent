@@ -11,15 +11,23 @@ function CallbackHandler() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const token = params.get("token");
-    if (token) {
-      setToken(token);
-      api.get<{ is_superadmin?: boolean }>("/auth/me")
-        .then(r => { router.push(r.data?.is_superadmin ? "/admin" : "/"); })
-        .catch(() => { setError("Authentication failed. Please try again."); });
-    } else {
-      router.replace("/login");
-    }
+    const code = params.get("code");
+    const legacyToken = params.get("token"); // backward-compat with old redirects
+    (async () => {
+      try {
+        let token = legacyToken;
+        if (code) {
+          const r = await api.post<{ token: string }>("/auth/exchange-code", { code });
+          token = r.data.token;
+        }
+        if (!token) { router.replace("/login"); return; }
+        setToken(token);
+        const me = await api.get<{ is_superadmin?: boolean }>("/auth/me");
+        router.push(me.data?.is_superadmin ? "/admin" : "/");
+      } catch {
+        setError("Authentication failed. Please try again.");
+      }
+    })();
   }, [params, router]);
 
   if (error) {

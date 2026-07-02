@@ -73,8 +73,9 @@ function ResetForm() {
       ) : (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
-            <label className="label-base">New password</label>
+            <label htmlFor="new-password" className="label-base">New password</label>
             <PasswordInput
+              id="new-password"
               autoComplete="new-password"
               placeholder="Minimum 8 characters"
               value={watch("password")}
@@ -83,8 +84,9 @@ function ResetForm() {
             {errors.password && <p className="text-xs text-error-600 mt-1">{errors.password.message}</p>}
           </div>
           <div>
-            <label className="label-base">Confirm new password</label>
+            <label htmlFor="confirm-new-password" className="label-base">Confirm new password</label>
             <PasswordInput
+              id="confirm-new-password"
               autoComplete="new-password"
               value={watch("confirm_password")}
               onChange={e => setValue("confirm_password", e.target.value)}

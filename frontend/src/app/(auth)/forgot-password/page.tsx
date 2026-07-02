@@ -79,6 +79,7 @@ export default function ForgotPasswordPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <InputField
                 label="Email"
+                id="email"
                 registration={register("email")}
                 error={errors.email}
                 type="email"

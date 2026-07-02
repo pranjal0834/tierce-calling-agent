@@ -130,6 +130,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
         {isMobile && (
           <button
             onClick={onMobileClose}
+            aria-label="Close menu"
             className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors ml-auto flex-shrink-0"
           >
             <X className="icon-sm" />
@@ -138,7 +139,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto sidebar-nav">
+      <nav aria-label="Main navigation" className="flex-1 px-3 py-3 space-y-4 overflow-y-auto sidebar-nav">
         {NAV_GROUPS.map((group, gi) => (
           <div key={group.label}>
             {gi > 0 && <div className="h-px bg-neutral-100 mb-3 mx-1" />}
@@ -154,6 +155,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
                   <Link
                     key={href}
                     href={href}
+                    aria-current={active ? "page" : undefined}
                     title={!isMobile && collapsed ? label : undefined}
                     className={`group relative flex items-center gap-2.5 rounded-lg text-[14px] font-medium transition-all duration-150 ${
                       !isMobile && collapsed ? "justify-center h-9 w-9 mx-auto" : "px-3 py-2"
@@ -315,6 +317,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
       {/* ── Mobile overlay backdrop ── */}
       {mobileOpen && (
         <div
+          aria-label="Close menu"
           className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] lg:hidden"
           onClick={onMobileClose}
         />
@@ -324,7 +327,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }: Side
       <aside
         className={`
           fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-neutral-200
-          w-[260px] transition-transform duration-300 ease-in-out
+          w-[260px] max-w-[80%] transition-transform duration-300 ease-in-out
           lg:hidden
           ${mobileOpen ? "translate-x-0 shadow-modal" : "-translate-x-full"}
         `}

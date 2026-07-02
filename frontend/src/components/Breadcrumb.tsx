@@ -13,9 +13,9 @@ export default function Breadcrumb({ items }: { items: Crumb[] }) {
         return (
           <span key={i} className="flex items-center gap-1 min-w-0">
             {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-neutral-300 shrink-0" />}
-            {c.href && !last
-              ? <Link href={c.href} className="hover:text-neutral-700 transition-colors truncate">{c.label}</Link>
-              : <span className="text-neutral-600 font-medium truncate">{c.label}</span>}
+              {c.href && !last
+                ? <Link href={c.href} className="hover:text-neutral-700 transition-colors truncate">{c.label}</Link>
+                : <span className="text-neutral-600 font-medium truncate" aria-current="page">{c.label}</span>}
           </span>
         );
       })}

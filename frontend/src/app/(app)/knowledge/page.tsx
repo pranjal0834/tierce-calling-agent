@@ -2,13 +2,14 @@
 import { useEffect, useState, useRef } from "react";
 import {
   BookOpen, Plus, Trash2, FileText, Globe, Type, UploadCloud,
-  ChevronLeft, CheckCircle2, AlertCircle, X, Loader2, Eye, User as UserIcon,
+  ChevronLeft, CheckCircle2, AlertCircle, X, Loader2, Eye, User as UserIcon, Pencil,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 import {
   getKnowledgeBases, createKnowledgeBase, getKnowledgeBase, deleteKnowledgeBase,
-  addKbTextDoc, addKbUrlDoc, uploadKbPdf, deleteKbDoc, getKbDocContent,
+  updateKnowledgeBase, addKbTextDoc, addKbUrlDoc, uploadKbPdf, deleteKbDoc,
+  getKbDocContent, updateKbDoc,
 } from "@/lib/api";
 
 interface KB {
@@ -44,8 +45,17 @@ export default function KnowledgePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showAddDoc, setShowAddDoc] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<KbDoc | null>(null);
-  const [confirmDeleteKb, setConfirmDeleteKb] = useState<{open: boolean; item?: KB}>({open: false});
-  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState<{open: boolean; item?: KbDoc}>({open: false});
+  const [editKb, setEditKb] = useState<KB | null>(null);
+  const [editDoc, setEditDoc] = useState<KbDoc | null>(null);
+
+  const applyKbEdit = (updated: KB) => {
+    setKbs(prev => prev.map(k => (k.id === updated.id ? { ...k, ...updated } : k)));
+    setSelected(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+  };
+  const applyDocEdit = (updated: KbDoc) => {
+    setDocs(prev => prev.map(d => (d.id === updated.id ? { ...d, ...updated } : d)));
+  };
+
 
   const loadKbs = () => getKnowledgeBases().then(setKbs).catch(() => {}).finally(() => setLoading(false));
   useEffect(() => { loadKbs(); }, []);
@@ -72,40 +82,60 @@ export default function KnowledgePage() {
     if (!selected) return;
     const hasProcessing = docs.some(d => d.status === "processing");
     if (!hasProcessing) return;
-    const t = setInterval(refreshDocs, 3000);
-    return () => clearInterval(t);
+    let cancelled = false;
+    let errorStreak = 0;
+    const tick = () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") { timer = setTimeout(tick, 10000); return; }
+      refreshDocs()
+        .catch(() => { errorStreak = Math.min(errorStreak + 1, 4); })
+        .finally(() => {
+          if (cancelled) return;
+          const delay = Math.min(10000 * (errorStreak > 0 ? 2 ** errorStreak : 1), 60000);
+          timer = setTimeout(tick, delay);
+        });
+    };
+    let timer: ReturnType<typeof setTimeout> = setTimeout(tick, 3000);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [selected, docs]);
 
   const handleDeleteKb = async (kb: KB) => {
-    setConfirmDeleteKb({open: true, item: kb});
-  };
-
-  const doDeleteKb = async () => {
-    const kb = confirmDeleteKb.item;
-    if (!kb) return;
-    try {
-      await deleteKnowledgeBase(kb.id);
-      setKbs(prev => prev.filter(k => k.id !== kb.id));
-      if (selected?.id === kb.id) { setSelected(null); setDocs([]); }
-      toast.success("Knowledge base deleted");
-    } catch { toast.error("Failed to delete"); }
-    finally { setConfirmDeleteKb({open: false}); }
+    await deleteKnowledgeBase(kb.id);
+    setKbs(prev => prev.filter(k => k.id !== kb.id));
+    if (selected?.id === kb.id) { setSelected(null); setDocs([]); }
+    toastUndo({
+      message: "Knowledge base deleted",
+      onUndo: async () => {
+        const restored = await createKnowledgeBase({ name: kb.name, description: kb.description });
+        setKbs(prev => [restored, ...prev]);
+      },
+    });
   };
 
   const handleDeleteDoc = async (doc: KbDoc) => {
     if (!selected) return;
-    setConfirmDeleteDoc({open: true, item: doc});
-  };
-
-  const doDeleteDoc = async () => {
-    const doc = confirmDeleteDoc.item;
-    if (!selected || !doc) return;
-    try {
-      await deleteKbDoc(selected.id, doc.id);
-      setDocs(prev => prev.filter(d => d.id !== doc.id));
-      toast.success("Document removed");
-    } catch { toast.error("Failed to remove document"); }
-    finally { setConfirmDeleteDoc({open: false}); }
+    const kbId = selected.id;
+    await deleteKbDoc(kbId, doc.id);
+    setDocs(prev => prev.filter(d => d.id !== doc.id));
+    toastUndo({
+      message: "Document removed",
+      onUndo: async () => {
+        try {
+          if (doc.source_type === "url" && doc.source_ref) {
+            await addKbUrlDoc(kbId, { url: doc.source_ref, title: doc.title });
+          } else if (doc.source_type === "text") {
+            await addKbTextDoc(kbId, { title: doc.title, content: "" });
+          } else {
+            toast.error("Cannot restore this document type");
+            return;
+          }
+          const d = await getKnowledgeBase(kbId);
+          setDocs(d.documents || []);
+        } catch {
+          toast.error("Failed to restore document");
+        }
+      },
+    });
   };
 
   return (
@@ -156,13 +186,22 @@ export default function KnowledgePage() {
                   <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
                     <BookOpen className="w-4 h-4 text-brand-500" />
                   </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteKb(kb); }}
-                    className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-all"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditKb(kb); }}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                      title="Edit"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteKb(kb); }}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
                 <p className="text-sm font-semibold text-neutral-900 mt-3 truncate">{kb.name}</p>
                 {kb.description && <p className="text-xs text-neutral-500 mt-0.5 line-clamp-2">{kb.description}</p>}
@@ -195,12 +234,21 @@ export default function KnowledgePage() {
                 </div>
                 {selected.description && <p className="text-xs text-neutral-500 mt-0.5">{selected.description}</p>}
               </div>
-              <button
-                onClick={() => setShowAddDoc(true)}
-                className="inline-flex items-center gap-1.5 h-9 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg shadow-xs transition-colors shrink-0"
-              >
-                <Plus className="w-4 h-4" /> Add Document
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setEditKb(selected)}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600 text-sm font-medium rounded-lg transition-colors"
+                  title="Edit name & description"
+                >
+                  <Pencil className="w-4 h-4" /> Edit
+                </button>
+                <button
+                  onClick={() => setShowAddDoc(true)}
+                  className="inline-flex items-center gap-1.5 h-9 px-4 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg shadow-xs transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Add Document
+                </button>
+              </div>
             </div>
 
             {docs.length === 0 ? (
@@ -251,6 +299,13 @@ export default function KnowledgePage() {
                           </button>
                         )}
                         <button
+                          onClick={() => setEditDoc(doc)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
+                          title={doc.source_type === "text" ? "Edit title & content" : "Rename"}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => handleDeleteDoc(doc)}
                           className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-error-500 hover:bg-error-50 transition-colors"
                           title="Remove"
@@ -287,20 +342,21 @@ export default function KnowledgePage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
-      <ConfirmModal
-        open={confirmDeleteKb.open}
-        title="Delete Knowledge Base"
-        message={confirmDeleteKb.item ? `Delete "${confirmDeleteKb.item.name}" and all its documents? This cannot be undone.` : ""}
-        onConfirm={doDeleteKb}
-        onCancel={() => setConfirmDeleteKb({open: false})}
-      />
-      <ConfirmModal
-        open={confirmDeleteDoc.open}
-        title="Remove Document"
-        message={confirmDeleteDoc.item ? `Remove "${confirmDeleteDoc.item.title}" from this knowledge base?` : ""}
-        onConfirm={doDeleteDoc}
-        onCancel={() => setConfirmDeleteDoc({open: false})}
-      />
+      {editKb && (
+        <EditKbModal
+          kb={editKb}
+          onClose={() => setEditKb(null)}
+          onSaved={(updated) => { applyKbEdit(updated); setEditKb(null); }}
+        />
+      )}
+      {editDoc && selected && (
+        <EditDocModal
+          kbId={selected.id}
+          doc={editDoc}
+          onClose={() => setEditDoc(null)}
+          onSaved={(updated) => { applyDocEdit(updated); setEditDoc(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -389,18 +445,143 @@ function CreateKbModal({ onClose, onCreated }: { onClose: () => void; onCreated:
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="label-base">Name</label>
-            <input className="input-base" placeholder="e.g. Product Docs, Company FAQ" value={name} onChange={e => setName(e.target.value)} autoFocus />
+            <label htmlFor="kb-name" className="label-base">Name</label>
+            <input id="kb-name" className="input-base" placeholder="e.g. Product Docs, Company FAQ" value={name} onChange={e => setName(e.target.value)} autoFocus />
           </div>
           <div>
-            <label className="label-base">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
-            <input className="input-base" placeholder="What's in this knowledge base?" value={description} onChange={e => setDescription(e.target.value)} />
+            <label htmlFor="kb-description" className="label-base">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
+            <input id="kb-description" className="input-base" placeholder="What's in this knowledge base?" value={description} onChange={e => setDescription(e.target.value)} />
           </div>
         </div>
         <div className="px-6 py-4 border-t border-neutral-100 flex justify-end gap-2.5">
           <button onClick={onClose} className="h-9 px-4 text-sm font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors">Cancel</button>
           <button onClick={save} disabled={saving} className="h-9 px-5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50">
             {saving ? "Creating…" : "Create"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit KB modal ───────────────────────────────────────────────────────────────
+
+function EditKbModal({ kb, onClose, onSaved }: { kb: KB; onClose: () => void; onSaved: (kb: KB) => void }) {
+  const [name, setName] = useState(kb.name);
+  const [description, setDescription] = useState(kb.description ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!name.trim()) { toast.error("Name is required"); return; }
+    setSaving(true);
+    try {
+      const updated = await updateKnowledgeBase(kb.id, { name: name.trim(), description: description.trim() });
+      toast.success("Knowledge base updated");
+      onSaved(updated);
+    } catch { toast.error("Failed to update"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 sm:p-4 animate-fade-in">
+      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-modal w-full sm:max-w-md animate-scale-in">
+        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between">
+          <h2 className="text-[15px] font-semibold text-neutral-900">Edit Knowledge Base</h2>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label htmlFor="kb-edit-name" className="label-base">Name</label>
+            <input id="kb-edit-name" className="input-base" value={name} onChange={e => setName(e.target.value)} autoFocus />
+          </div>
+          <div>
+            <label htmlFor="kb-edit-description" className="label-base">Description <span className="text-neutral-400 font-normal">(optional)</span></label>
+            <input id="kb-edit-description" className="input-base" placeholder="What's in this knowledge base?" value={description} onChange={e => setDescription(e.target.value)} />
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-neutral-100 flex justify-end gap-2.5">
+          <button onClick={onClose} className="h-9 px-4 text-sm font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors">Cancel</button>
+          <button onClick={save} disabled={saving} className="h-9 px-5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50">
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Edit document modal ─────────────────────────────────────────────────────────
+
+function EditDocModal({ kbId, doc, onClose, onSaved }: {
+  kbId: string; doc: KbDoc; onClose: () => void; onSaved: (doc: KbDoc) => void;
+}) {
+  const isText = doc.source_type === "text";
+  const [title, setTitle] = useState(doc.title);
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(isText);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isText) return;
+    getKbDocContent(kbId, doc.id)
+      .then((d: any) => setContent(d.content || ""))
+      .catch(() => toast.error("Failed to load content"))
+      .finally(() => setLoading(false));
+  }, [kbId, doc.id, isText]);
+
+  const save = async () => {
+    if (!title.trim()) { toast.error("Title is required"); return; }
+    const payload: { title: string; content?: string } = { title: title.trim() };
+    if (isText) {
+      if (!content.trim()) { toast.error("Content cannot be empty"); return; }
+      payload.content = content;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateKbDoc(kbId, doc.id, payload);
+      toast.success(isText ? "Document updated — reprocessing…" : "Document renamed");
+      onSaved(updated);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Failed to update document");
+    } finally { setSaving(false); }
+  };
+
+  const meta = SOURCE_META[doc.source_type] ?? SOURCE_META.text;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-50 sm:p-4 animate-fade-in">
+      <div className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-modal w-full sm:max-w-lg max-h-[92vh] sm:max-h-[90vh] flex flex-col animate-scale-in">
+        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between flex-shrink-0">
+          <h2 className="text-[15px] font-semibold text-neutral-900">{isText ? "Edit Document" : "Rename Document"}</h2>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          <div>
+            <label htmlFor="doc-edit-title" className="label-base">Title</label>
+            <input id="doc-edit-title" className="input-base" value={title} onChange={e => setTitle(e.target.value)} autoFocus />
+          </div>
+          {isText ? (
+            <div>
+              <label htmlFor="doc-edit-content" className="label-base">Content</label>
+              {loading ? (
+                <div className="flex items-center gap-2 text-sm text-neutral-400 py-6 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading current content…
+                </div>
+              ) : (
+                <textarea id="doc-edit-content" className="input-base min-h-[200px] resize-none" value={content} onChange={e => setContent(e.target.value)} />
+              )}
+              <p className="text-[11px] text-neutral-400 mt-1.5">Saving re-chunks and re-embeds this text — it'll briefly show as processing.</p>
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-500 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2.5">
+              Only the title can be edited for {meta.label} documents. To change the content, delete this document and re-add the {doc.source_type === "url" ? "URL" : "file"}.
+            </p>
+          )}
+        </div>
+        <div className="px-6 py-4 border-t border-neutral-100 flex justify-end gap-2.5 flex-shrink-0">
+          <button onClick={onClose} className="h-9 px-4 text-sm font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg transition-colors">Cancel</button>
+          <button onClick={save} disabled={saving || (isText && loading)} className="h-9 px-5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium shadow-xs transition-colors disabled:opacity-50">
+            {saving ? "Saving…" : "Save Changes"}
           </button>
         </div>
       </div>
@@ -487,24 +668,24 @@ function AddDocModal({ kbId, onClose, onAdded }: { kbId: string; onClose: () => 
           {tab === "url" && (
             <>
               <div>
-                <label className="label-base">Website URL</label>
-                <input className="input-base" placeholder="https://yourcompany.com/about" value={url} onChange={e => setUrl(e.target.value)} />
+                <label htmlFor="doc-url" className="label-base">Website URL</label>
+                <input id="doc-url" className="input-base" placeholder="https://yourcompany.com/about" value={url} onChange={e => setUrl(e.target.value)} />
               </div>
               <div>
-                <label className="label-base">Title <span className="text-neutral-400 font-normal">(optional)</span></label>
-                <input className="input-base" placeholder="Auto-detected from the page if blank" value={title} onChange={e => setTitle(e.target.value)} />
+                <label htmlFor="doc-url-title" className="label-base">Title <span className="text-neutral-400 font-normal">(optional)</span></label>
+                <input id="doc-url-title" className="input-base" placeholder="Auto-detected from the page if blank" value={title} onChange={e => setTitle(e.target.value)} />
               </div>
             </>
           )}
           {tab === "text" && (
             <>
               <div>
-                <label className="label-base">Title</label>
-                <input className="input-base" placeholder="e.g. Refund Policy" value={title} onChange={e => setTitle(e.target.value)} />
+                <label htmlFor="doc-text-title" className="label-base">Title</label>
+                <input id="doc-text-title" className="input-base" placeholder="e.g. Refund Policy" value={title} onChange={e => setTitle(e.target.value)} />
               </div>
               <div>
-                <label className="label-base">Content</label>
-                <textarea className="input-base min-h-[160px] resize-none" placeholder="Paste any text, FAQ, or notes the agent should know…" value={content} onChange={e => setContent(e.target.value)} />
+                <label htmlFor="doc-text-content" className="label-base">Content</label>
+                <textarea id="doc-text-content" className="input-base min-h-[160px] resize-none" placeholder="Paste any text, FAQ, or notes the agent should know…" value={content} onChange={e => setContent(e.target.value)} />
               </div>
             </>
           )}

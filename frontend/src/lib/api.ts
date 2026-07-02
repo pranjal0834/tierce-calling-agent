@@ -55,6 +55,8 @@ export const createKnowledgeBase = (data: { name: string; description?: string }
   api.post("/api/knowledge", data).then((r: AxiosResponse) => r.data);
 export const getKnowledgeBase = (id: string) =>
   api.get(`/api/knowledge/${id}`).then((r: AxiosResponse) => r.data);
+export const updateKnowledgeBase = (id: string, data: { name?: string; description?: string }) =>
+  api.patch(`/api/knowledge/${id}`, data).then((r: AxiosResponse) => r.data);
 export const deleteKnowledgeBase = (id: string) => api.delete(`/api/knowledge/${id}`);
 export const addKbTextDoc = (kbId: string, data: { title: string; content: string }) =>
   api.post(`/api/knowledge/${kbId}/documents/text`, data).then((r: AxiosResponse) => r.data);
@@ -67,6 +69,8 @@ export const uploadKbPdf = (kbId: string, file: File) => {
     headers: { "Content-Type": "multipart/form-data" },
   }).then((r: AxiosResponse) => r.data);
 };
+export const updateKbDoc = (kbId: string, docId: string, data: { title?: string; content?: string }) =>
+  api.patch(`/api/knowledge/${kbId}/documents/${docId}`, data).then((r: AxiosResponse) => r.data);
 export const deleteKbDoc = (kbId: string, docId: string) =>
   api.delete(`/api/knowledge/${kbId}/documents/${docId}`);
 export const getKbDocContent = (kbId: string, docId: string) =>
@@ -74,8 +78,13 @@ export const getKbDocContent = (kbId: string, docId: string) =>
 
 // ── Calls ────────────────────────────────────────────────────────────────────
 
-export const getCalls = (agentId?: string) =>
-  api.get("/api/calls", { params: agentId ? { agent_id: agentId } : {} }).then((r: AxiosResponse) => r.data);
+export const getCalls = (agentId?: string, page?: number, pageSize?: number) => {
+  const params: Record<string, string | number> = {};
+  if (agentId) params.agent_id = agentId;
+  if (page) params.offset = (page - 1) * (pageSize || 50);
+  if (pageSize) params.limit = pageSize;
+  return api.get("/api/calls", { params }).then((r: AxiosResponse) => r.data);
+};
 export const getCall = (id: string) => api.get(`/api/calls/${id}`).then((r: AxiosResponse) => r.data);
 export const hangupCall = (id: string) => api.post(`/api/calls/${id}/hangup`).then((r: AxiosResponse) => r.data);
 export const getCallTurns = (id: string) => api.get(`/api/calls/${id}/turns`).then((r: AxiosResponse) => r.data);
@@ -129,6 +138,20 @@ export const clearMemory = (contactId: string) =>
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export const getMe = () => api.get("/auth/me").then((r: AxiosResponse) => r.data);
+export const updateProfile = (data: {
+  full_name?: string; email?: string; phone?: string;
+  address_line?: string; city?: string; state?: string; country?: string; postal_code?: string;
+}) => api.patch("/auth/profile", data).then((r: AxiosResponse) => r.data);
+export const uploadAvatar = (file: File) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  return api.post("/auth/profile/avatar", fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  }).then((r: AxiosResponse) => r.data);
+};
+// Absolute URL for an avatar path returned by the API (served off the backend).
+export const avatarUrl = (path?: string | null) =>
+  path ? `${(process.env.NEXT_PUBLIC_API_URL as string) || "http://localhost:8000"}${path}` : "";
 export const acceptTerms = () => api.post("/auth/accept-terms").then((r: AxiosResponse) => r.data);
 export const getWorkspace = () => api.get("/auth/workspace").then((r: AxiosResponse) => r.data);
 export const getApiKeys = () => api.get("/auth/api-keys").then((r: AxiosResponse) => r.data);

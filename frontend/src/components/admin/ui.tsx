@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import {
   Users, Phone, Bot, RefreshCw,
   ToggleLeft, ToggleRight, Plus, Minus, ChevronDown, ChevronUp,
@@ -7,10 +8,13 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { api, getAdminRecordingUrl } from "@/lib/api";
+import { useFocusTrap } from "@/lib/useFocusTrap";
+import { Checkbox } from "./Checkbox";
 
 // ── Shared API helpers ────────────────────────────────────────────────────────
 
-export const adminGet  = (path: string) => api.get(`/api/admin${path}`).then(r => r.data);
+export const adminGet  = (path: string, config?: { params?: Record<string, string | number | boolean | undefined> }) =>
+  api.get(`/api/admin${path}`, config || {}).then(r => r.data);
 export const adminPost = (path: string, body: unknown) => api.post(`/api/admin${path}`, body).then(r => r.data);
 export const adminPut  = (path: string, body: unknown) => api.put(`/api/admin${path}`, body).then(r => r.data);
 export const adminDelete = (path: string) => api.delete(`/api/admin${path}`).then(r => r.data);
@@ -62,6 +66,7 @@ export interface WsDetail {
 export interface UserRow {
   id: string; email: string; role: string; is_active: boolean;
   workspace_id: string; workspace_name: string; created_at: string;
+  deleted_at?: string | null; days_left?: number | null;
 }
 export interface CallRow {
   id: string; workspace_name: string; phone_number: string;
@@ -86,7 +91,7 @@ export interface CostData {
   avg_cost_per_call_usd: number; avg_cost_per_min_usd: number;
   revenue_usd: number; gross_margin_usd: number;
   auxiliary_components: { name: string; usd: number; calls: number }[];
-  top_workspaces: { workspace: string; cost_usd: number; calls: number }[];
+  top_workspaces: { workspace: string; cost_usd: number; calls: number; revenue_usd?: number; margin_usd?: number }[];
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -111,22 +116,55 @@ export function PageHeading({ title, subtitle, action }: { title: string; subtit
   );
 }
 
-// KPI card — tinted icon chip, light palette
-export function KpiStat({ label, value, icon: Icon, sub, tint }: {
-  label: string; value: string | number; icon: React.ElementType; sub?: string; tint: string;
-}) {
+// Tiny inline-SVG sparkline — no chart lib, cheap to render in a KPI card.
+export function Sparkline({ data, color = "#f59e0b" }: { data: number[]; color?: string }) {
+  if (!data || data.length < 2) return null;
+  const w = 52, h = 18;
+  const max = Math.max(...data), min = Math.min(...data);
+  const range = max - min || 1;
+  const pts = data
+    .map((v, i) => `${((i / (data.length - 1)) * w).toFixed(1)},${(h - ((v - min) / range) * h).toFixed(1)}`)
+    .join(" ");
   return (
-    <div className="bg-white border border-neutral-200 rounded-xl shadow-xs px-4 py-3.5 min-w-0">
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden className="overflow-visible shrink-0">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// KPI card — tinted icon chip, light palette. Optional `spark` + `delta`
+// (week-over-week %) turn it into a trend card.
+export function KpiStat({ label, value, icon: Icon, sub, tint, spark, delta, href }: {
+  label: string; value: string | number; icon: React.ElementType; sub?: string; tint: string;
+  spark?: number[]; delta?: number | null; href?: string;
+}) {
+  const hasDelta = typeof delta === "number" && isFinite(delta);
+  const up = (delta ?? 0) >= 0;
+  const content = (
+    <div className={`bg-white border border-neutral-200 rounded-xl shadow-xs px-4 py-3.5 min-w-0 transition-all ${href ? "hover:border-brand-300 hover:shadow-sm" : ""}`}>
       <div className="flex items-center justify-between mb-2.5">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400 truncate">{label}</span>
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${tint}`}>
           <Icon className="icon-xs" />
         </div>
       </div>
-      <div className="text-[22px] font-semibold text-neutral-900 tracking-tight leading-none">{value}</div>
-      {sub && <p className="text-[11px] text-neutral-400 mt-1.5 truncate">{sub}</p>}
+      <div className="flex items-end justify-between gap-1.5">
+        <div className="text-[22px] font-semibold text-neutral-900 tracking-tight leading-none">{value}</div>
+        {spark && spark.length > 1 && <Sparkline data={spark} color={up ? "#059669" : "#dc2626"} />}
+      </div>
+      {hasDelta ? (
+        <p className="text-[11px] mt-1.5 flex items-center gap-1 truncate">
+          <span className={up ? "text-success-600 font-semibold" : "text-error-600 font-semibold"}>
+            {up ? "↑" : "↓"}{Math.abs(delta as number).toFixed(0)}%
+          </span>
+          <span className="text-neutral-400">vs last wk</span>
+        </p>
+      ) : sub ? (
+        <p className="text-[11px] text-neutral-400 mt-1.5 truncate">{sub}</p>
+      ) : null}
     </div>
   );
+  return href ? <Link href={href} className="block">{content}</Link> : content;
 }
 
 export function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "emerald" | "amber" | "blue" | "red" }) {
@@ -150,7 +188,12 @@ export function LoadingBlock() {
 
 // ── Workspace row with expandable detail ──────────────────────────────────────
 
-export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => void }) {
+export function WorkspaceRow({ ws, onRefresh, selected, onToggleSelect }: {
+  ws: WsRow;
+  onRefresh: () => void;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<WsDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -184,6 +227,17 @@ export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => vo
     finally { setAdjusting(false); }
   }
 
+  async function handlePreset(minutes: number) {
+    setAdjusting(true);
+    try {
+      const res = await adminPost(`/workspaces/${ws.id}/credits`, { minutes, reason: "" });
+      toast.success(`Balance updated: ${res.new_balance.toFixed(1)} min`);
+      setDetail(null);
+      onRefresh();
+    } catch { toast.error("Failed to adjust credits"); }
+    finally { setAdjusting(false); }
+  }
+
   async function toggleStatus() {
     setToggling(true);
     try {
@@ -196,20 +250,31 @@ export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => vo
 
   return (
     <div className="bg-white border border-neutral-200 rounded-xl shadow-xs overflow-hidden transition-colors">
-      <div className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-neutral-50 transition-colors" onClick={expand}>
-        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ws.is_active ? "bg-success-400" : "bg-neutral-300"}`} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-neutral-900 truncate">{ws.name}</p>
-          <p className="text-xs text-neutral-400">{fmt(ws.created_at)}</p>
-        </div>
-        <div className="hidden sm:flex items-center gap-5 text-xs text-neutral-500">
-          <span title="Members"><Users className="icon-xs inline mr-1 text-neutral-400" />{ws.member_count}</span>
-          <span title="Agents"><Bot className="icon-xs inline mr-1 text-neutral-400" />{ws.agent_count}</span>
-          <span title="Calls"><Phone className="icon-xs inline mr-1 text-neutral-400" />{ws.call_count}</span>
-          <span title="Balance" className={`font-medium ${ws.credits_balance <= 0 ? "text-error-500" : "text-success-600"}`}>{ws.credits_balance.toFixed(1)} min</span>
-        </div>
-        <Pill tone={ws.is_active ? "emerald" : "neutral"}>{ws.is_active ? "Active" : "Disabled"}</Pill>
-        {expanded ? <ChevronUp className="icon-sm text-neutral-400 flex-shrink-0" /> : <ChevronDown className="icon-sm text-neutral-400 flex-shrink-0" />}
+      <div className="flex items-center gap-3 pl-5 pr-3 py-3.5 hover:bg-neutral-50 transition-colors">
+        {onToggleSelect && (
+          <Checkbox checked={!!selected} onChange={() => onToggleSelect()} />
+        )}
+        <button
+          type="button"
+          onClick={expand}
+          aria-expanded={expanded}
+          aria-label={`${ws.name} — ${expanded ? "collapse" : "expand"} details`}
+          className="flex flex-1 items-center gap-4 min-w-0 text-left cursor-pointer"
+        >
+          <span aria-hidden className={`w-2 h-2 rounded-full flex-shrink-0 ${ws.is_active ? "bg-success-400" : "bg-neutral-300"}`} />
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-neutral-900 truncate">{ws.name}</span>
+            <span className="block text-xs text-neutral-400">{fmt(ws.created_at)}</span>
+          </span>
+          <span className="hidden sm:flex items-center gap-5 text-xs text-neutral-500">
+            <span title="Members"><Users className="icon-xs inline mr-1 text-neutral-400" />{ws.member_count}</span>
+            <span title="Agents"><Bot className="icon-xs inline mr-1 text-neutral-400" />{ws.agent_count}</span>
+            <span title="Calls"><Phone className="icon-xs inline mr-1 text-neutral-400" />{ws.call_count}</span>
+            <span title="Balance" className={`font-medium ${ws.credits_balance <= 0 ? "text-error-500" : "text-success-600"}`}>{ws.credits_balance.toFixed(1)} min</span>
+          </span>
+          <Pill tone={ws.is_active ? "emerald" : "neutral"}>{ws.is_active ? "Active" : "Disabled"}</Pill>
+          {expanded ? <ChevronUp className="icon-sm text-neutral-400 flex-shrink-0" /> : <ChevronDown className="icon-sm text-neutral-400 flex-shrink-0" />}
+        </button>
       </div>
 
       {expanded && (
@@ -230,7 +295,28 @@ export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => vo
               </div>
 
               <div className="bg-white border border-neutral-200 rounded-xl p-4 space-y-3">
-                <CardLabel>Adjust Credits</CardLabel>
+                <CardLabel>Quick Presets</CardLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {[100, 500, 1000, 60, 300].map(amt => {
+                    const label = amt >= 60 && amt % 60 === 0 ? `+${amt / 60}h` : `+${amt}`;
+                    return (
+                      <button key={amt} onClick={() => handlePreset(amt)} disabled={adjusting}
+                        className="px-3 h-7 text-xs font-medium bg-success-50 hover:bg-success-100 text-success-700 rounded-md transition-colors disabled:opacity-50">
+                        {label}
+                      </button>
+                    );
+                  })}
+                  {[100, 500, 1000, 60, 300].map(amt => {
+                    const label = amt >= 60 && amt % 60 === 0 ? `-${amt / 60}h` : `-${amt}`;
+                    return (
+                      <button key={`neg-${amt}`} onClick={() => handlePreset(-amt)} disabled={adjusting}
+                        className="px-3 h-7 text-xs font-medium bg-error-50 hover:bg-error-100 text-error-700 rounded-md transition-colors disabled:opacity-50">
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <CardLabel>Custom Adjustment</CardLabel>
                 <div className="flex flex-wrap gap-2">
                   <input type="number" placeholder="Minutes" value={adjMinutes} onChange={e => setAdjMinutes(e.target.value)}
                     className="w-28 bg-white border border-neutral-200 rounded-lg px-3 h-9 text-neutral-900 text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/10" />
@@ -275,7 +361,12 @@ export function WorkspaceRow({ ws, onRefresh }: { ws: WsRow; onRefresh: () => vo
                 </div>
 
                 <div className="bg-white border border-neutral-200 rounded-xl p-4">
-                  <CardLabel>Recent Calls</CardLabel>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wide">Recent Calls</p>
+                    <Link href={`/admin/calls?search=${encodeURIComponent(ws.name)}`} className="text-[11px] font-medium text-brand-600 hover:text-brand-700">
+                      View all calls →
+                    </Link>
+                  </div>
                   <div className="space-y-2">
                     {detail.recent_calls.map(c => (
                       <div key={c.id} className="flex items-center justify-between text-xs gap-2">
@@ -339,7 +430,7 @@ export function AdminCallRow({ c }: { c: CallRow }) {
   return (
     <div className="bg-white border border-neutral-200 rounded-xl shadow-xs overflow-hidden">
       <div className="flex items-center gap-4 px-5 py-3">
-        <div className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "in_progress" ? "bg-brand-400 animate-pulse" : c.status === "completed" ? "bg-success-400" : "bg-warning-400"}`} />
+        <div aria-hidden className={`w-2 h-2 rounded-full flex-shrink-0 ${c.status === "in_progress" ? "bg-brand-400 animate-pulse" : c.status === "completed" ? "bg-success-400" : "bg-warning-400"}`} />
         <div className="flex-1 min-w-0">
           <p className="text-sm text-neutral-900 truncate">{c.phone_number}</p>
           <p className="text-xs text-neutral-400 truncate">{c.workspace_name} · {c.pipeline_mode}</p>
@@ -359,6 +450,7 @@ export function AdminCallRow({ c }: { c: CallRow }) {
           </button>
         )}
         <button onClick={() => setOpen(o => !o)} disabled={!hasCost}
+          aria-expanded={open} aria-label={hasCost ? "Toggle cost breakdown" : "No cost recorded"}
           className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 disabled:opacity-30 disabled:cursor-default flex-shrink-0"
           title={hasCost ? "Cost breakdown" : "No cost recorded"}>
           {open ? <ChevronUp className="icon-sm" /> : <ChevronDown className="icon-sm" />}
@@ -403,9 +495,10 @@ export function AdminCallRow({ c }: { c: CallRow }) {
 export function DeleteConfirmModal({ email, onConfirm, onCancel, loading }: {
   email: string; onConfirm: () => void; onCancel: () => void; loading: boolean;
 }) {
+  const trapRef = useFocusTrap<HTMLDivElement>(true, onCancel);
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-white rounded-2xl border border-neutral-200 shadow-modal w-full max-w-sm animate-scale-in">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="admin-delete-title">
+      <div ref={trapRef} className="bg-white rounded-2xl border border-neutral-200 shadow-modal w-full max-w-sm animate-scale-in">
         <div className="flex items-start justify-between p-6 pb-4">
           <div className="w-10 h-10 bg-error-50 border border-error-100 rounded-xl flex items-center justify-center flex-shrink-0">
             <AlertTriangle className="icon-lg text-error-500" />
@@ -415,12 +508,13 @@ export function DeleteConfirmModal({ email, onConfirm, onCancel, loading }: {
           </button>
         </div>
         <div className="px-6 pb-6">
-          <h2 className="text-[15px] font-semibold text-neutral-900 mb-1.5">Delete account</h2>
-          <p className="text-sm text-neutral-500 mb-1">You are about to permanently delete:</p>
+          <h2 id="admin-delete-title" className="text-[15px] font-semibold text-neutral-900 mb-1.5">Delete account</h2>
+          <p className="text-sm text-neutral-500 mb-1">You are about to delete:</p>
           <p className="text-sm font-semibold text-neutral-800 bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 mb-4 font-mono break-all">{email}</p>
-          <div className="bg-error-50 border border-error-100 rounded-xl px-4 py-3 mb-6">
-            <p className="text-xs text-error-700 leading-relaxed">
-              If this is the only member of their workspace, <span className="font-semibold">the entire workspace — including all agents, calls, and data — will also be permanently deleted.</span> This action cannot be undone.
+          <div className="bg-warning-50 border border-warning-200 rounded-xl px-4 py-3 mb-6">
+            <p className="text-xs text-warning-700 leading-relaxed">
+              The account is deactivated and its email freed immediately. You can restore it from
+              <span className="font-semibold"> Recently Deleted</span> for <span className="font-semibold">30 days</span> — after that it's permanently purged.
             </p>
           </div>
           <div className="flex gap-2">
@@ -444,11 +538,24 @@ export function DeleteConfirmModal({ email, onConfirm, onCancel, loading }: {
 export function AnnouncementPanel() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ subject: "", headline: "", body: "", cta_label: "", cta_url: "" });
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [sending, setSending] = useState(false);
   const [testSending, setTestSending] = useState(false);
 
+  // Inline field validation — required fields + CTA URL format (when provided).
+  const errors: Record<string, string> = {};
+  if (!form.subject.trim()) errors.subject = "Subject is required";
+  if (!form.headline.trim()) errors.headline = "Headline is required";
+  if (!form.body.trim()) errors.body = "Body is required";
+  if (form.cta_url.trim() && !/^https?:\/\/.+/i.test(form.cta_url.trim())) errors.cta_url = "Enter a full URL starting with http:// or https://";
+  const markTouched = (field: string) => setTouched(t => ({ ...t, [field]: true }));
+
   const send = async () => {
-    if (!form.subject || !form.headline || !form.body) { toast.error("Subject, headline, and body are required"); return; }
+    if (Object.keys(errors).length > 0) {
+      setTouched({ subject: true, headline: true, body: true, cta_url: true });
+      toast.error("Please fix the highlighted fields");
+      return;
+    }
     setSending(true);
     try {
       const res = await api.post<{ sent: number; message: string }>("/api/notifications/announce", form);
@@ -470,7 +577,7 @@ export function AnnouncementPanel() {
 
   return (
     <div className="bg-white border border-neutral-200 rounded-xl shadow-xs overflow-hidden">
-      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 transition-colors">
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open} className="w-full flex items-center justify-between px-5 py-4 hover:bg-neutral-50 transition-colors">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-brand-50 border border-brand-200 rounded-lg flex items-center justify-center">
             <Megaphone className="icon-sm text-brand-500" />
@@ -487,26 +594,42 @@ export function AnnouncementPanel() {
         <div className="border-t border-neutral-100 px-5 py-5 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label-base">Email Subject</label>
-              <input className="input-base" placeholder="🚀 New features in Vaaniq" value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} />
+              <label htmlFor="email-subject" className="label-base">Email Subject</label>
+              <input id="email-subject" aria-invalid={!!(touched.subject && errors.subject)}
+                className={`input-base ${touched.subject && errors.subject ? "border-error-300 focus:border-error-500" : ""}`}
+                placeholder="🚀 New features in Vaaniq" value={form.subject}
+                onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} onBlur={() => markTouched("subject")} />
+              {touched.subject && errors.subject && <p className="text-xs text-error-600 mt-1">{errors.subject}</p>}
             </div>
             <div>
-              <label className="label-base">Headline</label>
-              <input className="input-base" placeholder="We just shipped something exciting" value={form.headline} onChange={e => setForm(f => ({ ...f, headline: e.target.value }))} />
+              <label htmlFor="email-headline" className="label-base">Headline</label>
+              <input id="email-headline" aria-invalid={!!(touched.headline && errors.headline)}
+                className={`input-base ${touched.headline && errors.headline ? "border-error-300 focus:border-error-500" : ""}`}
+                placeholder="We just shipped something exciting" value={form.headline}
+                onChange={e => setForm(f => ({ ...f, headline: e.target.value }))} onBlur={() => markTouched("headline")} />
+              {touched.headline && errors.headline && <p className="text-xs text-error-600 mt-1">{errors.headline}</p>}
             </div>
           </div>
           <div>
-            <label className="label-base">Body</label>
-            <textarea className="input-base min-h-[100px] resize-none" placeholder="Describe what's new, what changed, or any important update…" value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} />
+            <label htmlFor="email-body" className="label-base">Body</label>
+            <textarea id="email-body" aria-invalid={!!(touched.body && errors.body)}
+              className={`input-base min-h-[100px] resize-none ${touched.body && errors.body ? "border-error-300 focus:border-error-500" : ""}`}
+              placeholder="Describe what's new, what changed, or any important update…" value={form.body}
+              onChange={e => setForm(f => ({ ...f, body: e.target.value }))} onBlur={() => markTouched("body")} />
+            {touched.body && errors.body && <p className="text-xs text-error-600 mt-1">{errors.body}</p>}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label-base">CTA Button Label <span className="text-neutral-400 font-normal">(optional)</span></label>
-              <input className="input-base" placeholder="Try it now" value={form.cta_label} onChange={e => setForm(f => ({ ...f, cta_label: e.target.value }))} />
+              <label htmlFor="email-cta-label" className="label-base">CTA Button Label <span className="text-neutral-400 font-normal">(optional)</span></label>
+              <input id="email-cta-label" className="input-base" placeholder="Try it now" value={form.cta_label} onChange={e => setForm(f => ({ ...f, cta_label: e.target.value }))} />
             </div>
             <div>
-              <label className="label-base">CTA URL <span className="text-neutral-400 font-normal">(optional)</span></label>
-              <input className="input-base" placeholder="https://..." value={form.cta_url} onChange={e => setForm(f => ({ ...f, cta_url: e.target.value }))} />
+              <label htmlFor="email-cta-url" className="label-base">CTA URL <span className="text-neutral-400 font-normal">(optional)</span></label>
+              <input id="email-cta-url" aria-invalid={!!(touched.cta_url && errors.cta_url)}
+                className={`input-base ${touched.cta_url && errors.cta_url ? "border-error-300 focus:border-error-500" : ""}`}
+                placeholder="https://..." value={form.cta_url}
+                onChange={e => setForm(f => ({ ...f, cta_url: e.target.value }))} onBlur={() => markTouched("cta_url")} />
+              {touched.cta_url && errors.cta_url && <p className="text-xs text-error-600 mt-1">{errors.cta_url}</p>}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 pt-1">

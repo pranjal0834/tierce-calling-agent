@@ -3,10 +3,12 @@ Knowledge Base API.
   GET    /api/knowledge                          — list knowledge bases
   POST   /api/knowledge                          — create a knowledge base
   GET    /api/knowledge/{kb_id}                  — KB detail + documents
+  PATCH  /api/knowledge/{kb_id}                  — rename / edit a KB (name, description)
   DELETE /api/knowledge/{kb_id}                  — delete a KB (and its docs/chunks)
   POST   /api/knowledge/{kb_id}/documents/text   — add a pasted-text document
   POST   /api/knowledge/{kb_id}/documents/url    — add a website URL document
   POST   /api/knowledge/{kb_id}/documents/upload — upload a PDF
+  PATCH  /api/knowledge/{kb_id}/documents/{doc_id} — edit a document (title; text content re-ingests)
   DELETE /api/knowledge/{kb_id}/documents/{doc_id} — delete a document
 """
 import asyncio
@@ -33,6 +35,11 @@ class KBCreate(BaseModel):
     description: str = ""
 
 
+class KBUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 class TextDocCreate(BaseModel):
     title: str
     content: str
@@ -41,6 +48,11 @@ class TextDocCreate(BaseModel):
 class UrlDocCreate(BaseModel):
     url: str
     title: str = ""
+
+
+class DocUpdate(BaseModel):
+    title: str | None = None
+    content: str | None = None   # re-ingests; text documents only
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +125,33 @@ async def create_kb(payload: KBCreate, user: User = Depends(get_current_user), d
     await db.refresh(kb)
     return {"id": kb.id, "name": kb.name, "description": kb.description,
             "document_count": 0, "ready_count": 0,
+            "created_at": kb.created_at.isoformat() if kb.created_at else None}
+
+
+@router.patch("/{kb_id}")
+async def update_kb(
+    kb_id: str, payload: KBUpdate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    kb = await _get_kb(kb_id, user.workspace_id, db)
+    if payload.name is not None:
+        if not payload.name.strip():
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+        kb.name = payload.name.strip()
+    if payload.description is not None:
+        kb.description = payload.description.strip() or None
+    await db.commit()
+    await db.refresh(kb)
+    doc_count = (await db.execute(
+        select(func.count(KnowledgeDocument.id)).where(KnowledgeDocument.kb_id == kb.id)
+    )).scalar() or 0
+    ready_count = (await db.execute(
+        select(func.count(KnowledgeDocument.id)).where(
+            KnowledgeDocument.kb_id == kb.id, KnowledgeDocument.status == "ready"
+        )
+    )).scalar() or 0
+    return {"id": kb.id, "name": kb.name, "description": kb.description,
+            "document_count": doc_count, "ready_count": ready_count,
             "created_at": kb.created_at.isoformat() if kb.created_at else None}
 
 
@@ -250,6 +289,50 @@ async def upload_pdf_document(
     await db.refresh(doc)
     asyncio.create_task(ingest_document(doc.id, pdf_bytes=data))
     return _doc_out(doc)
+
+
+@router.patch("/{kb_id}/documents/{doc_id}")
+async def update_document(
+    kb_id: str, doc_id: str, payload: DocUpdate,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """
+    Rename any document (title). For **text** documents, editing `content`
+    re-ingests it (re-chunks + re-embeds, replacing the old chunks). Content of
+    PDF/URL documents can't be edited — re-upload or re-add the URL instead.
+    """
+    await _get_kb(kb_id, user.workspace_id, db)
+    doc = await db.get(KnowledgeDocument, doc_id)
+    if not doc or doc.kb_id != kb_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if payload.title is not None and payload.title.strip():
+        doc.title = payload.title.strip()[:500]
+
+    reingest = False
+    if payload.content is not None:
+        if doc.source_type != "text":
+            raise HTTPException(
+                status_code=400,
+                detail="Only text documents can have their content edited.",
+            )
+        if not payload.content.strip():
+            raise HTTPException(status_code=400, detail="Content cannot be empty")
+        doc.status = "processing"
+        doc.error_message = None
+        reingest = True
+
+    await db.commit()
+    await db.refresh(doc)
+
+    if reingest:
+        asyncio.create_task(ingest_document(doc.id, raw_text=payload.content))
+
+    uploader = None
+    if doc.created_by:
+        urow = await db.execute(select(User.email).where(User.id == doc.created_by))
+        uploader = urow.scalar()
+    return _doc_out(doc, uploader)
 
 
 @router.delete("/{kb_id}/documents/{doc_id}", status_code=204)

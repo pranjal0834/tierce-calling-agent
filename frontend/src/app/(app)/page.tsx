@@ -5,6 +5,7 @@ import {
   AlertCircle, ArrowRight, ArrowUpRight,
 } from "lucide-react";
 import Link from "next/link";
+import OnboardingTour from "@/components/OnboardingTour";
 import { getAgents, getCalls } from "@/lib/api";
 import toast from "react-hot-toast";
 
@@ -25,7 +26,7 @@ function StatCard({ label, value, icon: Icon, iconColor, iconBg, trend }: {
   trend?: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-neutral-200 shadow-card p-5 flex flex-col gap-3 hover:shadow-hover transition-shadow duration-200">
+    <div className="snap-start shrink-0 sm:shrink min-w-[160px] sm:min-w-0 bg-white rounded-xl border border-neutral-200 shadow-card p-5 flex flex-col gap-3 hover:shadow-hover transition-shadow duration-200">
       <div className="flex items-center justify-between">
         <span className="text-[13px] font-medium text-neutral-500">{label}</span>
         <div className={`w-8 h-8 ${iconBg} rounded-lg flex items-center justify-center`}>
@@ -52,7 +53,7 @@ export default function Dashboard() {
     Promise.all([getAgents(), getCalls()])
       .then(([a, c]) => {
         setAgents(a);
-        setCalls(c);
+        setCalls(c.items || c);
       })
       .catch((err: any) => {
         const status = err?.response?.status;
@@ -79,9 +80,10 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <OnboardingTour />
       {/* API error */}
       {apiError && (
-        <div className="flex items-start gap-3 p-4 bg-error-50 border border-error-200 rounded-xl">
+        <div role="alert" className="flex items-start gap-3 p-4 bg-error-50 border border-error-200 rounded-xl">
           <AlertCircle className="w-4 h-4 text-error-500 mt-0.5 flex-shrink-0" />
           <div>
             <p className="text-sm font-medium text-error-700">Unable to load data</p>
@@ -91,7 +93,7 @@ export default function Dashboard() {
       )}
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 snap-x snap-mandatory scroll-thin">
         <StatCard label="Total Agents"  value={agents.length}      icon={Bot}      iconColor="text-brand-500"    iconBg="bg-brand-50"   />
         <StatCard label="Total Calls"   value={calls.length}       icon={Phone}    iconColor="text-success-600"  iconBg="bg-success-50" />
         <StatCard label="Active Now"    value={activeCalls.length} icon={Activity} iconColor="text-warning-600"    iconBg="bg-warning-50"   />
@@ -100,7 +102,7 @@ export default function Dashboard() {
 
       {/* Empty onboarding state */}
       {!apiError && agents.length === 0 && (
-        <div className="bg-white border border-dashed border-neutral-300 rounded-2xl p-10 text-center">
+        <div role="alert" className="bg-white border border-dashed border-neutral-300 rounded-2xl p-10 text-center">
           <div className="w-12 h-12 bg-brand-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Bot className="w-6 h-6 text-brand-500" />
           </div>
@@ -168,7 +170,7 @@ export default function Dashboard() {
           </div>
 
           {recentCalls.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
+            <div role="alert" className="flex-1 flex flex-col items-center justify-center py-12 px-6 text-center">
               <div className="w-10 h-10 bg-neutral-100 rounded-xl flex items-center justify-center mb-3">
                 <Phone className="w-5 h-5 text-neutral-400" />
               </div>

@@ -5,7 +5,7 @@ import {
   Terminal, Globe, Zap, Phone, CalendarClock, BookOpen,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 import { getApiKeys, createApiKey, revokeApiKey, getWorkspace } from "@/lib/api";
 
 interface ApiKey { id: string; name: string; last_used_at?: string; created_at: string; }
@@ -72,7 +72,7 @@ function ApiKeysSection() {
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState("");
-  const [confirmRevoke, setConfirmRevoke] = useState<{open: boolean; id?: string; name?: string}>({open: false});
+
 
   const load = useCallback(async () => {
     try { setKeys(await getApiKeys()); }
@@ -99,19 +99,18 @@ function ApiKeysSection() {
   }
 
   async function revoke(id: string, name: string) {
-    setConfirmRevoke({open: true, id, name});
-  }
-
-  async function doRevoke() {
-    if (!confirmRevoke.id) return;
     try {
-      await revokeApiKey(confirmRevoke.id);
-      setKeys((k) => k.filter((x) => x.id !== confirmRevoke.id));
-      toast.success("Key revoked");
+      await revokeApiKey(id);
+      setKeys((k) => k.filter((x) => x.id !== id));
+      toastUndo({
+        message: "Key revoked",
+        onUndo: async () => {
+          await createApiKey(name);
+          await load();
+        },
+      });
     } catch {
       toast.error("Failed to revoke key");
-    } finally {
-      setConfirmRevoke({open: false});
     }
   }
 
@@ -195,13 +194,6 @@ function ApiKeysSection() {
           </div>
         )}
       </div>
-      <ConfirmModal
-        open={confirmRevoke.open}
-        title="Revoke API Key"
-        message={confirmRevoke.name ? `Revoke key "${confirmRevoke.name}"? This cannot be undone.` : ""}
-        onConfirm={doRevoke}
-        onCancel={() => setConfirmRevoke({open: false})}
-      />
     </div>
   );
 }

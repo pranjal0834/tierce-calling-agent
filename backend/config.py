@@ -13,6 +13,10 @@ _DEFAULTS = {
     "SMTP_FROM_NAME": "Vaaniq Voice",
     # Super admin — comma-separated email whitelist
     "ADMIN_EMAILS": "",
+    # Scheduled admin digest email: "off" | "daily" | "weekly" (weekly = Mondays),
+    # sent to every ADMIN_EMAILS address at ADMIN_DIGEST_HOUR_UTC.
+    "ADMIN_DIGEST_FREQ": "off",
+    "ADMIN_DIGEST_HOUR_UTC": 6,
     # WhatsApp (external automation system) — POST text messages via its API
     "WHATSAPP_API_URL": "",
     "WHATSAPP_ACCESS_TOKEN": "",

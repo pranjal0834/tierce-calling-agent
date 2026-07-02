@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Zap, Layers, Pencil, Trash2, Phone,
@@ -8,10 +8,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumb";
-import { getAgent, getCalls, getAgentAnalytics, deleteAgent } from "@/lib/api";
+import { getAgent, getCalls, getAgentAnalytics, deleteAgent, createAgent } from "@/lib/api";
 import toast from "react-hot-toast";
 import { ToolsTab } from "@/components/tools/ToolsTab";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 
 // Gemini voices (current) plus legacy OpenAI ids so older agents still show a name.
 const VOICE_LABELS: Record<string, string> = {
@@ -88,7 +88,7 @@ export default function AgentViewPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "tools">( "overview");
   const [toolsCount, setToolsCount] = useState(0);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const agentRef = useRef<any>(null);
 
   useEffect(() => {
     Promise.all([
@@ -104,19 +104,15 @@ export default function AgentViewPage() {
   }, [id]);
 
   const handleDelete = async () => {
-    setConfirmDelete(true);
-  };
-
-  const doDelete = async () => {
-    try {
-      await deleteAgent(id);
-      toast.success("Agent deleted");
-      router.push("/agents");
-    } catch {
-      toast.error("Failed to delete agent");
-    } finally {
-      setConfirmDelete(false);
-    }
+    agentRef.current = agent;
+    await deleteAgent(id);
+    toastUndo({
+      message: "Agent deleted",
+      onUndo: async () => {
+        await createAgent(agentRef.current);
+      },
+    });
+    router.push("/agents");
   };
 
   if (loading) {
@@ -234,7 +230,7 @@ export default function AgentViewPage() {
                 </span>
               </Row>
               <Row label="Model">
-                <span className="text-sm text-neutral-900">Tierce Voice Engine</span>
+                <span className="text-sm text-neutral-900">Vaaniq Voice Engine</span>
               </Row>
               <Row label="Voice">
                 <span className="text-sm text-neutral-900">{VOICE_LABELS[agent.voice_id] ?? agent.voice_id ?? "—"}</span>
@@ -343,7 +339,7 @@ export default function AgentViewPage() {
                         <div className="min-w-0">
                           <p className="text-sm text-neutral-900 font-mono truncate">{call.phone_number}</p>
                           <p className="text-xs text-neutral-500">
-                            {new Date((call.created_at.endsWith("Z") || call.created_at.includes("+") ? call.created_at : call.created_at + "Z")).toLocaleString("en-GB", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
+                            {new Date((call.created_at.endsWith("Z") || call.created_at.includes("+") ? call.created_at : call.created_at + "Z")).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
                           </p>
                         </div>
                       </div>
@@ -366,13 +362,6 @@ export default function AgentViewPage() {
       )}
 
       {activeTab === "tools" && <ToolsTab agentId={id} onToolsChange={setToolsCount} />}
-      <ConfirmModal
-        open={confirmDelete}
-        title="Delete Agent"
-        message="Delete this agent? This cannot be undone."
-        onConfirm={doDelete}
-        onCancel={() => setConfirmDelete(false)}
-      />
     </div>
   );
 }

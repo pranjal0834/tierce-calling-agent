@@ -49,15 +49,15 @@ export default function ConfirmModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/40 backdrop-blur-[1px]" onClick={onCancel} />
-      <div ref={dialogRef} className="relative bg-white rounded-xl shadow-modal w-full max-w-sm p-6 animate-scale-in" role="dialog" aria-modal="true">
+      <div ref={dialogRef} className="relative bg-white rounded-xl shadow-modal w-full max-w-sm p-6 animate-scale-in" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-message">
         <button onClick={onCancel} className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors">
           <X className="w-4 h-4" />
         </button>
         <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-4 ${color === "error" ? "bg-error-50" : "bg-warning-50"}`}>
           <AlertTriangle className={`w-5 h-5 ${color === "error" ? "text-error-600" : "text-warning-600"}`} />
         </div>
-        <h2 className="text-lg font-semibold text-neutral-900 mb-1">{title}</h2>
-        <p className="text-sm text-neutral-500 mb-4">{message}</p>
+        <h2 id="confirm-modal-title" className="text-lg font-semibold text-neutral-900 mb-1">{title}</h2>
+        <p id="confirm-modal-message" className="text-sm text-neutral-500 mb-4">{message}</p>
         {children}
         <div className="flex items-center gap-2.5 justify-end mt-6">
           <button onClick={onCancel} className="h-9 px-4 text-sm font-medium text-neutral-700 bg-white border border-neutral-200 rounded-lg hover:bg-neutral-50 transition-colors">

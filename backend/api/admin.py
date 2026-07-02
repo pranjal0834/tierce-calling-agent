@@ -17,7 +17,7 @@ import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, asc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.dependencies import require_superadmin
@@ -45,6 +45,262 @@ class WorkspaceStatusRequest(BaseModel):
 
 
 # ── Platform stats ────────────────────────────────────────────────────────────
+
+@router.get("/anomalies")
+async def admin_anomalies(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """
+    Lightweight heuristic anomaly flags for the overview dashboard. Each flag has
+    a level (critical | warning | info), a short title, and a detail string.
+    """
+    now = datetime.utcnow()
+    w1, w4 = now - timedelta(days=7), now - timedelta(days=28)
+    flags: list[dict] = []
+
+    # 1. AI cost spike — this week vs the average of the prior 3 weeks.
+    week_cost = (await db.execute(
+        select(func.coalesce(func.sum(Call.cost_usd), 0.0)).where(Call.created_at >= w1)
+    )).scalar() or 0.0
+    prior_cost = (await db.execute(
+        select(func.coalesce(func.sum(Call.cost_usd), 0.0))
+        .where(Call.created_at >= w4, Call.created_at < w1)
+    )).scalar() or 0.0
+    prior_weekly_avg = float(prior_cost) / 3.0
+    if prior_weekly_avg > 0.5 and float(week_cost) > 3 * prior_weekly_avg:
+        flags.append({
+            "level": "critical",
+            "title": f"AI cost spike — {float(week_cost) / prior_weekly_avg:.1f}× normal",
+            "detail": f"${float(week_cost):.2f} in AI cost this week vs a ${prior_weekly_avg:.2f}/week recent average.",
+        })
+
+    # 1b. Negative gross margin this week — AI cost exceeded revenue.
+    from backend.billing.credits import USD_TO_INR as _U2R
+    rev_rows_wk = (await db.execute(
+        select(CreditTransaction.amount_paid, CreditTransaction.currency).where(
+            CreditTransaction.type == "purchase",
+            CreditTransaction.amount_paid.isnot(None),
+            CreditTransaction.created_at >= w1,
+        )
+    )).all()
+    revenue_wk = sum((float(a or 0) if (c or "INR") == "INR" else float(a or 0) * _U2R) for a, c in rev_rows_wk)
+    cost_wk_inr = float(week_cost) * _U2R
+    if (revenue_wk + cost_wk_inr) > 0 and revenue_wk < cost_wk_inr:
+        flags.append({
+            "level": "critical",
+            "title": "Negative gross margin this week",
+            "detail": f"AI cost ₹{cost_wk_inr:,.0f} exceeded revenue ₹{revenue_wk:,.0f} over the last 7 days.",
+        })
+
+    # 2. Zero calls platform-wide in the last 7 days (but there is history).
+    calls_7d = (await db.execute(select(func.count(Call.id)).where(Call.created_at >= w1))).scalar() or 0
+    total_calls = (await db.execute(select(func.count(Call.id)))).scalar() or 0
+    if total_calls > 0 and calls_7d == 0:
+        flags.append({
+            "level": "warning",
+            "title": "No calls in the last 7 days",
+            "detail": "The platform has processed zero calls this week.",
+        })
+
+    # 3. Quiet workspaces — had calls before, but none in the last 7 days.
+    last_call_rows = (await db.execute(
+        select(Call.workspace_id, func.max(Call.created_at)).group_by(Call.workspace_id)
+    )).all()
+    quiet = [wid for wid, last in last_call_rows if wid and last and last < w1]
+    if quiet:
+        flags.append({
+            "level": "info",
+            "title": f"{len(quiet)} workspace{'s' if len(quiet) != 1 else ''} went quiet",
+            "detail": "Had calls previously but none in the last 7 days — possible churn.",
+        })
+
+    # 4. Signup spike — new users this week vs prior 3-week average.
+    users_7d = (await db.execute(select(func.count(User.id)).where(User.created_at >= w1))).scalar() or 0
+    users_prior = (await db.execute(
+        select(func.count(User.id)).where(User.created_at >= w4, User.created_at < w1)
+    )).scalar() or 0
+    prior_users_avg = float(users_prior) / 3.0
+    if prior_users_avg >= 1 and users_7d > 3 * prior_users_avg:
+        flags.append({
+            "level": "info",
+            "title": f"Signup spike — {users_7d} new users",
+            "detail": f"{users_7d} signups this week vs a {prior_users_avg:.1f}/week average. Verify they're legitimate.",
+        })
+
+    return {"anomalies": flags, "checked_at": now.isoformat()}
+
+
+@router.post("/digest/send")
+async def admin_send_digest_now(
+    admin: User = Depends(require_superadmin),
+):
+    """Manually send the admin digest now (also used to preview/test the scheduled report)."""
+    from backend.notifications.digest import send_admin_digest
+    sent = await send_admin_digest("Manual")
+    if sent == 0:
+        raise HTTPException(status_code=400, detail="No digest sent — check ADMIN_EMAILS and SMTP settings")
+    return {"ok": True, "sent": sent, "frequency": (settings.ADMIN_DIGEST_FREQ or "off")}
+
+
+@router.get("/search")
+async def admin_global_search(
+    q: str = "",
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """One query across workspaces, users, calls, and phone numbers."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"workspaces": [], "users": [], "calls": [], "phone_numbers": []}
+    like = f"%{q}%"
+    LIM = 6
+
+    ws_rows = (await db.execute(
+        select(Workspace.id, Workspace.name).where(Workspace.name.ilike(like)).limit(LIM)
+    )).all()
+    user_rows = (await db.execute(
+        select(User.id, User.email).where(User.email.ilike(like), User.deleted_at.is_(None)).limit(LIM)
+    )).all()
+    call_rows = (await db.execute(
+        select(Call.id, Call.phone_number, Call.workspace_id)
+        .where(Call.phone_number.ilike(like)).order_by(desc(Call.created_at)).limit(LIM)
+    )).all()
+    pn_rows = (await db.execute(
+        select(PhoneNumber.id, PhoneNumber.phone_number, PhoneNumber.workspace_id)
+        .where(PhoneNumber.phone_number.ilike(like)).limit(LIM)
+    )).all()
+
+    ws_ids = {r[2] for r in call_rows} | {r[2] for r in pn_rows}
+    ws_names: dict[str, str] = {}
+    if ws_ids:
+        for wid, name in (await db.execute(
+            select(Workspace.id, Workspace.name).where(Workspace.id.in_(ws_ids))
+        )).all():
+            ws_names[wid] = name
+
+    return {
+        "workspaces": [{"id": i, "name": n} for i, n in ws_rows],
+        "users": [{"id": i, "email": e} for i, e in user_rows],
+        "calls": [{"id": i, "phone_number": p, "workspace_name": ws_names.get(w, "—")} for i, p, w in call_rows],
+        "phone_numbers": [{"id": i, "phone_number": p, "workspace_name": ws_names.get(w, "—")} for i, p, w in pn_rows],
+    }
+
+
+# E.164 dial-code → (country, flag). Longest-prefix match; NANP (+1) is bucketed.
+_DIAL_CODES: dict[str, tuple[str, str]] = {
+    "1": ("US / Canada", "🇺🇸"), "44": ("United Kingdom", "🇬🇧"), "91": ("India", "🇮🇳"),
+    "61": ("Australia", "🇦🇺"), "49": ("Germany", "🇩🇪"), "33": ("France", "🇫🇷"),
+    "971": ("UAE", "🇦🇪"), "65": ("Singapore", "🇸🇬"), "81": ("Japan", "🇯🇵"),
+    "86": ("China", "🇨🇳"), "92": ("Pakistan", "🇵🇰"), "880": ("Bangladesh", "🇧🇩"),
+    "234": ("Nigeria", "🇳🇬"), "27": ("South Africa", "🇿🇦"), "55": ("Brazil", "🇧🇷"),
+    "52": ("Mexico", "🇲🇽"), "34": ("Spain", "🇪🇸"), "39": ("Italy", "🇮🇹"),
+    "31": ("Netherlands", "🇳🇱"), "7": ("Russia / KZ", "🇷🇺"), "60": ("Malaysia", "🇲🇾"),
+    "62": ("Indonesia", "🇮🇩"), "63": ("Philippines", "🇵🇭"), "66": ("Thailand", "🇹🇭"),
+    "84": ("Vietnam", "🇻🇳"), "82": ("South Korea", "🇰🇷"), "20": ("Egypt", "🇪🇬"),
+    "254": ("Kenya", "🇰🇪"), "94": ("Sri Lanka", "🇱🇰"), "977": ("Nepal", "🇳🇵"),
+    "966": ("Saudi Arabia", "🇸🇦"), "353": ("Ireland", "🇮🇪"), "64": ("New Zealand", "🇳🇿"),
+}
+
+
+def _country_for(number: str) -> tuple[str, str] | None:
+    n = (number or "").lstrip("+").strip()
+    if not n or not n[0].isdigit():
+        return None
+    for length in (4, 3, 2, 1):
+        if len(n) >= length and n[:length] in _DIAL_CODES:
+            return _DIAL_CODES[n[:length]]
+    return None
+
+
+# ── India regional breakdown (drill-down under "India") ───────────────────────
+# Landline STD codes → city (deterministic, accurate).
+_IN_STD: dict[str, str] = {
+    "11": "Delhi", "22": "Mumbai", "33": "Kolkata", "44": "Chennai", "20": "Pune",
+    "40": "Hyderabad", "79": "Ahmedabad", "80": "Bengaluru", "141": "Jaipur",
+    "522": "Lucknow", "172": "Chandigarh", "484": "Kochi", "471": "Thiruvananthapuram",
+    "422": "Coimbatore", "361": "Guwahati", "674": "Bhubaneswar", "731": "Indore",
+    "712": "Nagpur", "265": "Vadodara", "532": "Prayagraj", "512": "Kanpur",
+    "281": "Rajkot", "183": "Amritsar", "755": "Bhopal", "612": "Patna",
+    "821": "Mysuru", "824": "Mangaluru", "413": "Puducherry", "751": "Gwalior",
+}
+# Mobile first-4-digits → telecom circle. APPROXIMATE: reflects the number's
+# ORIGINAL allocation circle, not the caller's live location (mobile number
+# portability breaks the link). Extend/correct this with your own ranges — it's
+# just a lookup table. Unmapped mobiles fall into "Other circle".
+_IN_MOBILE_CIRCLE: dict[str, str] = {
+    "9845": "Karnataka", "9880": "Karnataka", "9886": "Karnataka", "7899": "Karnataka",
+    "9820": "Mumbai", "9821": "Mumbai", "9833": "Mumbai", "9930": "Mumbai",
+    "9811": "Delhi", "9810": "Delhi", "9871": "Delhi", "9999": "Delhi",
+    "9840": "Chennai", "9841": "Chennai", "9884": "Tamil Nadu", "9944": "Tamil Nadu",
+    "9825": "Gujarat", "9898": "Gujarat", "9909": "Gujarat", "8511": "Gujarat",
+    "9849": "Andhra/Telangana", "9848": "Andhra/Telangana", "9959": "Andhra/Telangana",
+    "9830": "Kolkata", "9831": "Kolkata", "9903": "West Bengal",
+    "9822": "Maharashtra", "9890": "Maharashtra", "9421": "Maharashtra",
+    "9829": "Rajasthan", "9950": "Rajasthan", "9414": "Rajasthan",
+    "9891": "UP (West)", "9897": "UP (West)", "9838": "UP (East)", "9935": "UP (East)",
+    "9895": "Kerala", "9847": "Kerala", "9539": "Kerala",
+    "9815": "Punjab", "9872": "Punjab", "9425": "Madhya Pradesh", "9424": "Madhya Pradesh",
+    "9437": "Odisha", "9438": "Odisha", "9835": "Bihar/Jharkhand", "9431": "Bihar/Jharkhand",
+}
+
+
+def _india_region(number: str) -> str:
+    """Best-effort Indian region for a +91 number (landline = city, mobile = circle)."""
+    n = (number or "").lstrip("+").strip()
+    if not n.startswith("91"):
+        return "Other"
+    local = n[2:]
+    if not local:
+        return "Unknown"
+    if len(local) >= 10 and local[0] in "6789":   # mobile
+        return _IN_MOBILE_CIRCLE.get(local[:4], "Other circle")
+    for length in (4, 3, 2):                        # landline STD
+        if local[:length] in _IN_STD:
+            return _IN_STD[local[:length]]
+    return "Other"
+
+
+@router.get("/geo")
+async def admin_geo(
+    days: int = 30,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_superadmin),
+):
+    """
+    Call volume grouped by destination country (from the E.164 prefix). The India
+    entry also includes a `regions` breakdown (city for landlines, telecom circle
+    for mobiles — approximate, see _IN_MOBILE_CIRCLE).
+    """
+    from collections import Counter
+    days = max(min(int(days or 30), 90), 1)
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = (await db.execute(select(Call.phone_number).where(Call.created_at >= since))).all()
+    counts: Counter = Counter()
+    india_regions: Counter = Counter()
+    flags: dict[str, str] = {}
+    for (num,) in rows:
+        c = _country_for(num or "")
+        key = c[0] if c else "Other"
+        counts[key] += 1
+        if c:
+            flags[c[0]] = c[1]
+            if c[0] == "India":
+                india_regions[_india_region(num or "")] += 1
+    total = sum(counts.values())
+    countries = []
+    for k, v in counts.most_common(12):
+        entry = {"country": k, "flag": flags.get(k, "🌐"), "calls": v,
+                 "pct": round(v / total * 100, 1) if total else 0.0}
+        if k == "India" and india_regions:
+            rtot = sum(india_regions.values())
+            entry["regions"] = [
+                {"region": rk, "calls": rv, "pct": round(rv / rtot * 100, 1) if rtot else 0.0}
+                for rk, rv in india_regions.most_common(10)
+            ]
+        countries.append(entry)
+    return {"days": days, "total": total, "countries": countries}
+
 
 @router.get("/stats")
 async def platform_stats(
@@ -92,33 +348,45 @@ async def platform_stats(
 
 @router.get("/workspaces")
 async def list_workspaces(
-    limit: int = 100,
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    conditions = []
+    if search:
+        conditions.append(Workspace.name.ilike(f"%{search}%"))
+
+    count_q = select(func.count(Workspace.id))
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(Workspace, sort_by, Workspace.created_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+
     result = await db.execute(
-        select(Workspace).order_by(desc(Workspace.created_at)).limit(limit)
+        select(Workspace).where(*conditions).order_by(order).limit(limit).offset(offset)
     )
     workspaces = result.scalars().all()
 
     rows = []
     for ws in workspaces:
-        # member count
         mc = (await db.execute(
             select(func.count(User.id)).where(User.workspace_id == ws.id)
         )).scalar() or 0
-
-        # call count
         cc = (await db.execute(
             select(func.count(Call.id)).where(Call.workspace_id == ws.id)
         )).scalar() or 0
-
-        # agent count
         ac = (await db.execute(
             select(func.count(Agent.id)).where(Agent.workspace_id == ws.id)
         )).scalar() or 0
-
-        # total purchased minutes
         purchased = (await db.execute(
             select(func.sum(CreditTransaction.minutes)).where(
                 CreditTransaction.workspace_id == ws.id,
@@ -138,7 +406,7 @@ async def list_workspaces(
             "total_purchased_minutes": round(float(purchased), 1),
             "created_at": ws.created_at.isoformat() if ws.created_at else None,
         })
-    return rows
+    return {"items": rows, "total": total}
 
 
 @router.get("/workspaces/{ws_id}")
@@ -243,78 +511,139 @@ async def set_workspace_status(
 
 # ── Users ─────────────────────────────────────────────────────────────────────
 
+# Soft-deleted accounts are recoverable for this many days, then purged.
+DELETED_RETENTION_DAYS = 30
+
+
+def _display_email(email: str) -> str:
+    """Un-mangle a soft-deleted email ('deleted_<ts>_user@x.com' → 'user@x.com')."""
+    parts = email.split("_", 2)
+    if len(parts) == 3 and parts[0] == "deleted" and parts[1].isdigit():
+        return parts[2]
+    return email
+
+
 @router.get("/users")
 async def list_all_users(
-    limit: int = 200,
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
+    deleted_only: bool = False,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
-    result = await db.execute(
-        select(User).order_by(desc(User.created_at)).limit(limit)
-    )
-    users = result.scalars().all()
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
 
+    q = select(User).join(Workspace, User.workspace_id == Workspace.id, isouter=True)
+    conditions = []
+    if search:
+        conditions.append(or_(User.email.ilike(f"%{search}%"), Workspace.name.ilike(f"%{search}%")))
+    # Main list hides soft-deleted accounts; the "Recently Deleted" view shows only them.
+    conditions.append(User.deleted_at.isnot(None) if deleted_only else User.deleted_at.is_(None))
+    q = q.where(*conditions)
+
+    count_q = (
+        select(func.count(User.id)).select_from(User)
+        .join(Workspace, User.workspace_id == Workspace.id, isouter=True)
+        .where(*conditions)
+    )
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(User, sort_by, User.created_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    users = (await db.execute(q)).scalars().all()
+
+    now = datetime.utcnow()
     rows = []
     for u in users:
         ws = await db.get(Workspace, u.workspace_id)
+        days_left = None
+        if u.deleted_at:
+            days_left = max(0, DELETED_RETENTION_DAYS - (now - u.deleted_at).days)
         rows.append({
             "id": u.id,
-            "email": u.email,
+            "email": _display_email(u.email),   # show the real address, not the mangled one
             "role": u.role,
             "is_active": u.is_active,
             "workspace_id": u.workspace_id,
             "workspace_name": ws.name if ws else "—",
             "created_at": u.created_at.isoformat() if u.created_at else None,
+            "deleted_at": u.deleted_at.isoformat() if u.deleted_at else None,
+            "days_left": days_left,
         })
-    return rows
+    return {"items": rows, "total": total}
 
 
-# ── Delete user ───────────────────────────────────────────────────────────────
+# ── Soft-delete / restore (30-day recovery window) ────────────────────────────
 
-@router.delete("/users/{user_id}", status_code=204)
+@router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_superadmin),
 ):
     """
-    Permanently delete a user account.
-    If they are the sole member of their workspace, the workspace is also
-    deleted (agents, calls, transactions removed in dependency order).
-    Super admins cannot delete themselves.
+    Soft-delete a user: deactivate, stamp deleted_at (starts the 30-day recovery
+    window), and free the email (mangled, recoverable). A background job purges
+    accounts once the window elapses. Super admins cannot delete themselves.
     """
-    from sqlalchemy import text
-
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     if target.id == admin.id:
         raise HTTPException(status_code=400, detail="You cannot delete your own super admin account")
+    if target.deleted_at is not None:
+        raise HTTPException(status_code=400, detail="User is already deleted")
 
-    ws_id = target.workspace_id
-    members_count = (await db.execute(
-        select(func.count(User.id)).where(User.workspace_id == ws_id)
-    )).scalar() or 0
-
-    is_sole_member = members_count <= 1
-
-    if is_sole_member:
-        # Delete in FK dependency order so no constraint violations
-        await db.execute(text("DELETE FROM notification_preferences WHERE user_id = :uid"), {"uid": user_id})
-        await db.execute(text("DELETE FROM api_keys WHERE workspace_id = :ws"), {"ws": ws_id})
-        await db.execute(text("DELETE FROM credit_transactions WHERE workspace_id = :ws"), {"ws": ws_id})
-        await db.execute(text("DELETE FROM calls WHERE workspace_id = :ws"), {"ws": ws_id})
-        await db.execute(text("DELETE FROM agents WHERE workspace_id = :ws"), {"ws": ws_id})
-        await db.execute(text("DELETE FROM users WHERE workspace_id = :ws"), {"ws": ws_id})
-        await db.execute(text("DELETE FROM workspaces WHERE id = :ws"), {"ws": ws_id})
-    else:
-        # Multi-member workspace — remove only this user and their prefs
-        await db.execute(text("DELETE FROM notification_preferences WHERE user_id = :uid"), {"uid": user_id})
-        await db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": user_id})
+    original = _display_email(target.email)
+    now = datetime.utcnow()
+    target.deleted_at = now
+    target.is_active = False
+    if not target.email.startswith("deleted_"):
+        target.email = f"deleted_{now.strftime('%Y%m%d%H%M%S')}_{original}"
 
     await db.commit()
-    log.info("User deleted by admin", user_id=user_id, email=target.email,
-             workspace_deleted=is_sole_member, admin=admin.email)
+    log.info("User soft-deleted by admin", user_id=user_id, email=original, admin=admin.email)
+    return {
+        "ok": True, "user_id": user_id, "email": original,
+        "recover_by": (now + timedelta(days=DELETED_RETENTION_DAYS)).isoformat(),
+    }
+
+
+@router.post("/users/{user_id}/restore")
+async def restore_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_superadmin),
+):
+    """Restore a soft-deleted user within the 30-day window (re-activates + restores email)."""
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.deleted_at is None:
+        raise HTTPException(status_code=400, detail="User is not deleted")
+    if (datetime.utcnow() - target.deleted_at).days >= DELETED_RETENTION_DAYS:
+        raise HTTPException(status_code=410, detail="The 30-day recovery window has expired — this account can no longer be restored")
+
+    original = _display_email(target.email)
+    # The freed email may have been claimed by a new signup — block the collision.
+    existing = (await db.execute(
+        select(User).where(User.email == original, User.id != target.id)
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Cannot restore: {original} is now used by another account")
+
+    target.email = original
+    target.is_active = True
+    target.deleted_at = None
+    await db.commit()
+    log.info("User restored by admin", user_id=user_id, email=original, admin=admin.email)
+    return {"ok": True, "user_id": user_id, "email": original}
 
 
 # ── Cost analytics (COGS) — owner only ────────────────────────────────────────
@@ -375,30 +704,39 @@ async def cost_analytics(
         .where(KnowledgeDocument.created_at >= since)
     )).scalar() or 0.0)
 
-    # Approximate revenue (USD) from purchases in the same window.
+    # Approximate revenue (USD) from purchases in the same window, per workspace.
     from backend.billing.credits import USD_TO_INR
     rev_rows = (await db.execute(
-        select(CreditTransaction.amount_paid, CreditTransaction.currency).where(
+        select(CreditTransaction.workspace_id, CreditTransaction.amount_paid, CreditTransaction.currency).where(
             CreditTransaction.type == "purchase",
             CreditTransaction.amount_paid.isnot(None),
             CreditTransaction.created_at >= since,
         )
     )).all()
     revenue_usd = 0.0
-    for amt, cur in rev_rows:
+    ws_rev: dict[str, float] = {}
+    for wsid, amt, cur in rev_rows:
         amt = float(amt or 0.0)
-        revenue_usd += amt / USD_TO_INR if (cur or "INR") == "INR" else amt
+        usd = amt / USD_TO_INR if (cur or "INR") == "INR" else amt
+        revenue_usd += usd
+        if wsid:
+            ws_rev[wsid] = ws_rev.get(wsid, 0.0) + usd
 
-    # Resolve workspace names for the top spenders.
+    # Per-workspace profitability (revenue vs AI cost). Union of spenders + buyers.
+    ws_keys = set(ws_cost) | set(ws_rev)
     ws_names: dict[str, str] = {}
-    for ws_id in ws_cost:
-        ws = await db.get(Workspace, ws_id)
-        ws_names[ws_id] = ws.name if ws else "—"
+    for wid in ws_keys:
+        ws = await db.get(Workspace, wid)
+        ws_names[wid] = ws.name if ws else "—"
     top_workspaces = sorted(
-        ({"workspace": ws_names[w], "cost_usd": round(c, 4), "calls": ws_calls[w]}
-         for w, c in ws_cost.items()),
+        ({"workspace": ws_names[w],
+          "cost_usd": round(ws_cost.get(w, 0.0), 4),
+          "calls": ws_calls.get(w, 0),
+          "revenue_usd": round(ws_rev.get(w, 0.0), 2),
+          "margin_usd": round(ws_rev.get(w, 0.0) - ws_cost.get(w, 0.0), 2)}
+         for w in ws_keys),
         key=lambda x: x["cost_usd"], reverse=True,
-    )[:10]
+    )[:12]
 
     comp_list = sorted(
         ({"name": k, "usd": round(v["usd"], 4), "calls": v["calls"]}
@@ -430,12 +768,33 @@ async def cost_analytics(
 @router.get("/calls")
 async def list_all_calls(
     limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
-    result = await db.execute(
-        select(Call).order_by(desc(Call.created_at)).limit(limit)
-    )
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    q = select(Call).join(Workspace, Call.workspace_id == Workspace.id, isouter=True)
+    conditions = []
+    if search:
+        conditions.append(or_(Call.phone_number.ilike(f"%{search}%"), Workspace.name.ilike(f"%{search}%")))
+    if conditions:
+        q = q.where(*conditions)
+
+    count_q = select(func.count(Call.id)).select_from(Call).join(Workspace, Call.workspace_id == Workspace.id, isouter=True)
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(Call, sort_by, Call.created_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    result = await db.execute(q)
     calls = result.scalars().all()
 
     rows = []
@@ -464,20 +823,42 @@ async def list_all_calls(
                 "auxiliary": cb.get("auxiliary") or {},
             },
         })
-    return rows
+    return {"items": rows, "total": total}
 
 
 # ── Phone number inventory (global) ───────────────────────────────────────────
 
 @router.get("/phone-numbers")
 async def admin_phone_numbers(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "purchased_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
     """Every purchased number across all workspaces, with monthly cost liability."""
-    rows = (await db.execute(
-        select(PhoneNumber).order_by(desc(PhoneNumber.purchased_at))
-    )).scalars().all()
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    q = select(PhoneNumber).join(Workspace, PhoneNumber.workspace_id == Workspace.id, isouter=True)
+    conditions = []
+    if search:
+        conditions.append(or_(PhoneNumber.phone_number.ilike(f"%{search}%"), Workspace.name.ilike(f"%{search}%")))
+    if conditions:
+        q = q.where(*conditions)
+
+    count_q = select(func.count(PhoneNumber.id)).select_from(PhoneNumber).join(Workspace, PhoneNumber.workspace_id == Workspace.id, isouter=True)
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(PhoneNumber, sort_by, PhoneNumber.purchased_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    rows = (await db.execute(q)).scalars().all()
     price = float(settings.NUMBER_PRICE_INR)
     out, active, suspended = [], 0, 0
     for n in rows:
@@ -501,14 +882,8 @@ async def admin_phone_numbers(
             "renews_at": (base + timedelta(days=30)).isoformat() if base else None,
         })
     return {
-        "numbers": out,
-        "summary": {
-            "total": len(rows),
-            "active": active,
-            "suspended": suspended,
-            "number_price_inr": price,
-            "monthly_liability_inr": round(active * price, 2),
-        },
+        "items": out,
+        "total": total,
     }
 
 
@@ -516,16 +891,40 @@ async def admin_phone_numbers(
 
 @router.get("/transactions")
 async def admin_transactions(
-    limit: int = 100,
-    q: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
-    """Recent credit/payment transactions across the platform, with revenue rollup."""
+    """Recent credit/payment transactions across the platform."""
     from backend.billing.credits import USD_TO_INR
-    txs = (await db.execute(
-        select(CreditTransaction).order_by(desc(CreditTransaction.created_at)).limit(500)
-    )).scalars().all()
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    q = select(CreditTransaction).join(Workspace, CreditTransaction.workspace_id == Workspace.id, isouter=True)
+    conditions = []
+    if search:
+        conditions.append(or_(
+            Workspace.name.ilike(f"%{search}%"),
+            CreditTransaction.type.ilike(f"%{search}%"),
+            CreditTransaction.description.ilike(f"%{search}%"),
+        ))
+    if conditions:
+        q = q.where(*conditions)
+
+    count_q = select(func.count(CreditTransaction.id)).select_from(CreditTransaction).join(Workspace, CreditTransaction.workspace_id == Workspace.id, isouter=True)
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(CreditTransaction, sort_by, CreditTransaction.created_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    txs = (await db.execute(q)).scalars().all()
 
     ws_cache: dict[str, str] = {}
     async def wsname(wid: str) -> str:
@@ -534,14 +933,11 @@ async def admin_transactions(
             ws_cache[wid] = w.name if w else "—"
         return ws_cache[wid]
 
-    rows, total_rev, ws_rev = [], 0.0, {}
+    rows = []
     for t in txs:
         name = await wsname(t.workspace_id)
         amt = float(t.amount_paid or 0.0)
         amt_inr = amt if (t.currency or "INR") == "INR" else amt * USD_TO_INR
-        if t.type == "purchase" and amt_inr:
-            total_rev += amt_inr
-            ws_rev[name] = ws_rev.get(name, 0.0) + amt_inr
         rows.append({
             "id": t.id,
             "workspace_name": name,
@@ -555,22 +951,18 @@ async def admin_transactions(
             "created_at": t.created_at.isoformat() if t.created_at else None,
         })
 
-    if q:
-        ql = q.lower()
-        rows = [r for r in rows if ql in (f"{r['workspace_name']} {r['type']} {r['description'] or ''}").lower()]
-    rows = rows[:limit]
-
-    top = sorted(
-        ({"workspace": k, "revenue_inr": round(v, 2)} for k, v in ws_rev.items()),
-        key=lambda x: x["revenue_inr"], reverse=True,
-    )[:10]
-    return {"transactions": rows, "summary": {"total_revenue_inr": round(total_rev, 2), "top_workspaces": top}}
+    return {"items": rows, "total": total}
 
 
 # ── Compliance audit (per workspace) ──────────────────────────────────────────
 
 @router.get("/compliance")
 async def admin_compliance(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "workspace",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
@@ -594,8 +986,21 @@ async def admin_compliance(
             "calling_window": (f"{int(w.calling_start_hour):02d}:00–{int(w.calling_end_hour):02d}:00 {w.calling_timezone}"
                                if w.calling_window_enabled else None),
         })
-    out.sort(key=lambda x: (x["dnc_count"] + x["consent_attestations"]), reverse=True)
-    return {"workspaces": out, "summary": {"total_dnc": tot_dnc, "total_opt_outs": tot_opt, "total_consent_attestations": tot_consent}}
+
+    if search:
+        ql = search.lower()
+        out = [r for r in out if ql in r["workspace"].lower()]
+
+    valid_sorts = {"workspace", "dnc_count", "opt_out_count", "consent_attestations"}
+    if sort_by not in valid_sorts:
+        sort_by = "workspace"
+    reverse = sort_dir == "desc"
+    out.sort(key=lambda x: (x.get(sort_by) or 0) if sort_by != "workspace" else (x.get(sort_by) or "").lower(), reverse=reverse)
+
+    total = len(out)
+    out = out[offset:offset + limit]
+
+    return {"items": out, "total": total}
 
 
 # ── Admin call recording playback (any call) ──────────────────────────────────
@@ -654,11 +1059,35 @@ class AgentStatusRequest(BaseModel):
 
 @router.get("/agents")
 async def admin_agents(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
     """Every agent across all workspaces, with call volume and total AI cost."""
-    agents = (await db.execute(select(Agent).order_by(desc(Agent.created_at)))).scalars().all()
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    q = select(Agent).join(Workspace, Agent.workspace_id == Workspace.id, isouter=True)
+    conditions = []
+    if search:
+        conditions.append(or_(Agent.name.ilike(f"%{search}%"), Workspace.name.ilike(f"%{search}%")))
+    if conditions:
+        q = q.where(*conditions)
+
+    count_q = select(func.count(Agent.id)).select_from(Agent).join(Workspace, Agent.workspace_id == Workspace.id, isouter=True)
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(Agent, sort_by, Agent.created_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    agents = (await db.execute(q)).scalars().all()
     stat_rows = (await db.execute(
         select(Call.agent_id, func.count(Call.id), func.coalesce(func.sum(Call.cost_usd), 0.0))
         .group_by(Call.agent_id)
@@ -679,7 +1108,7 @@ async def admin_agents(
             "cost_usd": round(cost, 4),
             "created_at": a.created_at.isoformat() if a.created_at else None,
         })
-    return out
+    return {"items": out, "total": total}
 
 
 @router.put("/agents/{agent_id}/status")
@@ -701,25 +1130,46 @@ async def admin_agent_status(
 
 @router.get("/webhooks")
 async def admin_webhooks(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
     """Webhook endpoints across the platform with delivery success/failure stats."""
-    endpoints = (await db.execute(
-        select(WebhookEndpoint).order_by(desc(WebhookEndpoint.created_at))
-    )).scalars().all()
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    q = select(WebhookEndpoint).join(Workspace, WebhookEndpoint.workspace_id == Workspace.id, isouter=True)
+    conditions = []
+    if search:
+        conditions.append(or_(WebhookEndpoint.url.ilike(f"%{search}%"), Workspace.name.ilike(f"%{search}%")))
+    if conditions:
+        q = q.where(*conditions)
+
+    count_q = select(func.count(WebhookEndpoint.id)).select_from(WebhookEndpoint).join(Workspace, WebhookEndpoint.workspace_id == Workspace.id, isouter=True)
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(WebhookEndpoint, sort_by, WebhookEndpoint.created_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    endpoints = (await db.execute(q)).scalars().all()
     out, tot_deliv, tot_failed = [], 0, 0
     for e in endpoints:
         ws = await db.get(Workspace, e.workspace_id)
         delivs = (await db.execute(
             select(WebhookDelivery).where(WebhookDelivery.endpoint_id == e.id)
         )).scalars().all()
-        total = len(delivs)
+        total_del = len(delivs)
         failed = sum(1 for d in delivs if d.delivered_at is None or (d.response_status or 0) >= 400)
         last = max((d.created_at for d in delivs if d.created_at), default=None)
-        tot_deliv += total
+        tot_deliv += total_del
         tot_failed += failed
-        # Most recent deliveries (newest first) with status + truncated response body.
         recent = sorted(delivs, key=lambda d: d.created_at or datetime.min, reverse=True)[:8]
         recent_out = [{
             "event_type": d.event_type,
@@ -736,40 +1186,57 @@ async def admin_webhooks(
             "url": e.url,
             "events": e.events or [],
             "is_active": e.is_active,
-            "total_deliveries": total,
+            "total_deliveries": total_del,
             "failed_deliveries": failed,
-            "success_rate": round((total - failed) / total * 100, 1) if total else None,
+            "success_rate": round((total_del - failed) / total_del * 100, 1) if total_del else None,
             "last_delivery": last.isoformat() if last else None,
             "last_error": (f"{last_fail['status'] or 'no response'}: {last_fail['body']}".strip()
                            if last_fail else None),
             "recent_deliveries": recent_out,
         })
-    return {
-        "endpoints": out,
-        "summary": {
-            "total_endpoints": len(endpoints),
-            "total_deliveries": tot_deliv,
-            "total_failed": tot_failed,
-        },
-    }
+    return {"items": out, "total": total}
 
 
 # ── Scheduled calls overview ──────────────────────────────────────────────────
 
 @router.get("/scheduled-calls")
 async def admin_scheduled_calls(
-    limit: int = 200,
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "scheduled_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
     """Upcoming and failed scheduled calls platform-wide."""
-    rows = (await db.execute(
-        select(ScheduledCall).order_by(desc(ScheduledCall.scheduled_at)).limit(limit)
-    )).scalars().all()
-    out, counts = [], {}
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    conditions = []
+    if search:
+        conditions.append(or_(
+            ScheduledCall.phone_number.ilike(f"%{search}%"),
+            ScheduledCall.contact_name.ilike(f"%{search}%"),
+        ))
+
+    count_q = select(func.count(ScheduledCall.id))
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(ScheduledCall, sort_by, ScheduledCall.scheduled_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+
+    q = select(ScheduledCall)
+    if conditions:
+        q = q.where(*conditions)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    rows = (await db.execute(q)).scalars().all()
+    out = []
     for s in rows:
         ws = await db.get(Workspace, s.workspace_id)
-        counts[s.status] = counts.get(s.status, 0) + 1
         out.append({
             "id": s.id,
             "workspace_name": ws.name if ws else "—",
@@ -780,39 +1247,60 @@ async def admin_scheduled_calls(
             "error_message": s.error_message,
             "call_id": s.call_id,
         })
-    return {"scheduled": out, "summary": counts}
+    return {"items": out, "total": total}
 
 
 # ── WhatsApp usage (per workspace) ────────────────────────────────────────────
 
 @router.get("/whatsapp")
 async def admin_whatsapp(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "workspace",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
     """Which workspaces have WhatsApp connected, and how many agents use it."""
     workspaces = (await db.execute(select(Workspace))).scalars().all()
-    out, connected = [], 0
+    out = []
     for w in workspaces:
         has_wa = bool(getattr(w, "whatsapp_api_key", None))
         agents = (await db.execute(select(Agent).where(Agent.workspace_id == w.id))).scalars().all()
         enabled = sum(1 for a in agents if (a.config or {}).get("whatsapp_enabled"))
         if not has_wa and enabled == 0:
             continue
-        if has_wa:
-            connected += 1
         out.append({
             "workspace": w.name, "workspace_id": w.id,
             "connected": has_wa, "enabled_agents": enabled, "total_agents": len(agents),
         })
-    out.sort(key=lambda x: (x["connected"], x["enabled_agents"]), reverse=True)
-    return {"workspaces": out, "summary": {"connected_workspaces": connected, "shown": len(out)}}
+
+    if search:
+        ql = search.lower()
+        out = [r for r in out if ql in r["workspace"].lower()]
+
+    valid_sorts = {"workspace", "connected", "enabled_agents", "total_agents"}
+    if sort_by not in valid_sorts:
+        sort_by = "workspace"
+    reverse = sort_dir == "desc"
+    out.sort(key=lambda x: (x.get(sort_by) or 0) if sort_by != "workspace" else (x.get(sort_by) or "").lower(), reverse=reverse)
+
+    total = len(out)
+    out = out[offset:offset + limit]
+
+    return {"items": out, "total": total}
 
 
 # ── Knowledge base storage audit ──────────────────────────────────────────────
 
 @router.get("/knowledge")
 async def admin_knowledge(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "docs",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
@@ -831,13 +1319,25 @@ async def admin_knowledge(
         b["chunks"] += int(d.chunk_count or 0)
         b["chars"] += int(d.char_count or 0)
         b["embed_usd"] += float(d.embedding_cost_usd or 0.0)
-    out, tot_embed, tot_docs = [], 0.0, 0
+    out = []
     for wid, b in by_ws.items():
         ws = await db.get(Workspace, wid)
-        tot_embed += b["embed_usd"]; tot_docs += b["docs"]
         out.append({"workspace": ws.name if ws else "—", "workspace_id": wid, **b, "embed_usd": round(b["embed_usd"], 4)})
-    out.sort(key=lambda x: x["docs"], reverse=True)
-    return {"workspaces": out, "summary": {"total_docs": tot_docs, "total_embed_usd": round(tot_embed, 4), "workspaces": len(out)}}
+
+    if search:
+        ql = search.lower()
+        out = [r for r in out if ql in r["workspace"].lower()]
+
+    valid_sorts = {"workspace", "kbs", "docs", "chunks", "chars", "embed_usd"}
+    if sort_by not in valid_sorts:
+        sort_by = "docs"
+    reverse = sort_dir == "desc"
+    out.sort(key=lambda x: (x.get(sort_by) or 0) if sort_by != "workspace" else (x.get(sort_by) or "").lower(), reverse=reverse)
+
+    total = len(out)
+    out = out[offset:offset + limit]
+
+    return {"items": out, "total": total}
 
 
 # ── Trends (time series for charts) ───────────────────────────────────────────
@@ -858,7 +1358,8 @@ async def admin_trends(
         select(CreditTransaction.created_at, CreditTransaction.amount_paid, CreditTransaction.currency)
         .where(CreditTransaction.created_at >= since, CreditTransaction.type == "purchase")
     )).all()
-    day_calls, day_cogs, day_rev = defaultdict(int), defaultdict(float), defaultdict(float)
+    signups = (await db.execute(select(User.created_at).where(User.created_at >= since))).all()
+    day_calls, day_cogs, day_rev, day_users = defaultdict(int), defaultdict(float), defaultdict(float), defaultdict(int)
     for cat, cost in calls:
         if not cat:
             continue
@@ -871,6 +1372,9 @@ async def admin_trends(
         k = cat.strftime("%Y-%m-%d")
         a = float(amt or 0.0)
         day_rev[k] += a if (cur or "INR") == "INR" else a * USD_TO_INR
+    for (uat,) in signups:
+        if uat:
+            day_users[uat.strftime("%Y-%m-%d")] += 1
     series = []
     for i in range(days, -1, -1):
         d = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -879,6 +1383,7 @@ async def admin_trends(
             "calls": day_calls.get(d, 0),
             "cogs_inr": round(day_cogs.get(d, 0.0) * USD_TO_INR, 2),
             "revenue_inr": round(day_rev.get(d, 0.0), 2),
+            "new_users": day_users.get(d, 0),
         })
     return {"days": days, "series": series}
 
@@ -897,16 +1402,47 @@ class TemplateUpsert(BaseModel):
 
 @router.get("/templates")
 async def admin_list_templates(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_superadmin),
 ):
     from backend.db.models import AgentTemplate
-    rows = (await db.execute(select(AgentTemplate).order_by(desc(AgentTemplate.created_at)))).scalars().all()
-    return [{
-        "id": t.id, "name": t.name, "category": t.category, "description": t.description,
-        "voice_id": t.voice_id, "pipeline_mode": t.pipeline_mode, "tags": t.tags or [],
-        "is_official": t.is_official, "created_at": t.created_at.isoformat() if t.created_at else None,
-    } for t in rows]
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    conditions = []
+    if search:
+        conditions.append(or_(
+            AgentTemplate.name.ilike(f"%{search}%"),
+            AgentTemplate.category.ilike(f"%{search}%"),
+        ))
+
+    count_q = select(func.count(AgentTemplate.id))
+    if conditions:
+        count_q = count_q.where(*conditions)
+    total = (await db.execute(count_q)).scalar() or 0
+
+    sort_col = getattr(AgentTemplate, sort_by, AgentTemplate.created_at)
+    order = desc(sort_col) if sort_dir == "desc" else asc(sort_col)
+
+    q = select(AgentTemplate)
+    if conditions:
+        q = q.where(*conditions)
+    q = q.order_by(order).limit(limit).offset(offset)
+
+    rows = (await db.execute(q)).scalars().all()
+    return {
+        "items": [{
+            "id": t.id, "name": t.name, "category": t.category, "description": t.description,
+            "voice_id": t.voice_id, "pipeline_mode": t.pipeline_mode, "tags": t.tags or [],
+            "is_official": t.is_official, "created_at": t.created_at.isoformat() if t.created_at else None,
+        } for t in rows],
+        "total": total,
+    }
 
 
 @router.post("/templates", status_code=201)

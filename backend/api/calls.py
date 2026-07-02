@@ -2,8 +2,9 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Request
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import httpx
 
@@ -384,33 +385,57 @@ async def _initiate_single_bulk_call(contact: dict, agent_id: str, workspace_id:
             raise
 
 
-@router.get("", response_model=List[CallOut])
+class PaginatedCalls(BaseModel):
+    items: List[CallOut]
+    total: int
+
+
+@router.get("", response_model=PaginatedCalls)
 async def list_calls(
     agent_id: Optional[str] = None,
     limit: int = 500,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db),
     workspace: Workspace = Depends(require_workspace),
     user: User = Depends(get_current_user),
 ):
     from sqlalchemy import or_, and_
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
+
+    where_clauses = [
+        Call.workspace_id == workspace.id,
+        or_(
+            Agent.is_personal == False,
+            Agent.is_personal == None,
+            and_(Agent.is_personal == True, Agent.created_by == user.id),
+        ),
+    ]
+    if agent_id:
+        where_clauses.append(Call.agent_id == agent_id)
+
+    # Total count (matching same filters)
+    count_q = (
+        select(func.count())
+        .select_from(Call)
+        .join(Agent, Call.agent_id == Agent.id, isouter=True)
+        .where(*where_clauses)
+    )
+    total = (await db.execute(count_q)).scalar()
+
+    # Paginated data
     q = (
         select(Call)
         .join(Agent, Call.agent_id == Agent.id, isouter=True)
-        .where(
-            Call.workspace_id == workspace.id,
-            or_(
-                Agent.is_personal == False,
-                Agent.is_personal == None,
-                and_(Agent.is_personal == True, Agent.created_by == user.id),
-            ),
-        )
+        .where(*where_clauses)
         .order_by(desc(Call.created_at))
         .limit(limit)
+        .offset(offset)
     )
-    if agent_id:
-        q = q.where(Call.agent_id == agent_id)
     result = await db.execute(q)
-    return result.scalars().all()
+    items = result.scalars().all()
+
+    return {"items": items, "total": total}
 
 
 

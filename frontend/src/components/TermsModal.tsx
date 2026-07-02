@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ShieldCheck, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { acceptTerms } from "@/lib/api";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /**
  * First-login Terms of Service gate. Shown (and not dismissable) whenever the
@@ -44,6 +45,7 @@ const TERMS_SECTIONS: { heading: string; body: string }[] = [
 export default function TermsModal({ onAccepted }: { onAccepted: () => void }) {
   const [checked, setChecked] = useState(false);
   const [saving, setSaving] = useState(false);
+  const trapRef = useFocusTrap<HTMLDivElement>(true); // blocking — no Escape-close
 
   async function accept() {
     if (!checked) return;
@@ -58,13 +60,13 @@ export default function TermsModal({ onAccepted }: { onAccepted: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col max-h-[88vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-neutral-900/60 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="terms-modal-title">
+      <div ref={trapRef} className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-neutral-200 flex flex-col max-h-[88vh]">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-neutral-100">
           <span className="grid place-items-center w-10 h-10 rounded-xl bg-brand-50 text-brand-600 shrink-0"><ShieldCheck className="w-5 h-5" /></span>
           <div>
-            <h2 className="text-lg font-semibold text-neutral-900">Terms of Service</h2>
+            <h2 id="terms-modal-title" className="text-lg font-semibold text-neutral-900">Terms of Service</h2>
             <p className="text-xs text-neutral-500">Please review and accept to continue.</p>
           </div>
         </div>
@@ -84,8 +86,9 @@ export default function TermsModal({ onAccepted }: { onAccepted: () => void }) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-neutral-100 space-y-3">
-          <label className="flex items-start gap-2.5 cursor-pointer">
+          <label htmlFor="terms-agree" className="flex items-start gap-2.5 cursor-pointer">
             <input
+              id="terms-agree"
               type="checkbox"
               checked={checked}
               onChange={(e) => setChecked(e.target.checked)}

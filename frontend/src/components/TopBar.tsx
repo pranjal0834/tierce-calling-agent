@@ -65,6 +65,8 @@ export default function TopBar({
         {/* Command palette trigger */}
         <button
           onClick={() => window.dispatchEvent(new Event("vaaniq:command"))}
+          aria-label="Command palette"
+          aria-keyshortcuts="Ctrl+K"
           className="hidden md:flex items-center gap-2 px-3 h-9 rounded-lg border border-neutral-200 bg-white text-neutral-400 hover:border-neutral-300 hover:text-neutral-600 transition-colors shadow-xs"
           title="Search (Ctrl/⌘ + K)"
         >
@@ -89,6 +91,8 @@ export default function TopBar({
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setOpen(o => !o)}
+            aria-haspopup="true"
+            aria-expanded={open}
             title={me?.email || "Account"}
             className={`w-9 h-9 rounded-full bg-brand-500 text-white text-sm font-semibold flex items-center justify-center transition-shadow ${open ? "ring-2 ring-brand-500/30" : "hover:shadow-md"}`}
           >
@@ -96,7 +100,7 @@ export default function TopBar({
           </button>
 
           {open && (
-            <div className="absolute right-0 mt-2 w-60 bg-white border border-neutral-200 rounded-xl shadow-modal py-1.5 z-50 animate-scale-in origin-top-right">
+            <div role="menu" className="absolute right-0 mt-2 w-60 bg-white border border-neutral-200 rounded-xl shadow-modal py-1.5 z-50 animate-scale-in origin-top-right">
               <div className="px-3 py-2.5 border-b border-neutral-100">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-1">Account</p>
                 <p className="text-sm font-medium text-neutral-900 truncate flex items-center gap-1.5">
@@ -108,6 +112,7 @@ export default function TopBar({
               <div className="border-t border-neutral-100 my-1" />
               <button
                 onClick={() => { setOpen(false); logout(); }}
+                role="menuitem"
                 className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-error-600 hover:bg-error-50 transition-colors"
               >
                 <LogOut className="icon-sm" /> Sign out
@@ -122,7 +127,7 @@ export default function TopBar({
 
 function MenuLink({ href, icon: Icon, label, onClick }: { href: string; icon: React.ElementType; label: string; onClick: () => void }) {
   return (
-    <Link href={href} onClick={onClick} className="flex items-center gap-2.5 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 transition-colors">
+    <Link href={href} role="menuitem" onClick={onClick} className="flex items-center gap-2.5 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-100 transition-colors">
       <Icon className="icon-sm text-neutral-400" /> {label}
     </Link>
   );

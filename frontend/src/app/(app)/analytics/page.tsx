@@ -9,6 +9,7 @@ import {
   Zap, Download, RefreshCw, Phone, Calendar, X,
 } from "lucide-react";
 import { getAgents, getAgentAnalytics, getWorkspaceAnalytics } from "@/lib/api";
+import { SkeletonKpis, SkeletonCard } from "@/components/ui/Skeleton";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -317,8 +318,13 @@ function OverviewTab({ range }: { range: AnalyticsRange }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading) return (
-    <div className="flex items-center justify-center py-24 gap-2 text-neutral-500">
-      <RefreshCw className="w-5 h-5 animate-spin" /><span className="text-sm">Loading…</span>
+    <div className="space-y-6">
+      <SkeletonKpis count={4} />
+      <SkeletonCard className="h-64" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SkeletonCard className="h-56" />
+        <SkeletonCard className="h-56" />
+      </div>
     </div>
   );
 
@@ -669,8 +675,9 @@ function AgentTab({ range }: { range: AnalyticsRange }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 gap-2 text-neutral-500">
-          <RefreshCw className="w-5 h-5 animate-spin" /><span className="text-sm">Loading…</span>
+        <div className="space-y-6">
+          <SkeletonKpis count={6} />
+          <SkeletonCard className="h-56" />
         </div>
       ) : !data || data.total_calls === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 border border-dashed border-neutral-300 rounded-2xl">

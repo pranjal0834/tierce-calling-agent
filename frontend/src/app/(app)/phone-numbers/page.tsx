@@ -255,19 +255,23 @@ function TelephonyProviderCard({ config, onChange }: {
 
 // ── Buy Number Modal ───────────────────────────────────────────────────────────
 
-function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
+function BuyModal({ agents, provider, initialCountry, onClose, onBought, onNeedKyc }: {
   agents: Agent[];
   provider: "twilio" | "plivo";
+  initialCountry?: string;
   onClose: () => void;
   onBought: () => void;
   onNeedKyc?: (country: string) => void;
 }) {
   const countries = provider === "plivo" ? PLIVO_COUNTRIES : TWILIO_COUNTRIES;
   const defaultCountry = provider === "plivo" ? "IN" : "US";
+  // When opened straight from an approved KYC row, preselect that country.
+  const preselected = !!initialCountry && countries.some(c => c.code === initialCountry);
+  const startCountry = preselected ? (initialCountry as string) : defaultCountry;
 
   const [areaCode, setAreaCode] = useState("");
   const [contains, setContains] = useState("");
-  const [country, setCountry] = useState(defaultCountry);
+  const [country, setCountry] = useState(startCountry);
   const [results, setResults] = useState<AvailableNumber[]>([]);
   const [searching, setSearching] = useState(false);
   const [buying, setBuying] = useState<string | null>(null);
@@ -294,6 +298,13 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
       .finally(() => { if (!cancelled) setCitiesLoading(false); });
     return () => { cancelled = true; };
   }, [provider, country]);
+
+  // Opened for a specific (KYC-approved) country → run the first search
+  // automatically so numbers appear without an extra click.
+  useEffect(() => {
+    if (preselected) search();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function search(codeOverride?: string) {
     const ac = (codeOverride ?? areaCode).trim();
@@ -418,12 +429,12 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
   const costNote = `Flat ₹${priceInr}/month per number, billed separately from your call credits. First month is paid via Razorpay at purchase; renewals are drawn from your number wallet.`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="buynum-modal-title">
       <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-xl shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-neutral-200">
           <div>
-            <h2 className="text-base font-semibold text-neutral-900">Buy Phone Number</h2>
+            <h2 id="buynum-modal-title" className="text-base font-semibold text-neutral-900">Buy Phone Number</h2>
             <p className="text-xs text-neutral-500 mt-0.5">{costNote}</p>
           </div>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900 transition-colors">
@@ -466,6 +477,7 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
               value={areaCode}
               onChange={e => setAreaCode(e.target.value)}
               onKeyDown={e => e.key === "Enter" && search()}
+              inputMode="numeric"
               placeholder={country === "US" ? "Area code (415)" : country === "IN" ? "STD code (80)" : "Area code"}
               className={`${provider === "plivo" ? "w-28 sm:w-36" : "flex-1"} bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500`}
             />
@@ -529,8 +541,9 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
           {/* Agent assignment */}
           {agents.length > 0 && (
             <div>
-              <label className="block text-xs text-neutral-500 mb-1.5">Route inbound calls to</label>
+              <label htmlFor="buy-agent" className="block text-xs text-neutral-500 mb-1.5">Route inbound calls to</label>
               <select
+                id="buy-agent"
                 value={selectedAgent}
                 onChange={e => setSelectedAgent(e.target.value)}
                 className="w-full bg-white border border-neutral-300 text-neutral-900 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500"
@@ -607,10 +620,11 @@ function BuyModal({ agents, provider, onClose, onBought, onNeedKyc }: {
 
 // ── KYC Status Banner ─────────────────────────────────────────────────────────
 
-function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: {
+function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated, onBuyForCountry }: {
   bundles: KycBundle[];
   onOpenForm: (country: string) => void;
   onBundleUpdated: (b: KycBundle) => void;
+  onBuyForCountry?: (country: string) => void;
 }) {
   const [showAddPicker, setShowAddPicker] = useState(false);
   const [addSearch, setAddSearch] = useState("");
@@ -733,9 +747,19 @@ function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: {
               {/* Action */}
               <div className="flex items-center shrink-0">
                 {status === "approved" ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-green-600 font-medium">
-                    <ShieldCheck className="w-4 h-4" /> Verified
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-green-600 font-medium">
+                      <ShieldCheck className="w-4 h-4" /> Verified
+                    </span>
+                    {onBuyForCountry && (
+                      <button
+                        onClick={() => onBuyForCountry(code)}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg transition-colors font-medium whitespace-nowrap"
+                      >
+                        <Plus className="w-3 h-3" /> Buy number
+                      </button>
+                    )}
+                  </div>
                 ) : status === "submitted" ? (
                   <button
                     onClick={async () => {
@@ -767,7 +791,7 @@ function KycStatusBanner({ bundles, onOpenForm, onBundleUpdated }: {
       </div>
 
       <p className="text-xs text-neutral-400 mt-3">
-        Once KYC shows <span className="text-green-600 font-medium">Approved</span>, you can buy numbers for that country. Most submissions are approved instantly.
+        Once KYC shows <span className="text-green-600 font-medium">Approved</span>, a <span className="font-medium text-neutral-500">Buy number</span> button appears here so you can provision a number for that country right away. Most submissions are approved instantly.
       </p>
     </div>
   );
@@ -868,11 +892,11 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
 
   if (phase === "documents") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="kycdocs-modal-title">
         <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col">
           <div className="flex items-center justify-between p-5 border-b border-neutral-200 shrink-0">
             <div>
-              <h2 className="text-base font-semibold text-neutral-900">KYC documents — {countryName}</h2>
+              <h2 id="kycdocs-modal-title" className="text-base font-semibold text-neutral-900">KYC documents — {countryName}</h2>
               <p className="text-xs text-neutral-500 mt-0.5">Upload the required documents, then submit for review.</p>
             </div>
             <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900"><X className="w-5 h-5" /></button>
@@ -900,9 +924,9 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
                          : <p className="text-[11px] text-neutral-400">PDF, JPG or PNG · up to 10 MB</p>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <label className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50">
+                    <label htmlFor={`doc-upload-${t.id}`} className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50">
                       {uploadingType === t.id ? "Uploading…" : doc ? "Replace" : "Upload"}
-                      <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
+                      <input id={`doc-upload-${t.id}`} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
                         onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(t.id, f); e.currentTarget.value = ""; }} />
                     </label>
                     {doc && <button onClick={() => handleDeleteDoc(doc.id)} className="text-neutral-400 hover:text-error-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>}
@@ -930,12 +954,12 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="kyccountry-modal-title">
       <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-lg shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-neutral-200 shrink-0">
           <div>
-            <h2 className="text-base font-semibold text-neutral-900">KYC — {countryName}</h2>
+            <h2 id="kyccountry-modal-title" className="text-base font-semibold text-neutral-900">KYC — {countryName}</h2>
             <p className="text-xs text-neutral-500 mt-0.5">
               Required before buying a {countryName} number
               {country === "IN" ? " (TRAI regulation)" : ""}
@@ -969,11 +993,11 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
           </div>
 
           <div>
-            <label className={lbl}>
+            <label htmlFor="pn-business-name" className={lbl}>
               {form.business_type === "company" ? "Registered business name" : "Full name"}
               <span className="text-error-500 ml-0.5">*</span>
             </label>
-            <input required value={form.business_name} onChange={e => set({ business_name: e.target.value })}
+            <input id="pn-business-name" required value={form.business_name} onChange={e => set({ business_name: e.target.value })}
               placeholder={form.business_type === "company" ? "Acme Pvt. Ltd." : "Rahul Sharma"}
               className={inp} />
           </div>
@@ -981,38 +1005,38 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
           {form.business_type === "company" && country === "IN" && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={lbl}>GSTIN</label>
-                <input value={form.gstin} onChange={e => set({ gstin: e.target.value })}
+                <label htmlFor="pn-gstin" className={lbl}>GSTIN</label>
+                <input id="pn-gstin" value={form.gstin} onChange={e => set({ gstin: e.target.value })}
                   placeholder="22AAAAA0000A1Z5" className={inp} />
               </div>
               <div>
-                <label className={lbl}>CIN (optional)</label>
-                <input value={form.cin} onChange={e => set({ cin: e.target.value })}
+                <label htmlFor="pn-cin" className={lbl}>CIN (optional)</label>
+                <input id="pn-cin" value={form.cin} onChange={e => set({ cin: e.target.value })}
                   placeholder="U72900MH2020PTC123456" className={inp} />
               </div>
             </div>
           )}
 
           <div>
-            <label className={lbl}>Registered address<span className="text-error-500 ml-0.5">*</span></label>
-            <input required value={form.address_line} onChange={e => set({ address_line: e.target.value })}
+            <label htmlFor="pn-address" className={lbl}>Registered address<span className="text-error-500 ml-0.5">*</span></label>
+            <input id="pn-address" required value={form.address_line} onChange={e => set({ address_line: e.target.value })}
               placeholder="123, MG Road, Indiranagar" className={inp} />
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-1">
-              <label className={lbl}>City<span className="text-error-500 ml-0.5">*</span></label>
-              <input required value={form.city} onChange={e => set({ city: e.target.value })}
+              <label htmlFor="pn-city" className={lbl}>City<span className="text-error-500 ml-0.5">*</span></label>
+              <input id="pn-city" required value={form.city} onChange={e => set({ city: e.target.value })}
                 placeholder="Bengaluru" className={inp} />
             </div>
             <div className="col-span-1">
-              <label className={lbl}>State<span className="text-error-500 ml-0.5">*</span></label>
-              <input required value={form.state} onChange={e => set({ state: e.target.value })}
+              <label htmlFor="pn-state" className={lbl}>State<span className="text-error-500 ml-0.5">*</span></label>
+              <input id="pn-state" required value={form.state} onChange={e => set({ state: e.target.value })}
                 placeholder="Karnataka" className={inp} />
             </div>
             <div className="col-span-1">
-              <label className={lbl}>{country === "IN" ? "PIN code" : "Postal code"}<span className="text-error-500 ml-0.5">*</span></label>
-              <input required value={form.postal_code} onChange={e => set({ postal_code: e.target.value })}
+              <label htmlFor="pn-postal" className={lbl}>{country === "IN" ? "PIN code" : "Postal code"}<span className="text-error-500 ml-0.5">*</span></label>
+              <input id="pn-postal" required value={form.postal_code} onChange={e => set({ postal_code: e.target.value })}
                 placeholder="560038" className={inp} />
             </div>
           </div>
@@ -1021,14 +1045,14 @@ function KycModal({ country, existing, onClose, onSubmitted }: {
             <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3">Authorized Signatory</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={lbl}>Full name<span className="text-error-500 ml-0.5">*</span></label>
-                <input required value={form.authorized_name} onChange={e => set({ authorized_name: e.target.value })}
+                <label htmlFor="pn-signatory" className={lbl}>Full name<span className="text-error-500 ml-0.5">*</span></label>
+                <input id="pn-signatory" required value={form.authorized_name} onChange={e => set({ authorized_name: e.target.value })}
                   placeholder="Rahul Sharma" className={inp} />
               </div>
               {country === "IN" && (
                 <div>
-                  <label className={lbl}>PAN number</label>
-                  <input value={form.authorized_pan} onChange={e => set({ authorized_pan: e.target.value.toUpperCase() })}
+                  <label htmlFor="pn-signatory-pan" className={lbl}>PAN number</label>
+                  <input id="pn-signatory-pan" value={form.authorized_pan} onChange={e => set({ authorized_pan: e.target.value.toUpperCase() })}
                     placeholder="ABCDE1234F" maxLength={10} className={`${inp} font-mono`} />
                 </div>
               )}
@@ -1120,6 +1144,7 @@ export default function PhoneNumbersPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBuy, setShowBuy] = useState(false);
+  const [buyCountry, setBuyCountry] = useState<string | null>(null);
   const [providerConfig, setProviderConfig] = useState<TelephonyConfigState>(DEFAULT_CONFIG);
   const [kycBundles, setKycBundles] = useState<KycBundle[]>([]);
   const [kycCountry, setKycCountry] = useState<string | null>(null);
@@ -1154,6 +1179,12 @@ export default function PhoneNumbersPage() {
     } catch {
       toast.error("Failed to release number");
     }
+  }
+
+  // Open the buy flow preselected to a specific country (e.g. from an approved KYC row).
+  function openBuyForCountry(country: string) {
+    setBuyCountry(country);
+    setShowBuy(true);
   }
 
   function handleUpdate(id: string, agentId: string | null, autoRenew?: boolean) {
@@ -1234,20 +1265,28 @@ export default function PhoneNumbersPage() {
         <TelephonyProviderCard config={providerConfig} onChange={setProviderConfig} />
       </div>
 
-      {/* KYC */}
-      <KycStatusBanner
-        bundles={kycBundles}
-        onOpenForm={(country: string) => setKycCountry(country)}
-        onBundleUpdated={(b: KycBundle) => setKycBundles((prev: KycBundle[]) => {
-          const without = prev.filter((x: KycBundle) => x.country !== b.country);
-          return [...without, b];
-        })}
-      />
-
-      {/* Step 2 — Numbers */}
+      {/* Step 2 — Verify your business (KYC) */}
       <div>
         <div className="flex items-center gap-2 mb-2">
           <span className="w-5 h-5 bg-brand-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0">2</span>
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Verify your business (KYC)</p>
+          <span className="text-[11px] text-neutral-400 normal-case font-normal">— required for India, UK, Germany &amp; Australia before Step 3</span>
+        </div>
+        <KycStatusBanner
+          bundles={kycBundles}
+          onOpenForm={(country: string) => setKycCountry(country)}
+          onBundleUpdated={(b: KycBundle) => setKycBundles((prev: KycBundle[]) => {
+            const without = prev.filter((x: KycBundle) => x.country !== b.country);
+            return [...without, b];
+          })}
+          onBuyForCountry={isTrial ? undefined : (country: string) => openBuyForCountry(country)}
+        />
+      </div>
+
+      {/* Step 3 — Numbers */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-5 h-5 bg-brand-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0">3</span>
           <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Buy numbers &amp; assign agents</p>
         </div>
 
@@ -1345,9 +1384,10 @@ export default function PhoneNumbersPage() {
         <BuyModal
           agents={agents}
           provider={providerConfig.provider}
-          onClose={() => setShowBuy(false)}
+          initialCountry={buyCountry ?? undefined}
+          onClose={() => { setShowBuy(false); setBuyCountry(null); }}
           onBought={load}
-          onNeedKyc={(country) => { setShowBuy(false); setKycCountry(country); }}
+          onNeedKyc={(country) => { setShowBuy(false); setBuyCountry(null); setKycCountry(country); }}
         />
       )}
 

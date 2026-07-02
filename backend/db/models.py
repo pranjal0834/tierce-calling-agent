@@ -14,6 +14,27 @@ def gen_uuid():
     return str(uuid.uuid4())
 
 
+# ─── Plan ──────────────────────────────────────────────────────────────────────
+
+class Plan(Base):
+    """Pricing plan configuration — managed by super admin."""
+    __tablename__ = "plans"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    slug: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    price_inr: Mapped[float] = mapped_column(Float, default=0.0)
+    price_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    minutes: Mapped[float | None] = mapped_column(Float)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    features: Mapped[dict] = mapped_column(JSONB, default=dict)
+    rate_limits: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ─── Workspace ─────────────────────────────────────────────────────────────────
 
 class Workspace(Base):
@@ -56,10 +77,22 @@ class User(Base):
     google_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     role: Mapped[str] = mapped_column(String(20), default="member")    # owner | member
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # ── Profile ──
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    address_line: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    state: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Terms of Service acceptance (audit trail). Version lets us re-prompt when terms change.
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     terms_accepted_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Soft-delete: when set, the account is in the 30-day recovery window. It is
+    # hidden from the app, its email is freed (mangled), and purged after 30 days.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     workspace: Mapped["Workspace"] = relationship("Workspace", back_populates="users")
 

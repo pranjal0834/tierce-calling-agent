@@ -29,6 +29,44 @@ async def send_email(to: str, subject: str, html: str, ics: str | None = None,
     return await loop.run_in_executor(None, _send_sync, to, subject, html, ics, ics_method)
 
 
+async def send_report(to: str, subject: str, html: str, csv_name: str, csv_content: str) -> bool:
+    """Send an HTML email with a CSV file attached (used for scheduled admin digests)."""
+    if not settings.SMTP_HOST or not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        log.warning("SMTP not configured — skipping report email", to=to, subject=subject)
+        return False
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _send_report_sync, to, subject, html, csv_name, csv_content)
+
+
+def _send_report_sync(to: str, subject: str, html: str, csv_name: str, csv_content: str) -> bool:
+    try:
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = subject
+        msg["From"] = f"{settings.SMTP_FROM_NAME or 'Vaaniq Voice'} <{settings.SMTP_USER}>"
+        msg["To"] = to
+
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(html, "html", "utf-8"))
+        msg.attach(alt)
+
+        part = MIMEBase("text", "csv")
+        part.set_payload(csv_content.encode("utf-8"))
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{csv_name}"')
+        msg.attach(part)
+
+        with smtplib.SMTP(settings.SMTP_HOST, int(settings.SMTP_PORT or 587)) as srv:
+            srv.ehlo()
+            srv.starttls()
+            srv.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            srv.sendmail(settings.SMTP_USER, [to], msg.as_string())
+        log.info("Report email sent", to=to, subject=subject)
+        return True
+    except Exception as exc:
+        log.error("Report email failed", to=to, subject=subject, error=str(exc))
+        return False
+
+
 async def send_bulk(recipients: list[str], subject: str, html: str) -> int:
     """Send email to multiple recipients. Returns count of successful sends."""
     results = await asyncio.gather(

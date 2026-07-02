@@ -1,23 +1,30 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Users, Globe, Copy, Check,
   Trash2, UserPlus, Shield, Crown, Bell, KeyRound, UserCircle, MessageCircle,
+  Camera, MapPin, Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   getWorkspace, getMe, updateWorkspace,
   getMembers, removeMember, createInvite,
   getWhatsappConfig, saveWhatsappConfig, testWhatsappConfig,
+  updateProfile, uploadAvatar, avatarUrl,
   api,
 } from "@/lib/api";
 import PasswordInput from "@/components/ui/PasswordInput";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Workspace { id: string; name: string; plan: string; credits_balance: number; created_at: string; }
-interface Me { id: string; email: string; role: string; has_password?: boolean; }
+interface Me {
+  id: string; email: string; role: string; has_password?: boolean;
+  full_name?: string | null; avatar_url?: string | null; phone?: string | null;
+  address_line?: string | null; city?: string | null; state?: string | null;
+  country?: string | null; postal_code?: string | null;
+}
 interface Member { id: string; email: string; role: string; is_active: boolean; created_at: string; }
 
 // ── Copy helper ───────────────────────────────────────────────────────────────
@@ -87,9 +94,10 @@ function GeneralSection({ workspace, me, onSaved }: { workspace: Workspace; me: 
   return (
     <div className="space-y-5">
       <SectionCard title="Workspace" description="Your workspace name is visible to all team members." icon={Globe}>
-        <label className="block text-sm text-neutral-700 font-medium mb-1.5">Workspace Name</label>
+        <label htmlFor="workspace-name" className="block text-sm text-neutral-700 font-medium mb-1.5">Workspace Name</label>
         <div className="flex flex-col sm:flex-row gap-2 max-w-md">
           <input
+            id="workspace-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={!isOwner}
@@ -142,28 +150,137 @@ function GeneralSection({ workspace, me, onSaved }: { workspace: Workspace; me: 
 
 // ── Account section (profile + password) ─────────────────────────────────────────
 
+function ProfileField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-xs text-neutral-500 mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function ProfileCard({ me, onSaved }: { me: Me; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    full_name: me.full_name ?? "", email: me.email ?? "", phone: me.phone ?? "",
+    address_line: me.address_line ?? "", city: me.city ?? "", state: me.state ?? "",
+    country: me.country ?? "", postal_code: me.postal_code ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  async function save() {
+    if (!form.email.trim()) { toast.error("Email is required"); return; }
+    setSaving(true);
+    try {
+      await updateProfile(form);
+      toast.success("Profile updated");
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Failed to update profile");
+    } finally { setSaving(false); }
+  }
+
+  async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { toast.error("Image too large (max 2 MB)"); return; }
+    setUploading(true);
+    try {
+      await uploadAvatar(file);
+      toast.success("Profile picture updated");
+      onSaved();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  const initial = (me.full_name || me.email || "?").trim()[0]?.toUpperCase() || "?";
+  const img = avatarUrl(me.avatar_url);
+
+  return (
+    <SectionCard title="Profile" description="Your name, photo, contact details, and address." icon={UserCircle}>
+      <div className="space-y-5">
+        {/* Avatar */}
+        <div className="flex items-center gap-4">
+          {img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={img} alt="Profile" className="w-16 h-16 rounded-full object-cover border border-neutral-200" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-brand-50 border border-brand-200 flex items-center justify-center text-xl font-semibold text-brand-600">{initial}</div>
+          )}
+          <div>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onPickAvatar} />
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="inline-flex items-center gap-1.5 h-9 px-3 border border-neutral-200 bg-white hover:bg-neutral-50 rounded-lg text-sm font-medium text-neutral-600 transition-colors disabled:opacity-50">
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />} {uploading ? "Uploading…" : "Change photo"}
+            </button>
+            <p className="text-xs text-neutral-400 mt-1">PNG, JPG, WEBP or GIF · max 2 MB</p>
+          </div>
+        </div>
+
+        {/* Basic details */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ProfileField label="Full name">
+            <input className="input-base" value={form.full_name} onChange={e => set("full_name", e.target.value)} placeholder="Your name" />
+          </ProfileField>
+          <ProfileField label="Email">
+            <input className="input-base" type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="you@company.com" />
+          </ProfileField>
+          <ProfileField label="Phone">
+            <input className="input-base" value={form.phone} onChange={e => set("phone", e.target.value)} placeholder="+91 98XXXXXXXX" />
+          </ProfileField>
+          <ProfileField label="Role">
+            <div className="flex items-center gap-1.5 h-[42px]">
+              {me.role === "owner" ? <Crown className="w-3.5 h-3.5 text-yellow-500" /> : <Shield className="w-3.5 h-3.5 text-blue-500" />}
+              <span className="text-sm font-medium text-neutral-900 capitalize">{me.role}</span>
+            </div>
+          </ProfileField>
+        </div>
+
+        {/* Address */}
+        <div>
+          <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-3 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Address</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <ProfileField label="Street address">
+                <input className="input-base" value={form.address_line} onChange={e => set("address_line", e.target.value)} placeholder="Building, street, area" />
+              </ProfileField>
+            </div>
+            <ProfileField label="City">
+              <input className="input-base" value={form.city} onChange={e => set("city", e.target.value)} placeholder="e.g. Ahmedabad" />
+            </ProfileField>
+            <ProfileField label="State / Province">
+              <input className="input-base" value={form.state} onChange={e => set("state", e.target.value)} placeholder="e.g. Gujarat" />
+            </ProfileField>
+            <ProfileField label="Country">
+              <input className="input-base" value={form.country} onChange={e => set("country", e.target.value)} placeholder="e.g. India" />
+            </ProfileField>
+            <ProfileField label="Postal code">
+              <input className="input-base" value={form.postal_code} onChange={e => set("postal_code", e.target.value)} placeholder="e.g. 380001" />
+            </ProfileField>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <button onClick={save} disabled={saving}
+            className="inline-flex items-center gap-2 h-9 px-5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg shadow-xs transition-colors disabled:opacity-50">
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 function AccountSection({ me, onSaved }: { me: Me; onSaved: () => void }) {
   return (
     <div className="space-y-5">
-      <SectionCard title="Profile" description="Your account details." icon={UserCircle}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-          <div className="flex items-center justify-between gap-3 sm:block">
-            <p className="text-xs text-neutral-500 sm:mb-1">Email</p>
-            <div className="flex items-center gap-2 min-w-0">
-              <p className="text-sm text-neutral-700 truncate">{me.email}</p>
-              <CopyButton text={me.email} />
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-3 sm:block">
-            <p className="text-xs text-neutral-500 sm:mb-1">Role</p>
-            <div className="flex items-center gap-1.5">
-              {me.role === "owner" ? <Crown className="w-3.5 h-3.5 text-yellow-500" /> : <Shield className="w-3.5 h-3.5 text-blue-500" />}
-              <p className="text-sm font-medium text-neutral-900 capitalize">{me.role}</p>
-            </div>
-          </div>
-        </div>
-      </SectionCard>
-
+      <ProfileCard me={me} onSaved={onSaved} />
       <ChangePasswordCard me={me} onSaved={onSaved} />
     </div>
   );
@@ -215,8 +332,9 @@ function ChangePasswordCard({ me, onSaved }: { me: Me; onSaved: () => void }) {
       <div className="space-y-3 max-w-md">
         {hasPassword && (
           <div>
-            <label className="label-base">Current password</label>
+            <label htmlFor="current-password" className="label-base">Current password</label>
             <PasswordInput
+              id="current-password"
               autoComplete="current-password"
               placeholder="Your current password"
               value={current}
@@ -225,8 +343,9 @@ function ChangePasswordCard({ me, onSaved }: { me: Me; onSaved: () => void }) {
           </div>
         )}
         <div>
-          <label className="label-base">New password</label>
+          <label htmlFor="new-password" className="label-base">New password</label>
           <PasswordInput
+            id="new-password"
             autoComplete="new-password"
             placeholder="Minimum 8 characters"
             value={next}
@@ -234,8 +353,9 @@ function ChangePasswordCard({ me, onSaved }: { me: Me; onSaved: () => void }) {
           />
         </div>
         <div>
-          <label className="label-base">Confirm new password</label>
+          <label htmlFor="confirm-new-password" className="label-base">Confirm new password</label>
           <PasswordInput
+            id="confirm-new-password"
             autoComplete="new-password"
             placeholder="Re-enter new password"
             value={confirm}
@@ -263,7 +383,6 @@ function TeamTab({ me }: { me: Me }) {
   const [inviteRole, setInviteRole] = useState("member");
   const [inviting, setInviting] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
-  const [confirmRemove, setConfirmRemove] = useState<{open: boolean; id?: string; email?: string}>({open: false});
   const isOwner = me.role === "owner";
 
   const load = useCallback(async () => {
@@ -293,19 +412,22 @@ function TeamTab({ me }: { me: Me }) {
   }
 
   async function remove(id: string, email: string) {
-    setConfirmRemove({open: true, id, email});
-  }
-
-  async function doRemove() {
-    if (!confirmRemove.id) return;
     try {
-      await removeMember(confirmRemove.id);
-      setMembers((m) => m.filter((x) => x.id !== confirmRemove.id));
-      toast.success("Member removed");
+      await removeMember(id);
+      setMembers((m) => m.filter((x) => x.id !== id));
+      toastUndo({
+        message: "Member removed",
+        onUndo: async () => {
+          try {
+            await createInvite(email, "member");
+            toast.success("Invite sent to re-added member");
+          } catch {
+            toast.error("Failed to restore member");
+          }
+        },
+      });
     } catch {
       toast.error("Failed to remove member");
-    } finally {
-      setConfirmRemove({open: false});
     }
   }
 
@@ -401,13 +523,6 @@ function TeamTab({ me }: { me: Me }) {
           </div>
         )}
       </div>
-      <ConfirmModal
-        open={confirmRemove.open}
-        title="Remove Member"
-        message={confirmRemove.email ? `Remove ${confirmRemove.email} from the workspace?` : ""}
-        onConfirm={doRemove}
-        onCancel={() => setConfirmRemove({open: false})}
-      />
     </div>
   );
 }
@@ -522,8 +637,6 @@ function WhatsAppSection() {
   const [saving, setSaving] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [testing, setTesting] = useState(false);
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-
   const load = useCallback(async () => {
     try {
       const c = await getWhatsappConfig();
@@ -555,20 +668,20 @@ function WhatsAppSection() {
   }
 
   async function disconnect() {
-    setConfirmDisconnect(true);
-  }
-
-  async function doDisconnect() {
     setSaving(true);
     try {
       await saveWhatsappConfig("");
       setConnected(false); setMasked(""); setApiKey("");
-      toast.success("WhatsApp disconnected");
+      toastUndo({
+        message: "WhatsApp disconnected",
+        onUndo: async () => {
+          toast.error("Reconnect by pasting your API key above");
+        },
+      });
     } catch {
       toast.error("Failed to disconnect");
     } finally {
       setSaving(false);
-      setConfirmDisconnect(false);
     }
   }
 
@@ -620,11 +733,12 @@ function WhatsAppSection() {
           </div>
         )}
 
-        <label className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
+        <label htmlFor="whatsapp-api-key" className="text-xs text-neutral-500 uppercase tracking-wide mb-1.5 block">
           {connected ? "Replace API Key" : "API Key"}
         </label>
         <div className="flex gap-2">
           <input
+            id="whatsapp-api-key"
             type="password"
             value={apiKey}
             onChange={e => setApiKey(e.target.value)}
@@ -645,6 +759,8 @@ function WhatsAppSection() {
         <SectionCard title="Send a test message" description="Verify the connection by sending yourself a WhatsApp.">
           <div className="flex gap-2">
             <input
+              type="tel"
+              inputMode="tel"
               value={testTo}
               onChange={e => setTestTo(e.target.value)}
               placeholder="+919812345678"
@@ -660,13 +776,6 @@ function WhatsAppSection() {
           </div>
         </SectionCard>
       )}
-      <ConfirmModal
-        open={confirmDisconnect}
-        title="Disconnect WhatsApp"
-        message="Disconnect WhatsApp? Agents will stop sending messages."
-        onConfirm={doDisconnect}
-        onCancel={() => setConfirmDisconnect(false)}
-      />
     </div>
   );
 }

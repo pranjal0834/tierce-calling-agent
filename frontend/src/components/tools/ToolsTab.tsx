@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import {
   Plus, Wrench, AlertCircle, ToggleRight, ToggleLeft, Pencil, Trash
 } from "lucide-react";
-import { getTools, updateTool, deleteTool } from "@/lib/api";
+import { getTools, updateTool, deleteTool, addTool } from "@/lib/api";
 import toast from "react-hot-toast";
 import { ToolModal } from "./ToolModal";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 
 const TOOL_TYPES = [
   {
@@ -63,7 +63,7 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Tool | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; item?: Tool}>({open: false});
+
 
   useEffect(() => {
     getTools(agentId)
@@ -102,25 +102,23 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
   };
 
   const handleDelete = async (tool: Tool) => {
-    setConfirmDelete({open: true, item: tool});
-  };
-
-  const doDelete = async () => {
-    const tool = confirmDelete.item;
-    if (!tool) return;
-    try {
-      await deleteTool(agentId, tool.id);
-      setTools(prev => {
-        const next = prev.filter(t => t.id !== tool.id);
-        if (onToolsChange) onToolsChange(next.length);
-        return next;
-      });
-      toast.success("Tool deleted");
-    } catch {
-      toast.error("Failed to delete tool");
-    } finally {
-      setConfirmDelete({open: false});
-    }
+    await deleteTool(agentId, tool.id);
+    setTools(prev => {
+      const next = prev.filter(t => t.id !== tool.id);
+      if (onToolsChange) onToolsChange(next.length);
+      return next;
+    });
+    toastUndo({
+      message: "Tool deleted",
+      onUndo: async () => {
+        const restored = await addTool(agentId, tool);
+        setTools(prev => {
+          const next = [...prev, restored];
+          if (onToolsChange) onToolsChange(next.length);
+          return next;
+        });
+      },
+    });
   };
 
   if (loading) {
@@ -277,13 +275,6 @@ export function ToolsTab({ agentId, onToolsChange }: ToolsTabProps) {
           onSaved={handleSaved}
         />
       )}
-      <ConfirmModal
-        open={confirmDelete.open}
-        title="Delete Tool"
-        message={confirmDelete.item ? `Delete tool "${confirmDelete.item.name}"?` : ""}
-        onConfirm={doDelete}
-        onCancel={() => setConfirmDelete({open: false})}
-      />
     </div>
   );
 }

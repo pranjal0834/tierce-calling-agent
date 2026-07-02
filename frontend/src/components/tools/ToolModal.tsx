@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useState } from "react";
 import {
   Globe, PhoneOff, UserCheck, Calendar, X, Plus, Trash
 } from "lucide-react";
@@ -10,6 +10,7 @@ import { addTool, updateTool } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import toast from "react-hot-toast";
 import { FormField, InputField } from "@/components/ui/FormField";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 const TOOL_TYPES = [
   {
@@ -171,7 +172,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
       : []
   );
   const [saving, setSaving] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>(true, onClose);
 
   const { register, handleSubmit, watch, setValue, getValues, formState: { errors }, trigger } = useForm<ToolFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -259,39 +260,11 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
     }
   });
 
-  const onKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
-    if (e.key === "Tab" && dialogRef.current) {
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    }
-  }, [onClose]);
-
-  useEffect(() => {
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onKeyDown]);
-
-  useEffect(() => {
-    if (dialogRef.current) {
-      const first = dialogRef.current.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      first?.focus();
-    }
-  }, []);
-
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="tool-modal-title">
       <div ref={dialogRef} className="bg-white sm:rounded-2xl rounded-t-2xl border border-neutral-200 shadow-lg w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-neutral-200">
-          <h2 className="text-lg font-semibold text-neutral-900">
+          <h2 id="tool-modal-title" className="text-lg font-semibold text-neutral-900">
             {existing ? "Edit Tool" : "Add Tool"}
           </h2>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-900">
@@ -328,6 +301,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
           {/* Name */}
           <InputField
             label="Function Name"
+            id="tool-name"
             required
             registration={register("name", { setValueAs: (v: string) => v.replace(/\s+/g, "_").toLowerCase() })}
             error={errors.name}
@@ -338,6 +312,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
           {/* Description */}
           <InputField
             label="Description"
+            id="tool-description"
             registration={register("description")}
             error={errors.description}
             placeholder="Check available time slots in the calendar"
@@ -349,6 +324,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
           {type === "webhook" && (
             <InputField
               label="Webhook URL"
+              id="webhook-url"
               required
               registration={register("webhookUrl")}
               error={errors.webhookUrl}
@@ -361,7 +337,9 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
           {type === "transfer_call" && (
             <InputField
               label="Transfer To (E.164)"
+              id="transfer-to"
               required
+              type="tel"
               registration={register("transferTo")}
               error={errors.transferTo}
               placeholder="+14155552671"
@@ -434,6 +412,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                   <>
                     <InputField
                       label={preset.apiKeyLabel}
+                      id="cal-api-key"
                       required
                       registration={register("calApiKey")}
                       error={errors.calApiKey}
@@ -443,6 +422,7 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                     />
                     <InputField
                       label={preset.idLabel}
+                      id="cal-event-id"
                       required
                       registration={register("calEventId")}
                       error={errors.calEventId}
@@ -518,8 +498,9 @@ export function ToolModal({ agentId, existing, onClose, onSaved }: ToolModalProp
                         placeholder="Describe this parameter..."
                         className="w-full bg-white border border-neutral-300 rounded px-2 py-1 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none"
                       />
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label htmlFor={`param-required-${i}`} className="flex items-center gap-2 cursor-pointer">
                         <input
+                          id={`param-required-${i}`}
                           type="checkbox"
                           checked={p.required}
                           onChange={e => updateParam(i, "required", e.target.checked)}

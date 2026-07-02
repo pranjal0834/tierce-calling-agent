@@ -121,6 +121,16 @@ _VOICEMAIL_PHRASES = (
     "to record a message",
     "leave a voice message",
     "is currently engaged",
+    # ── Carrier voicemail recording instructions ──
+    # (e.g. "When you have finished recording, you may hang up" — Airtel/Jio/Vi
+    #  voicemail. Machine-only phrasing; a live callee would not say these.)
+    "when you have finished recording",
+    "you have finished recording",
+    "finished recording, you may",
+    "begin recording your message",
+    "start recording your message",
+    "record your message now",
+    "record your message after the tone",
 )
 
 # OpenAI Realtime transcription accepts ISO-639-1 codes from this set only.

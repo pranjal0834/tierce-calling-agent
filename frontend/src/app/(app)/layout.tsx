@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, ShieldAlert } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import TermsModal from "@/components/TermsModal";
@@ -35,12 +35,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [needsTerms, setNeedsTerms] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const topbar = TOPBAR_PAGES[pathname] || Object.entries(TOPBAR_PAGES).find(([key]) => key !== "/" && pathname.startsWith(key))?.[1];
 
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_KEY);
     if (stored === "true") setCollapsed(true);
   }, []);
+
+  // Keep the browser tab title in sync with the current page.
+  useEffect(() => {
+    document.title = topbar?.title ? `${topbar.title} · Vaaniq` : "Vaaniq Voice Agent";
+  }, [topbar?.title]);
 
   const toggleSidebar = () => {
     setCollapsed(prev => {
@@ -57,7 +63,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
     api.get<{ is_superadmin?: boolean; needs_terms_acceptance?: boolean }>("/auth/me")
       .then(r => {
-        if (r.data?.is_superadmin) { window.location.href = "/admin"; return; }
+        // Super admins may browse the user app (e.g. via "Back to app"), but we
+        // surface a persistent banner so it's always clear they're outside the
+        // admin console. Login routes them to /admin by default.
+        if (r.data?.is_superadmin) setIsSuperAdmin(true);
         if (r.data?.needs_terms_acceptance) setNeedsTerms(true);
       })
       .catch((err: { response?: { status?: number } }) => {
@@ -70,7 +79,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-neutral-50">
-      {needsTerms && <TermsModal onAccepted={() => setNeedsTerms(false)} />}
+      {needsTerms && <div role="alert"><TermsModal onAccepted={() => setNeedsTerms(false)} /></div>}
       <CommandPalette />
       <Sidebar
         collapsed={collapsed}
@@ -80,6 +89,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* A super admin is browsing the user-facing app — keep it unmistakable. */}
+        {isSuperAdmin && (
+          <div role="status" className="flex items-center justify-between gap-3 px-4 sm:px-6 h-9 bg-amber-500 text-neutral-900 flex-shrink-0 z-40">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide truncate">
+              <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> Super Admin Viewing — you're browsing the user app
+            </span>
+            <a href="/admin" className="inline-flex items-center gap-1 text-xs font-semibold underline underline-offset-2 hover:opacity-80 whitespace-nowrap shrink-0">
+              Return to Admin Console →
+            </a>
+          </div>
+        )}
         {topbar ? (
           /* Full top navigation bar (desktop + mobile) */
           <TopBar title={topbar.title} subtitle={topbar.subtitle} onMobileMenu={() => setMobileMenuOpen(true)} />
@@ -104,7 +124,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Main content */}
         <main className="flex-1 overflow-auto scroll-thin">
-          <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 page-enter">
+          <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-brand-700 focus:rounded-lg focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-brand-500">Skip to content</a>
+          <div id="main-content" className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 page-enter">
             {children}
           </div>
         </main>

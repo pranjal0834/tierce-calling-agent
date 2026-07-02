@@ -269,7 +269,7 @@ export default function TemplatesPage() {
         const theme = CATEGORY_THEME[previewTemplate.category] ?? DEFAULT_THEME;
         const Icon = theme.icon;
         return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 backdrop-blur-[2px] p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 backdrop-blur-[2px] p-4" role="dialog" aria-modal="true" aria-labelledby="tmpl-preview-title">
           <div className="bg-white border border-neutral-200 w-full max-w-2xl rounded-2xl shadow-modal flex flex-col max-h-[85vh] animate-scale-in">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
@@ -278,7 +278,7 @@ export default function TemplatesPage() {
                   <Icon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-neutral-900 text-base">{previewTemplate.name}</h3>
+                  <h3 id="tmpl-preview-title" className="font-semibold text-neutral-900 text-base">{previewTemplate.name}</h3>
                   <p className="text-xs text-neutral-400 mt-0.5">{previewTemplate.category} Template</p>
                 </div>
               </div>
@@ -300,7 +300,7 @@ export default function TemplatesPage() {
                 </div>
                 <div>
                   <p className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider">Model</p>
-                  <p className="text-xs font-semibold text-neutral-700 mt-0.5">Tierce Voice Engine</p>
+                  <p className="text-xs font-semibold text-neutral-700 mt-0.5">Vaaniq Voice Engine</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider">Voice ID</p>
@@ -350,7 +350,7 @@ export default function TemplatesPage() {
 
       {/* ─── Import / Customize Modal ─── */}
       {importingTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 backdrop-blur-[2px] p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/40 backdrop-blur-[2px] p-4" role="dialog" aria-modal="true" aria-labelledby="tmpl-import-title">
           <div className="bg-white border border-neutral-200 w-full max-w-md rounded-2xl shadow-modal flex flex-col animate-scale-in">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
@@ -359,7 +359,7 @@ export default function TemplatesPage() {
                   <Sparkles className="w-4 h-4 text-brand-500" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-neutral-900 text-sm">Import Template</h3>
+                  <h3 id="tmpl-import-title" className="font-semibold text-neutral-900 text-sm">Import Template</h3>
                   <p className="text-[11px] text-neutral-400 mt-0.5">Customize properties before importing</p>
                 </div>
               </div>

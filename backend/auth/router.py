@@ -14,7 +14,7 @@ import asyncio
 import base64
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
 from jose import jwt
 from sqlalchemy import select
@@ -34,6 +34,7 @@ from backend.models.schemas import (
     ApiKeyCreated,
     ApiKeyOut,
     LoginRequest,
+    ProfileUpdate,
     RegisterRequest,
     TokenOut,
     UserOut,
@@ -86,6 +87,38 @@ def _create_access_token(user_id: str) -> str:
         settings.SECRET_KEY,
         algorithm=settings.ALGORITHM,
     )
+
+
+# ── OAuth one-time code exchange ──────────────────────────────────────────────
+# So the JWT is NEVER placed in a URL (which leaks via history/referrer/logs).
+# The Google callback stashes the token behind a short-lived single-use code and
+# redirects with ?code=…; the SPA exchanges it for the token via a POST.
+_OAUTH_CODES: dict[str, tuple[str, datetime]] = {}
+_OAUTH_CODE_TTL_SECONDS = 120
+
+
+def _stash_oauth_token(token: str) -> str:
+    now = datetime.utcnow()
+    # Prune expired entries so the dict can't grow unbounded.
+    for c in [c for c, (_, exp) in _OAUTH_CODES.items() if exp < now]:
+        _OAUTH_CODES.pop(c, None)
+    code = secrets.token_urlsafe(32)
+    _OAUTH_CODES[code] = (token, now + timedelta(seconds=_OAUTH_CODE_TTL_SECONDS))
+    return code
+
+
+class ExchangeCodeRequest(_BaseModel):
+    code: str
+
+
+@router.post("/exchange-code")
+async def exchange_oauth_code(payload: ExchangeCodeRequest):
+    """Exchange a single-use OAuth code for the access token (token returned in body,
+    never in a URL)."""
+    entry = _OAUTH_CODES.pop(payload.code, None)  # single-use
+    if not entry or entry[1] < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invalid or expired sign-in code")
+    return {"token": entry[0]}
 
 
 # ── Register ──────────────────────────────────────────────────────────────────
@@ -366,13 +399,13 @@ async def google_callback(code: str, state: str = "", db: AsyncSession = Depends
         asyncio.create_task(mailer.send_email(user.email, subject, html))
 
     token = _create_access_token(user.id)
-    return RedirectResponse(f"{frontend_url}/callback?token={token}")
+    code = _stash_oauth_token(token)  # keep the JWT out of the URL
+    return RedirectResponse(f"{frontend_url}/callback?code={code}")
 
 
 # ── Current user / workspace ──────────────────────────────────────────────────
 
-@router.get("/me", response_model=UserOut)
-async def get_me(user: User = Depends(get_current_user)):
+def _user_out(user: User) -> UserOut:
     admin_emails = [e.strip().lower() for e in settings.ADMIN_EMAILS.split(",") if e.strip()]
     data = UserOut.model_validate(user)
     data.is_superadmin = user.email.lower() in admin_emails
@@ -380,6 +413,75 @@ async def get_me(user: User = Depends(get_current_user)):
     # Prompt for terms if never accepted, or accepted an older version than current.
     data.needs_terms_acceptance = (user.terms_accepted_version != settings.TERMS_VERSION)
     return data
+
+
+@router.get("/me", response_model=UserOut)
+async def get_me(user: User = Depends(get_current_user)):
+    return _user_out(user)
+
+
+@router.patch("/profile", response_model=UserOut)
+async def update_profile(
+    payload: ProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the current user's profile (name, phone, address, city/state/country, email)."""
+    if payload.email is not None:
+        new_email = payload.email.strip().lower()
+        if new_email and new_email != (user.email or "").lower():
+            existing = (await db.execute(
+                select(User).where(User.email == new_email, User.id != user.id)
+            )).scalar_one_or_none()
+            if existing:
+                raise HTTPException(status_code=409, detail="That email is already in use")
+            user.email = new_email
+    for f in ("full_name", "phone", "address_line", "city", "state", "country", "postal_code"):
+        val = getattr(payload, f)
+        if val is not None:
+            setattr(user, f, (val.strip() or None))
+    await db.commit()
+    await db.refresh(user)
+    return _user_out(user)
+
+
+@router.post("/profile/avatar", response_model=UserOut)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a profile picture (PNG/JPG/WEBP/GIF, max 2 MB). Served from /avatars."""
+    name = file.filename or ""
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext == "jpeg":
+        ext = "jpg"
+    if ext not in ("png", "jpg", "webp", "gif"):
+        raise HTTPException(status_code=400, detail="Only PNG, JPG, WEBP, or GIF images are allowed")
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 2 MB)")
+
+    avatars_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "avatars")
+    os.makedirs(avatars_dir, exist_ok=True)
+    # Drop any previous avatar for this user (possibly a different extension).
+    for old_ext in ("png", "jpg", "webp", "gif"):
+        old = os.path.join(avatars_dir, f"{user.id}.{old_ext}")
+        if old_ext != ext and os.path.exists(old):
+            try:
+                os.remove(old)
+            except Exception:
+                pass
+    fname = f"{user.id}.{ext}"
+    with open(os.path.join(avatars_dir, fname), "wb") as fh:
+        fh.write(data)
+    # Cache-bust so a replaced image reloads in the browser.
+    user.avatar_url = f"/avatars/{fname}?v={int(datetime.utcnow().timestamp())}"
+    await db.commit()
+    await db.refresh(user)
+    return _user_out(user)
 
 
 @router.post("/accept-terms")

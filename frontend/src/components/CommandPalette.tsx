@@ -28,7 +28,7 @@ const PAGES = [
 const ACTIONS = [
   { label: "New Agent",        href: "/agents?new=1",  icon: Plus,          kw: "create build" },
   { label: "Start a Call",     href: "/calls?dial=1",  icon: PhoneOutgoing, kw: "dial outbound" },
-  { label: "Buy Credits",      href: "/billing",       icon: CreditCard,    kw: "top up minutes" },
+  { label: "Buy Minutes",      href: "/billing",       icon: CreditCard,    kw: "top up minutes credits" },
 ];
 
 /** Opens the palette from anywhere: window.dispatchEvent(new Event("vaaniq:command")) */

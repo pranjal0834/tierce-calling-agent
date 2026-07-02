@@ -121,8 +121,8 @@ export default function CompliancePage() {
         </div>
         <p className="text-xs text-neutral-500 mb-4">When enabled, outbound calls are blocked outside these hours in the chosen timezone.</p>
 
-        <label className="flex items-center gap-2.5 cursor-pointer mb-4">
-          <input type="checkbox" className="w-4 h-4 accent-brand-500 rounded"
+        <label htmlFor="enforce-window" className="flex items-center gap-2.5 cursor-pointer mb-4">
+          <input id="enforce-window" type="checkbox" className="w-4 h-4 accent-brand-500 rounded"
             checked={!!settings?.calling_window_enabled}
             onChange={e => setSettings((s: any) => ({ ...s, calling_window_enabled: e.target.checked }))} />
           <span className="text-sm text-neutral-700">Enforce calling window</span>
@@ -130,24 +130,24 @@ export default function CompliancePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-xs text-neutral-500 mb-1.5">From (hour)</label>
-            <select className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="call-from" className="block text-xs text-neutral-500 mb-1.5">From (hour)</label>
+            <select id="call-from" className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm"
               value={settings?.calling_start_hour ?? 9}
               onChange={e => setSettings((s: any) => ({ ...s, calling_start_hour: Number(e.target.value) }))}>
               {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-neutral-500 mb-1.5">To (hour)</label>
-            <select className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm"
+            <label htmlFor="call-to" className="block text-xs text-neutral-500 mb-1.5">To (hour)</label>
+            <select id="call-to" className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm"
               value={settings?.calling_end_hour ?? 21}
               onChange={e => setSettings((s: any) => ({ ...s, calling_end_hour: Number(e.target.value) }))}>
               {Array.from({ length: 25 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-neutral-500 mb-1.5">Timezone</label>
-            <input className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm font-mono"
+            <label htmlFor="call-tz" className="block text-xs text-neutral-500 mb-1.5">Timezone</label>
+            <input id="call-tz" className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm font-mono"
               value={settings?.calling_timezone ?? "Asia/Kolkata"}
               onChange={e => setSettings((s: any) => ({ ...s, calling_timezone: e.target.value }))} />
           </div>

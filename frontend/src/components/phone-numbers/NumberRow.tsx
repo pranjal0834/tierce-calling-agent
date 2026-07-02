@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { Phone, Trash2, RefreshCw, CheckCircle, X, Bot, Mic, MessageSquare, AlertTriangle, Clock } from "lucide-react";
 import toast from "react-hot-toast";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 import {
   updateNumberRouting,
   updateNumberAutoRenew,
   createRenewalOrder,
   renewPhoneNumber,
+  provisionNumber,
 } from "@/lib/api";
 import CapBadge from "@/components/phone-numbers/CapBadge";
 
@@ -65,8 +66,6 @@ export default function NumberRow({
   const [autoRenew, setAutoRenew] = useState(number.auto_renew ?? true);
   const [togglingRenew, setTogglingRenew] = useState(false);
   const [renewing, setRenewing] = useState(false);
-  const [confirmReleaseModal, setConfirmReleaseModal] = useState(false);
-
   const suspended = !!number.is_suspended;
   const daysLeft = number.days_until_renewal;
   const dueSoon = !suspended && daysLeft != null && daysLeft <= REMINDER_WINDOW_DAYS;
@@ -149,9 +148,22 @@ export default function NumberRow({
 
   const providerLabel = number.provider === "plivo" ? "Plivo" : "Twilio";
 
-  function doRelease() {
-    setConfirmReleaseModal(false);
+  async function handleRelease() {
     onRelease(number.id);
+    toastUndo({
+      message: "Number released",
+      onUndo: async () => {
+        try {
+          await provisionNumber({
+            phone_number: number.phone_number,
+            monthly_cost_usd: number.monthly_cost_inr / 80,
+          });
+          onRenewed?.();
+        } catch {
+          toast.error("Failed to restore number");
+        }
+      },
+    });
   }
 
   return (
@@ -187,7 +199,7 @@ export default function NumberRow({
         </div>
 
         <button
-          onClick={() => setConfirmReleaseModal(true)}
+          onClick={handleRelease}
           className="p-2 text-neutral-400 hover:text-error-500 hover:bg-error-50 rounded-lg transition-colors shrink-0"
           title="Release number"
         >
@@ -293,13 +305,6 @@ export default function NumberRow({
         Purchased {new Date(number.purchased_at + "Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
         &nbsp;·&nbsp;{number.twilio_sid}
       </p>
-      <ConfirmModal
-        open={confirmReleaseModal}
-        title="Release Number"
-        message={`Release ${number.phone_number}? This removes it from your ${providerLabel} account immediately and stops all future charges.`}
-        onConfirm={doRelease}
-        onCancel={() => setConfirmReleaseModal(false)}
-      />
     </div>
   );
 }

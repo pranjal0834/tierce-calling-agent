@@ -102,14 +102,16 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <InputField
             label="Email"
+            id="email"
             registration={register("email")}
             error={errors.email}
             type="email"
             placeholder="you@company.com"
           />
           <div>
-            <label className="label-base">Password</label>
+            <label htmlFor="password" className="label-base">Password</label>
             <PasswordInput
+              id="password"
               autoComplete="current-password"
               value={watch("password")}
               onChange={e => setValue("password", e.target.value)}

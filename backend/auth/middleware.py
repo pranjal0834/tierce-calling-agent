@@ -19,6 +19,7 @@ _PUBLIC_PREFIXES = (
     "/redoc",
     "/billing/razorpay/webhook",
     "/voice-samples/",   # public voice-preview clips for the agent Voice picker
+    "/avatars/",         # public profile pictures
 )
 
 

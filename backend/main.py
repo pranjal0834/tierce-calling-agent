@@ -18,6 +18,7 @@ from backend.api import agents, calls, analytics, memory, telephony, tools as to
 from backend.api import plivo_telephony as plivo_telephony_api
 from backend.api import scheduling as scheduling_api
 from backend.api import admin as admin_api
+from backend.api import admin_plans as admin_plans_api
 from backend.api import webhooks as webhooks_api
 from backend.api import phone_numbers as phone_numbers_api
 from backend.api import kyc as kyc_api
@@ -60,6 +61,46 @@ async def _reap_orphaned_calls():
             log.info("Reaped orphaned calls on startup", count=result.rowcount)
 
 
+async def _purge_expired_deleted_users():
+    """
+    Hard-delete users whose 30-day soft-delete recovery window has elapsed.
+    Best-effort: if a row can't be removed (FK references), it simply stays
+    soft-deleted (already hidden + email freed) — the recovery window is what
+    matters. Runs at startup and every 6h.
+    """
+    from backend.db.database import AsyncSessionLocal
+    from sqlalchemy import text
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(text(
+                "DELETE FROM users WHERE deleted_at IS NOT NULL "
+                "AND deleted_at < now() - interval '30 days'"
+            ))
+            await db.commit()
+            if result.rowcount:
+                log.info("Purged expired soft-deleted users", count=result.rowcount)
+    except Exception as exc:
+        log.warning("Deleted-user purge skipped", error=str(exc))
+
+
+async def _deleted_user_purge_poller():
+    """Run the soft-delete purge at startup, then every 6 hours."""
+    while True:
+        await _purge_expired_deleted_users()
+        await asyncio.sleep(6 * 3600)
+
+
+async def _admin_digest_poller():
+    """Fire the scheduled admin digest (daily/weekly) at the configured hour."""
+    from backend.notifications.digest import maybe_send_admin_digest
+    while True:
+        try:
+            await maybe_send_admin_digest()
+        except Exception as exc:  # noqa: BLE001 — never let the digest crash the app
+            log.warning("Admin digest check failed", error=str(exc))
+        await asyncio.sleep(1800)  # every 30 min
+
+
 async def _repair_null_jsonb():
     """Fix any calls that have NULL JSONB fields and add new columns that may be missing."""
     from backend.db.database import AsyncSessionLocal
@@ -90,6 +131,17 @@ async def _repair_null_jsonb():
             await db.execute(text(
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_version VARCHAR(20)"
             ))
+            await db.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP"
+            ))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS address_line VARCHAR(255)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS city VARCHAR(120)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS state VARCHAR(120)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(120)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20)"))
         except Exception:
             pass
         try:
@@ -552,6 +604,8 @@ async def lifespan(app: FastAPI):
     app.state.redis = redis_client
     asyncio.create_task(_schedule_poller())
     asyncio.create_task(_number_billing_poller())
+    asyncio.create_task(_deleted_user_purge_poller())
+    asyncio.create_task(_admin_digest_poller())
     log.info("Tierce Voice Agent started", version="1.0.0")
     yield
     await redis_client.aclose()
@@ -589,7 +643,8 @@ app.include_router(telephony.router,  prefix="/telephony",     tags=["Telephony"
 app.include_router(tools_api.router,  prefix="/api/agents",    tags=["Tools"])
 app.include_router(scheduling_api.router, prefix="/api/scheduling", tags=["Scheduling"])
 app.include_router(billing_router.router, prefix="/billing", tags=["Billing"])
-app.include_router(admin_api.router,    prefix="/api/admin",  tags=["Admin"])
+app.include_router(admin_api.router,       prefix="/api/admin",    tags=["Admin"])
+app.include_router(admin_plans_api.router, prefix="/api/admin",    tags=["Admin"])
 app.include_router(webhooks_api.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(phone_numbers_api.router, prefix="/api/phone-numbers", tags=["PhoneNumbers"])
 app.include_router(compliance_api.router, prefix="/api/compliance", tags=["Compliance"])
@@ -605,6 +660,10 @@ app.include_router(plivo_telephony_api.router, prefix="/telephony/plivo", tags=[
 _VOICE_SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "static", "voice-samples")
 os.makedirs(_VOICE_SAMPLES_DIR, exist_ok=True)
 app.mount("/voice-samples", StaticFiles(directory=_VOICE_SAMPLES_DIR), name="voice-samples")
+
+_AVATARS_DIR = os.path.join(os.path.dirname(__file__), "static", "avatars")
+os.makedirs(_AVATARS_DIR, exist_ok=True)
+app.mount("/avatars", StaticFiles(directory=_AVATARS_DIR), name="avatars")
 
 
 # ─── WebSocket — Main Call Handler ────────────────────────────────────────────
@@ -651,6 +710,99 @@ async def transfer_websocket(websocket: WebSocket, call_id: str):
     from backend.features.native_audio.transfer_stream import TransferStreamHandler
     handler = TransferStreamHandler(call_id)
     await handler.handle(websocket)
+
+
+@app.websocket("/ws/calls")
+async def calls_feed_websocket(
+    websocket: WebSocket,
+    token: Optional[str] = Query(default=None),
+    agent_id: Optional[str] = Query(default=None),
+):
+    """
+    Read-only live feed of a workspace's recent calls for the Calls page.
+
+    The browser holds a single socket instead of re-fetching on an interval;
+    the server polls the DB and pushes the list only when it changes. This is
+    an additive, read-only projection — it never touches the call pipeline, so
+    it cannot affect live calls. The frontend falls back to HTTP polling if the
+    socket is unavailable.
+    """
+    import json as _json
+    from jose import JWTError, jwt as _jwt
+    from sqlalchemy import select as _select, desc as _desc, or_ as _or, and_ as _and, func as _func
+    from backend.db.models import Call as _Call, Agent as _Agent, User as _User
+    from backend.models.schemas import CallOut as _CallOut
+
+    await websocket.accept()
+
+    # WebSockets can't send an Authorization header, so the JWT arrives as a
+    # query param. Validate it the same way get_current_user does.
+    if not token:
+        await websocket.close(code=4401)
+        return
+    try:
+        payload = _jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+    except JWTError:
+        user_id = None
+    if not user_id:
+        await websocket.close(code=4401)
+        return
+
+    last_hash: Optional[int] = None
+    try:
+        while True:
+            async with AsyncSessionLocal() as db:
+                user = await db.get(_User, user_id)
+                if not user or not user.is_active:
+                    await websocket.close(code=4401)
+                    return
+                # Same visibility filter as REST list_calls (hide other users'
+                # personal-agent calls).
+                _where = [
+                    _Call.workspace_id == user.workspace_id,
+                    _or(
+                        _Agent.is_personal == False,
+                        _Agent.is_personal == None,
+                        _and(_Agent.is_personal == True, _Agent.created_by == user.id),
+                    ),
+                ]
+                if agent_id:
+                    _where.append(_Call.agent_id == agent_id)
+
+                q = (
+                    _select(_Call)
+                    .join(_Agent, _Call.agent_id == _Agent.id, isouter=True)
+                    .where(*_where)
+                    .order_by(_desc(_Call.created_at))
+                    .limit(200)
+                )
+                rows = (await db.execute(q)).scalars().all()
+                items = [_CallOut.model_validate(c).model_dump(mode="json") for c in rows]
+
+                # Grand total (all matching calls, not just the 200 pushed) so the
+                # "Total Calls" KPI stays accurate beyond the page window.
+                count_q = (
+                    _select(_func.count())
+                    .select_from(_Call)
+                    .join(_Agent, _Call.agent_id == _Agent.id, isouter=True)
+                    .where(*_where)
+                )
+                total = (await db.execute(count_q)).scalar() or 0
+
+            payload_hash = hash(_json.dumps({"i": items, "t": total}, default=str, sort_keys=True))
+            if payload_hash != last_hash:
+                last_hash = payload_hash
+                await websocket.send_json({"type": "calls", "items": items, "total": total})
+            await asyncio.sleep(3)
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:  # noqa: BLE001 — best-effort feed, never crash the app
+        log.warning("calls_feed_websocket ended", error=str(exc))
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @app.get("/health")

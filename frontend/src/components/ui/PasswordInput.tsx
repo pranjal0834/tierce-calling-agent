@@ -8,6 +8,7 @@ interface PasswordInputProps {
   placeholder?: string;
   autoComplete?: string;
   className?: string;
+  id?: string;
 }
 
 export default function PasswordInput({
@@ -16,12 +17,14 @@ export default function PasswordInput({
   placeholder = "••••••••",
   autoComplete = "current-password",
   className = "",
+  id,
 }: PasswordInputProps) {
   const [show, setShow] = useState(false);
 
   return (
     <div className="relative">
       <input
+        id={id}
         type={show ? "text" : "password"}
         autoComplete={autoComplete}
         className={`input-base pr-10 ${className}`}

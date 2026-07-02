@@ -101,11 +101,12 @@ function InviteForm() {
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
-                <label className="label-base">
+                <label htmlFor="invite-password" className="label-base">
                   Password
                   <span className="text-neutral-400 font-normal ml-1">(only needed for new accounts)</span>
                 </label>
                 <PasswordInput
+                  id="invite-password"
                   value={watch("password") || ""}
                   onChange={e => setValue("password", e.target.value)}
                   autoComplete="new-password"
@@ -115,8 +116,9 @@ function InviteForm() {
               </div>
               {watch("password") && (
                 <div>
-                  <label className="label-base">Confirm password</label>
+                  <label htmlFor="invite-confirm-password" className="label-base">Confirm password</label>
                   <PasswordInput
+                    id="invite-confirm-password"
                     value={watch("confirm_password") || ""}
                     onChange={e => setValue("confirm_password", e.target.value)}
                     autoComplete="new-password"

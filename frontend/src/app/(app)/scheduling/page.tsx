@@ -10,7 +10,7 @@ import {
   cancelScheduledCall, getAgents,
 } from "@/lib/api";
 import toast from "react-hot-toast";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ function toUTC(iso: string) {
 
 function fmtScheduled(iso: string) {
   const d = new Date(toUTC(iso));
-  return d.toLocaleString("en-GB", {
+  return d.toLocaleString("en-IN", {
     timeZone: IST, weekday: "short", day: "2-digit", month: "short",
     year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true,
   });
@@ -136,7 +136,7 @@ export default function SchedulingPage() {
   const [bulkForm, setBulkForm] = useState({ agent_id: "", scheduled_at: "", notes: "" });
   const [bulkPreview, setBulkPreview] = useState<BulkContact[]>([]);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState<{open: boolean; item?: ScheduledCall}>({open: false});
+
 
   const load = async (statusFilter?: string) => {
     try {
@@ -158,8 +158,21 @@ export default function SchedulingPage() {
 
   // Auto-refresh every 15s
   useEffect(() => {
-    const id = setInterval(() => load(filter), 15000);
-    return () => clearInterval(id);
+    let cancelled = false;
+    let errorStreak = 0;
+    const tick = () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") { timer = setTimeout(tick, 20000); return; }
+      load(filter)
+        .catch(() => { errorStreak = Math.min(errorStreak + 1, 4); })
+        .finally(() => {
+          if (cancelled) return;
+          const delay = Math.min(15000 * (errorStreak > 0 ? 2 ** errorStreak : 1), 60000);
+          timer = setTimeout(tick, delay);
+        });
+    };
+    let timer: ReturnType<typeof setTimeout> = setTimeout(tick, 15000);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [filter]);
 
   const handleFilterChange = (f: string) => {
@@ -236,21 +249,23 @@ export default function SchedulingPage() {
 
   // ── Cancel ──
   const handleCancel = async (sc: ScheduledCall) => {
-    setConfirmCancel({open: true, item: sc});
-  };
-
-  const doCancel = async () => {
-    const sc = confirmCancel.item;
-    if (!sc) return;
-    try {
-      await cancelScheduledCall(sc.id);
-      toast.success("Call cancelled");
-      load(filter);
-    } catch {
-      toast.error("Failed to cancel scheduled call");
-    } finally {
-      setConfirmCancel({open: false});
-    }
+    await cancelScheduledCall(sc.id);
+    load(filter);
+    toastUndo({
+      message: "Call cancelled",
+      onUndo: async () => {
+        await scheduleCall({
+          agent_id: sc.agent_id,
+          phone_number: sc.phone_number,
+          contact_name: sc.contact_name || undefined,
+          contact_email: sc.contact_email || undefined,
+          notes: sc.notes || undefined,
+          scheduled_at: sc.scheduled_at,
+          timezone: sc.timezone,
+        });
+        load(filter);
+      },
+    });
   };
 
   const TABS = [
@@ -493,8 +508,9 @@ export default function SchedulingPage() {
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Agent *</label>
+                <label htmlFor="sched-agent" className="block text-xs text-neutral-500 mb-1">Agent *</label>
                 <select
+                  id="sched-agent"
                   value={schedForm.agent_id}
                   onChange={e => setSchedForm(f => ({ ...f, agent_id: e.target.value }))}
                   className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
@@ -507,9 +523,11 @@ export default function SchedulingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Phone Number *</label>
+                <label htmlFor="sched-phone" className="block text-xs text-neutral-500 mb-1">Phone Number *</label>
                 <input
+                  id="sched-phone"
                   type="tel"
+                  inputMode="tel"
                   placeholder="+91XXXXXXXXXX"
                   value={schedForm.phone_number}
                   onChange={e => setSchedForm(f => ({ ...f, phone_number: e.target.value }))}
@@ -518,8 +536,9 @@ export default function SchedulingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Schedule Date & Time (IST) *</label>
+                <label htmlFor="sched-datetime" className="block text-xs text-neutral-500 mb-1">Schedule Date & Time (IST) *</label>
                 <input
+                  id="sched-datetime"
                   type="datetime-local"
                   min={nowLocalMin()}
                   value={schedForm.scheduled_at}
@@ -529,8 +548,9 @@ export default function SchedulingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Contact Name</label>
+                <label htmlFor="sched-name" className="block text-xs text-neutral-500 mb-1">Contact Name</label>
                 <input
+                  id="sched-name"
                   type="text"
                   placeholder="Optional"
                   value={schedForm.contact_name}
@@ -540,8 +560,9 @@ export default function SchedulingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Contact Email</label>
+                <label htmlFor="sched-email" className="block text-xs text-neutral-500 mb-1">Contact Email</label>
                 <input
+                  id="sched-email"
                   type="email"
                   placeholder="Optional"
                   value={schedForm.contact_email}
@@ -551,8 +572,9 @@ export default function SchedulingPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Notes</label>
+                <label htmlFor="sched-notes" className="block text-xs text-neutral-500 mb-1">Notes</label>
                 <textarea
+                  id="sched-notes"
                   rows={2}
                   placeholder="Context for this call…"
                   value={schedForm.notes}
@@ -582,14 +604,6 @@ export default function SchedulingPage() {
         </div>
       )}
 
-      <ConfirmModal
-        open={confirmCancel.open}
-        title="Cancel Scheduled Call"
-        message={confirmCancel.item ? `Cancel scheduled call to ${confirmCancel.item.phone_number}?` : ""}
-        onConfirm={doCancel}
-        onCancel={() => setConfirmCancel({open: false})}
-      />
-
       {/* ── Bulk Schedule Modal ── */}
       {showBulk && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4">
@@ -603,8 +617,9 @@ export default function SchedulingPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Agent *</label>
+                <label htmlFor="bulk-agent" className="block text-xs text-neutral-500 mb-1">Agent *</label>
                 <select
+                  id="bulk-agent"
                   value={bulkForm.agent_id}
                   onChange={e => setBulkForm(f => ({ ...f, agent_id: e.target.value }))}
                   className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-neutral-900 text-sm focus:outline-none focus:border-brand-500"
@@ -616,8 +631,9 @@ export default function SchedulingPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-neutral-500 mb-1">Date & Time (IST) *</label>
+                <label htmlFor="bulk-datetime" className="block text-xs text-neutral-500 mb-1">Date & Time (IST) *</label>
                 <input
+                  id="bulk-datetime"
                   type="datetime-local"
                   min={nowLocalMin()}
                   value={bulkForm.scheduled_at}
@@ -628,8 +644,9 @@ export default function SchedulingPage() {
             </div>
 
             <div>
-              <label className="block text-xs text-neutral-500 mb-1">Notes</label>
+              <label htmlFor="bulk-notes" className="block text-xs text-neutral-500 mb-1">Notes</label>
               <input
+                id="bulk-notes"
                 type="text"
                 placeholder="Optional notes for all calls…"
                 value={bulkForm.notes}
@@ -672,12 +689,13 @@ export default function SchedulingPage() {
               </div>
             ) : (
               <div>
-                <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-neutral-300 rounded-lg py-6 cursor-pointer hover:border-brand-400 transition-colors">
+                <label htmlFor="bulk-upload" className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-neutral-300 rounded-lg py-6 cursor-pointer hover:border-brand-400 transition-colors">
                   <FileSpreadsheet className="w-6 h-6 text-neutral-400" />
                   <span className="text-xs text-neutral-500">
                     {bulkFile ? bulkFile.name : "Click to upload CSV or Excel"}
                   </span>
                   <input
+                    id="bulk-upload"
                     type="file"
                     accept=".csv,.xlsx,.xls"
                     className="hidden"

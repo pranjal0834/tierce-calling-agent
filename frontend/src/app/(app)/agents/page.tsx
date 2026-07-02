@@ -1,18 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Plus, Bot, Globe, Lock } from "lucide-react";
-import { getAgents, deleteAgent } from "@/lib/api";
+import { getAgents, deleteAgent, createAgent } from "@/lib/api";
 import toast from "react-hot-toast";
 import { AgentCard } from "@/components/agents/AgentCard";
 import { AgentFormModal } from "@/components/agents/AgentFormModal";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingAgent, setEditingAgent] = useState<any | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; id?: string}>({open: false});
-
   const loadAgents = () => {
     getAgents().then(setAgents).catch(() => {});
   };
@@ -36,19 +34,17 @@ export default function AgentsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    setConfirmDelete({open: true, id});
-  };
-
-  const doDelete = async () => {
-    try {
-      await deleteAgent(confirmDelete.id!);
-      setAgents(a => a.filter(x => x.id !== confirmDelete.id));
-      toast.success("Agent deleted");
-    } catch {
-      toast.error("Failed to delete agent");
-    } finally {
-      setConfirmDelete({open: false});
-    }
+    const item = agents.find(a => a.id === id);
+    if (!item) return;
+    await deleteAgent(id);
+    setAgents(a => a.filter(x => x.id !== id));
+    toastUndo({
+      message: "Agent deleted",
+      onUndo: async () => {
+        const restored = await createAgent(item);
+        setAgents(a => [...a, restored]);
+      },
+    });
   };
 
   const workspace = agents.filter((a: any) => !a.is_personal);
@@ -122,13 +118,6 @@ export default function AgentsPage() {
           onSaved={handleSaved}
         />
       )}
-      <ConfirmModal
-        open={confirmDelete.open}
-        title="Delete Agent"
-        message="Delete this agent? This cannot be undone."
-        onConfirm={doDelete}
-        onCancel={() => setConfirmDelete({open: false})}
-      />
     </div>
   );
 }

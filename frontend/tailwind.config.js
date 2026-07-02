@@ -24,6 +24,7 @@ module.exports = {
           600: "#0F766E",
           700: "#115E59",
           900: "#134E4A",
+          950: "#0A332F",   // deep teal — admin sidebar surface (distinct from the light user app)
         },
         secondary: { 500: "#2BA7A9", 600: "#0B8A8F" },
         accent:    { 500: "#F4B63D", 600: "#D97706" },
@@ -39,15 +40,15 @@ module.exports = {
           150: "#EFEFED",
           200: "#E8E8E6",
           300: "#D4D4D2",
-          400: "#A3A3A0",
-          500: "#737370",
+          400: "#78786F", // WCAG AA: ~4.5:1 on white (was #A3A3A0 / 2.5:1 — failed AA)
+          500: "#616160", // WCAG AA: ~5.9:1 on white (was #737370)
           600: "#525250",
           700: "#3D3D3B",
           800: "#262625",
           900: "#0F0F0E",
         },
       },
-      fontFamily: { sans: ["Inter", "system-ui", "sans-serif"] },
+      fontFamily: { sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"] },
       fontSize: {
         "2xs": ["0.625rem", { lineHeight: "0.875rem" }],
       },

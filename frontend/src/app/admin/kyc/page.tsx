@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ShieldCheck, ShieldAlert, RefreshCw, Download, Check, X, FileText, Trash2 } from "lucide-react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import toast from "react-hot-toast";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { adminListKyc, adminApproveKyc, adminRejectKyc, adminDeleteKyc, downloadKycDocAdmin } from "@/lib/api";
@@ -31,6 +32,8 @@ export default function AdminKycPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [sidInput, setSidInput] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<{open: boolean; item?: KycRow}>({open: false});
+  const [rejectModal, setRejectModal] = useState<{ open: boolean; item?: KycRow; reason: string }>({ open: false, reason: "" });
+  const trapRef = useFocusTrap<HTMLDivElement>(rejectModal.open, () => setRejectModal({ open: false, item: undefined, reason: "" }));
 
   const reload = async () => {
     try {
@@ -49,10 +52,7 @@ export default function AdminKycPage() {
     catch { toast.error("Failed to approve"); }
   };
   const reject = async (r: KycRow) => {
-    const reason = window.prompt("Reason for rejection (shown to the customer):", "");
-    if (reason === null) return;
-    try { await adminRejectKyc(r.id, reason); toast.success("Rejected"); reload(); }
-    catch { toast.error("Failed to reject"); }
+    setRejectModal({ open: true, item: r, reason: "" });
   };
   const remove = async (r: KycRow) => {
     setConfirmDelete({open: true, item: r});
@@ -89,6 +89,7 @@ export default function AdminKycPage() {
       {[...pending, ...others].map(r => (
         <div key={r.id} className="bg-white border border-neutral-200 rounded-2xl shadow-sm">
           <button onClick={() => setOpen(open === r.id ? null : r.id)}
+            aria-expanded={open === r.id}
             className="w-full flex items-center justify-between gap-3 p-4 text-left">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-neutral-900 truncate">{r.business_name || "(no name)"} <span className="text-neutral-400 font-normal">· {r.country}</span></p>
@@ -99,7 +100,7 @@ export default function AdminKycPage() {
 
           {open === r.id && (
             <div className="px-4 pb-4 space-y-4 border-t border-neutral-100 pt-4">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
                 <Field label="Entity">{r.business_type}</Field>
                 <Field label="GSTIN">{r.gstin || "—"}</Field>
                 <Field label="Address">{[r.address_line, r.city, r.state, r.postal_code].filter(Boolean).join(", ")}</Field>
@@ -161,6 +162,35 @@ export default function AdminKycPage() {
           )}
         </div>
       ))}
+      {rejectModal.open && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4 animate-fade-in" role="dialog" aria-modal="true">
+          <div ref={trapRef} className="bg-white rounded-2xl border border-neutral-200 shadow-modal w-full max-w-md animate-scale-in">
+            <div className="flex items-start justify-between p-6 pb-4">
+              <h2 className="text-base font-semibold text-neutral-900">Reject KYC</h2>
+              <button onClick={() => setRejectModal({ open: false, item: undefined, reason: "" })} className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"><X className="icon-sm" /></button>
+            </div>
+            <div className="px-6 pb-4 space-y-3">
+              <p className="text-sm text-neutral-600">Provide a reason for rejection — this will be shown to the customer.</p>
+              <textarea
+                value={rejectModal.reason}
+                onChange={e => setRejectModal(prev => ({ ...prev, reason: e.target.value }))}
+                rows={4}
+                placeholder="e.g. Document is illegible, please re-upload with better quality..."
+                className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-brand-500 resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2 px-6 pb-6">
+              <button onClick={() => setRejectModal({ open: false, item: undefined, reason: "" })} className="h-9 px-4 text-sm font-medium text-neutral-600 hover:text-neutral-900 rounded-lg">Cancel</button>
+              <button onClick={async () => {
+                if (!rejectModal.item || !rejectModal.reason.trim()) { toast.error("Enter a rejection reason"); return; }
+                try { await adminRejectKyc(rejectModal.item.id, rejectModal.reason.trim()); toast.success("Rejected"); setRejectModal({ open: false, item: undefined, reason: "" }); reload(); }
+                catch { toast.error("Failed to reject"); }
+              }} disabled={!rejectModal.reason.trim()}
+                className="h-9 px-5 bg-error-600 hover:bg-error-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
       <ConfirmModal
         open={confirmDelete.open}
         title="Delete KYC Packet"
@@ -176,7 +206,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div className="min-w-0">
       <p className="text-[10px] text-neutral-400 uppercase tracking-wide">{label}</p>
-      <p className="text-neutral-800 truncate">{children}</p>
+      <p className="text-neutral-800 break-words">{children}</p>
     </div>
   );
 }

@@ -92,20 +92,23 @@ export default function RegisterPage() {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <InputField
             label="Workspace Name"
+            id="workspace_name"
             registration={register("workspace_name")}
             error={errors.workspace_name}
             placeholder="Acme Inc."
           />
           <InputField
             label="Email"
+            id="email"
             registration={register("email")}
             error={errors.email}
             type="email"
             placeholder="you@company.com"
           />
           <div>
-            <label className="label-base">Password</label>
+            <label htmlFor="register-password" className="label-base">Password</label>
             <PasswordInput
+              id="register-password"
               autoComplete="new-password"
               placeholder="Minimum 8 characters"
               value={watch("password")}
@@ -114,8 +117,9 @@ export default function RegisterPage() {
             {errors.password && <p className="text-xs text-error-600 mt-1">{errors.password.message}</p>}
           </div>
           <div>
-            <label className="label-base">Confirm Password</label>
+            <label htmlFor="register-confirm-password" className="label-base">Confirm Password</label>
             <PasswordInput
+              id="register-confirm-password"
               autoComplete="new-password"
               value={watch("confirm_password")}
               onChange={e => setValue("confirm_password", e.target.value)}

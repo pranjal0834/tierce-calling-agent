@@ -11,6 +11,7 @@ import {
   createRazorpayOrder, verifyRazorpayPayment, testPurchase,
   createPaygOrder, verifyPaygPayment,
 } from "@/lib/api";
+import { SkeletonKpis, SkeletonCard } from "@/components/ui/Skeleton";
 
 // Pay-as-you-go bounds (mirror the backend).
 const PAYG_MIN_MINUTES = 10;
@@ -240,8 +241,11 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      <div className="space-y-6">
+        <SkeletonKpis count={3} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} className="h-52" />)}
+        </div>
       </div>
     );
   }
@@ -263,10 +267,10 @@ export default function BillingPage() {
 
       {/* Test mode banner */}
       {testMode && (
-        <div className="flex items-start gap-2.5 bg-warning-50 border border-warning-200 rounded-xl px-4 py-3">
+        <div role="alert" className="flex items-start gap-2.5 bg-warning-50 border border-warning-200 rounded-xl px-4 py-3">
           <Zap className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
           <p className="text-xs text-warning-700">
-            <span className="font-semibold">Test mode is on.</span> Clicking “Buy Now” will simulate a successful
+            <span className="font-semibold">Test mode is on.</span> Clicking “Buy Minutes” will simulate a successful
             payment and add credits instantly — no real money is charged. Turn off <code className="font-mono">BILLING_TEST_MODE</code> for live payments.
           </p>
         </div>
@@ -322,9 +326,9 @@ export default function BillingPage() {
       </div>
 
       {/* Packs grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
         {/* Pay-as-you-go — flexible minutes at the per-minute rate (before the fixed packs) */}
-        <div className="relative flex flex-col rounded-2xl border border-dashed border-neutral-300 bg-white p-4 sm:p-5 shadow-sm">
+        <div className="relative flex flex-col rounded-2xl border border-dashed border-neutral-300 bg-white p-4 sm:p-5 shadow-sm min-w-0">
           <div className="mb-3">
             <p className="text-sm font-semibold text-neutral-900">Pay-as-you-go</p>
             <p className="text-xs text-neutral-500 mt-0.5">Buy exactly what you need</p>
@@ -334,8 +338,9 @@ export default function BillingPage() {
             <span className="text-xs text-neutral-400">/min</span>
           </div>
           <div className="mt-2 mb-2">
-            <label className="text-xs text-neutral-500">Minutes</label>
+            <label htmlFor="payg-minutes" className="text-xs text-neutral-500">Minutes</label>
             <input
+              id="payg-minutes"
               type="number"
               min={PAYG_MIN_MINUTES}
               max={PAYG_MAX_MINUTES}
@@ -373,7 +378,7 @@ export default function BillingPage() {
           return (
             <div
               key={packId}
-              className={`relative flex flex-col rounded-2xl border p-4 sm:p-5 transition-all ${
+              className={`relative flex flex-col rounded-2xl border p-4 sm:p-5 transition-all min-w-0 ${
                 isPopular
                   ? "border-brand-500/60 bg-brand-500/8 shadow-sm"
                   : "border-neutral-200 bg-white shadow-sm hover:border-neutral-300"
@@ -417,7 +422,7 @@ export default function BillingPage() {
                 {isBuying ? (
                   <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Processing…</>
                 ) : (
-                  <><CheckCircle2 className="w-3.5 h-3.5" /> Buy Now</>
+                  <><CheckCircle2 className="w-3.5 h-3.5" /> Buy Minutes</>
                 )}
               </button>
             </div>

@@ -6,7 +6,7 @@ import {
   Globe, Zap, ArrowRight, Code2, ShieldCheck, Clock,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toastUndo } from "@/lib/toast-undo";
 import {
   getWebhookEndpoints,
   createWebhookEndpoint,
@@ -101,6 +101,7 @@ function DeliveryRow({ d }: { d: Delivery }) {
     <div className="border border-neutral-200 rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors text-left"
       >
         {pending ? (
@@ -283,6 +284,7 @@ function EndpointCard({
       <div className="border-t border-neutral-200">
         <button
           onClick={toggleLog}
+          aria-expanded={showLog}
           className="w-full flex items-center gap-2.5 px-5 py-3 text-xs text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50 transition-colors"
         >
           {loadingLog
@@ -370,10 +372,11 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
 
           {/* URL input */}
           <div>
-            <label className="text-xs font-medium text-neutral-700 block mb-2">
+            <label htmlFor="endpoint-url" className="text-xs font-medium text-neutral-700 block mb-2">
               Endpoint URL <span className="text-error-500">*</span>
             </label>
             <input
+              id="endpoint-url"
               value={url}
               onChange={e => setUrl(e.target.value)}
               placeholder="https://your-server.com/webhooks/tierce"
@@ -393,6 +396,7 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
               {ALL_EVENTS.map(ev => (
                 <label
                   key={ev.key}
+                  htmlFor={`ev-${ev.key}`}
                   className={`flex items-start gap-3 cursor-pointer p-3 rounded-xl border transition-colors ${
                     events.includes(ev.key)
                       ? "border-brand-500/40 bg-brand-500/5"
@@ -400,6 +404,7 @@ function AddModal({ onClose, onAdded }: { onClose: () => void; onAdded: (ep: Web
                   }`}
                 >
                   <input
+                    id={`ev-${ev.key}`}
                     type="checkbox"
                     checked={events.includes(ev.key)}
                     onChange={() => toggle(ev.key)}
@@ -455,7 +460,7 @@ function HowItWorks() {
     {
       icon: Zap,
       title: "A call event happens",
-      desc: "When a call starts, completes, or fails — Tierce fires the event immediately.",
+      desc: "When a call starts, completes, or fails — Vaaniq fires the event immediately.",
       cls: "text-yellow-600 bg-yellow-50 border-yellow-200",
     },
     {
@@ -499,6 +504,7 @@ function SignatureInfo() {
     <div className="border border-neutral-200 rounded-2xl overflow-hidden bg-white shadow-sm">
       <button
         onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
         className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-neutral-50 transition-colors text-left"
       >
         <Code2 className="w-4 h-4 text-neutral-400 shrink-0" />
@@ -548,8 +554,6 @@ export default function WebhooksPage() {
   const [endpoints, setEndpoints] = useState<WebhookEndpoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<{open: boolean; id?: string}>({open: false});
-
   const load = useCallback(async () => {
     try { setEndpoints(await getWebhookEndpoints()); }
     catch { toast.error("Failed to load webhooks"); }
@@ -559,17 +563,17 @@ export default function WebhooksPage() {
   useEffect(() => { load(); }, [load]);
 
   async function handleDelete(id: string) {
-    setConfirmDelete({open: true, id});
-  }
-
-  async function doDelete() {
-    if (!confirmDelete.id) return;
-    try {
-      await deleteWebhookEndpoint(confirmDelete.id);
-      setEndpoints(prev => prev.filter(ep => ep.id !== confirmDelete.id));
-      toast.success("Endpoint deleted");
-    } catch { toast.error("Failed to delete endpoint"); }
-    finally { setConfirmDelete({open: false}); }
+    const ep = endpoints.find(e => e.id === id);
+    if (!ep) return;
+    await deleteWebhookEndpoint(id);
+    setEndpoints(prev => prev.filter(e => e.id !== id));
+    toastUndo({
+      message: "Endpoint deleted",
+      onUndo: async () => {
+        const restored = await createWebhookEndpoint({ url: ep.url, events: ep.events });
+        setEndpoints(prev => [restored, ...prev]);
+      },
+    });
   }
 
   async function handleToggle(id: string, active: boolean) {
@@ -651,13 +655,6 @@ export default function WebhooksPage() {
 
       {/* Add modal */}
       {showAdd && <AddModal onClose={() => setShowAdd(false)} onAdded={ep => setEndpoints(prev => [ep, ...prev])} />}
-      <ConfirmModal
-        open={confirmDelete.open}
-        title="Delete Endpoint"
-        message="Delete this endpoint? All delivery history will be removed."
-        onConfirm={doDelete}
-        onCancel={() => setConfirmDelete({open: false})}
-      />
     </div>
   );
 }
